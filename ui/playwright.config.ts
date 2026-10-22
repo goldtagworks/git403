@@ -12,7 +12,8 @@ export default defineConfig({
     { name: "dark", use: { colorScheme: "dark" } },
   ],
   webServer: {
-    command: "VITE_MOCK=1 vite --port 1421 --strictPort",
+    command: "vite --port 1421 --strictPort",
+    env: { VITE_MOCK: "1" },
     url: "http://localhost:1421",
     reuseExistingServer: !process.env.CI,
   },

@@ -15,6 +15,11 @@ const menuItem = (page: Page, name: string | RegExp) => page.getByRole("menu").g
 const unstaged = (page: Page) => page.getByRole("listbox", { name: "스테이지 안 됨" });
 const staged = (page: Page) => page.getByRole("listbox", { name: "스테이지됨", exact: true });
 const REVEAL = /(Finder|탐색기|파일 관리자)에서 보기/;
+// 셸 인용은 앱이 도는 OS를 따른다 (Windows는 cmd 큰따옴표, 그 밖은 POSIX 작은따옴표)
+const quoter = async (page: Page) => {
+  const win = await page.evaluate(() => /Windows/i.test(navigator.userAgent));
+  return (v: string) => quoteShell(v, win);
+};
 
 const seed = (page: Page, cmds: Partial<CustomCommand>[]) =>
   page.evaluate((list) => localStorage.setItem("customCommands", JSON.stringify(list.map((c, i) => ({ id: String(i), confirm: false, ...c })))), cmds);
@@ -218,15 +223,16 @@ test("셸 명령: 값은 셸 인용, 파일·브랜치 대상 메뉴", async ({ 
     { name: "파일 크기", target: "file", kind: "shell", command: "wc -c ${file} # ${sha}" },
     { name: "브랜치 로그", target: "branch", kind: "shell", command: "git log -1 ${branch} && echo ${repo}" },
   ]);
+  const q = await quoter(page);
   await page.getByRole("listbox", { name: "변경 파일" }).getByText("lib.rs").click({ button: "right" });
   await menuItem(page, "파일 크기").click();
   // ${sha}는 커밋 파일 목록에서만 값이 있다
-  await expect.poll(() => lastCall(page)).toEqual(["start_shell", `wc -c 'crates/graph/src/lib.rs' # '${"m3".padEnd(40, "0")}'`]);
+  await expect.poll(() => lastCall(page)).toEqual(["start_shell", `wc -c ${q("crates/graph/src/lib.rs")} # ${q("m3".padEnd(40, "0"))}`]);
   await expect(page.locator(".toast", { hasText: "파일 크기 완료" }).first()).toBeVisible();
 
   await page.locator(".sidebar").getByRole("button", { name: "pull-lock", exact: true }).click({ button: "right" });
   await menuItem(page, "브랜치 로그").click();
-  await expect.poll(() => lastCall(page)).toEqual(["start_shell", "git log -1 'hotfix/pull-lock' && echo '/demo/git403'"]);
+  await expect.poll(() => lastCall(page)).toEqual(["start_shell", `git log -1 ${q("hotfix/pull-lock")} && echo ${q("/demo/git403")}`]);
 });
 
 test("파일 대상 명령에서 ${sha}는 변경 화면(작업 디렉터리)에는 없어서 오류", async ({ page }) => {
@@ -241,11 +247,12 @@ test("파일 대상 명령에서 ${sha}는 변경 화면(작업 디렉터리)에
 test("실행 전 확인: 최종 명령을 보여 주고, 아니오면 실행하지 않는다", async ({ page }) => {
   await seed(page, [{ name: "정리", target: "repo", kind: "shell", command: "echo ${repo}", confirm: true }]);
   await page.evaluate(() => ((window as any).__asked = []));
+  const cmd = `echo ${(await quoter(page))("/demo/git403")}`;
   await page.keyboard.press("ControlOrMeta+p");
   await page.getByRole("dialog", { name: "빠른 실행" }).getByRole("textbox").fill("실행: 정리");
   await page.keyboard.press("Enter");
-  await expect.poll(() => lastCall(page)).toEqual(["start_shell", "echo '/demo/git403'"]);
-  expect(await page.evaluate(() => (window as any).__asked)).toEqual([expect.stringContaining("echo '/demo/git403'")]);
+  await expect.poll(() => lastCall(page)).toEqual(["start_shell", cmd]);
+  expect(await page.evaluate(() => (window as any).__asked)).toEqual([expect.stringContaining(cmd)]);
 
   await page.evaluate(() => ((window as any).__askNo = true));
   const before = (await gitCalls(page)).length;
