@@ -66,6 +66,8 @@ impl Gh {
         let mut cmd = tokio::process::Command::new("gh");
         cmd.args(args).stdin(Stdio::null()).env("GH_PROMPT_DISABLED", "1").env("NO_COLOR", "1").kill_on_drop(true);
         cmd.envs(envs.iter().copied());
+        #[cfg(windows)]
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
         if let Some(p) = &self.path {
             cmd.env("PATH", p);
         }

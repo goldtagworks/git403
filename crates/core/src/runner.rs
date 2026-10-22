@@ -85,6 +85,9 @@ impl GitRunner {
         // 새 프로세스 그룹: 취소할 때 셸·difftool이 띄운 손자 프로세스까지 함께 끝낸다
         #[cfg(unix)]
         cmd.process_group(0);
+        // GUI 앱에서 git을 부를 때마다 콘솔 창이 깜빡이지 않게 한다
+        #[cfg(windows)]
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
         cmd
     }
 

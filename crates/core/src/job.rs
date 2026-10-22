@@ -97,7 +97,10 @@ fn kill_tree(pid: Option<u32>) {
         libc::killpg(pid as libc::pid_t, libc::SIGKILL);
     }
     #[cfg(windows)]
-    let _ = std::process::Command::new("taskkill").args(["/T", "/F", "/PID", &pid.to_string()]).output();
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = std::process::Command::new("taskkill").args(["/T", "/F", "/PID", &pid.to_string()]).creation_flags(0x0800_0000).output(); // CREATE_NO_WINDOW
+    }
 }
 
 /// 스트림을 `\n`과 `\r` 기준으로 잘라 이벤트로 보낸다. 마지막 줄을 돌려준다.

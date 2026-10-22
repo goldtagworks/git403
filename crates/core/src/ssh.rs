@@ -50,7 +50,11 @@ pub fn valid_key_name(name: &str) -> bool {
 }
 
 async fn keygen(args: &[String]) -> Result<String> {
-    let out = Command::new("ssh-keygen").args(args).stdin(std::process::Stdio::null()).output().await?;
+    let mut cmd = Command::new("ssh-keygen");
+    cmd.args(args).stdin(std::process::Stdio::null());
+    #[cfg(windows)]
+    cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    let out = cmd.output().await?;
     if !out.status.success() {
         return Err(Error::Exit { code: out.status.code(), stderr: String::from_utf8_lossy(&out.stderr).trim().to_string() });
     }

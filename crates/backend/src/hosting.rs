@@ -158,6 +158,8 @@ async fn gh_token(host: &str, path: Option<&str>) -> Option<String> {
     let host = host.trim_start_matches("https://").trim_start_matches("http://").trim_end_matches('/');
     let mut cmd = tokio::process::Command::new("gh");
     cmd.args(["auth", "token", "--hostname", host]);
+    #[cfg(windows)]
+    cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     // 다른 계정 작업이 전역 활성 계정을 임시로 바꾸는 중이면, 복원될 원래 계정의 토큰을 명시한다
     if let Some(user) = crate::gh::switched_from(host) {
         cmd.args(["--user", &user]);
