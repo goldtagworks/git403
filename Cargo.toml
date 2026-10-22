@@ -5,7 +5,7 @@ members = ["crates/i18n", "crates/core", "crates/graph", "crates/hosting", "crat
 [workspace.package]
 edition = "2021"
 version = "1.0.0"
-license = "UNLICENSED"
+license = "GPL-3.0-only"
 
 [workspace.dependencies]
 tokio = { version = "1", features = ["process", "io-util", "rt-multi-thread", "macros", "sync", "time", "net"] }

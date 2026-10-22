@@ -107,4 +107,4 @@ git403은 유료 플랜이나 로그인 없이 무료입니다. 도움이 됐다
 
 ## 라이선스
 
-라이선스는 아직 정하는 중입니다.
+[GNU General Public License v3.0](LICENSE) (GPL-3.0)

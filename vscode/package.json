@@ -4,7 +4,7 @@
   "description": "%git403.description%",
   "version": "1.0.0",
   "publisher": "goldtagworks",
-  "license": "UNLICENSED",
+  "license": "GPL-3.0-only",
   "private": true,
   "repository": {
     "type": "git",
