@@ -137,7 +137,8 @@ try {
       press(await waitFor(() => $$("[role=option]").find((o) => o.textContent.includes("pic.png")), "pic.png"));
       const info = await waitFor(() => $(".img-info"), "이미지 diff 정보");
       await waitFor(() => $(".img-info").textContent.includes("바뀐 픽셀 4.7%"), "바뀐 픽셀 %");
-      if ($$(".img-layer").length !== 2) throw new Error("나란히 모드는 이미지 두 장이어야 함: " + $$(".img-layer").length);
+      const st = $(".img-stage").getBoundingClientRect();
+      await waitFor(() => $$(".img-layer").length === 2, "나란히 모드 이미지 두 장 (stage " + st.width + "×" + st.height + ", mode " + localStorage.getItem("imgDiffMode") + ")");
       if (!$(".img-info").textContent.includes("변경 영역 (5, 6) 4×3")) throw new Error("변경 영역: " + $(".img-info").textContent);
     `);
     git("reset", "-q", "--hard", "HEAD~2"); // 뒤 단계가 HEAD를 "바깥에서 만든 커밋"으로 가정한다
