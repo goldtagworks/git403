@@ -109,13 +109,18 @@ async fn query(a: &Account, token: &str, q: &str, vars: Value) -> Result<Value> 
     let b = client().post(endpoint(a)?).header("User-Agent", "git403").bearer_auth(token).json(&json!({"query": q, "variables": vars}));
     let res = b.send().await.map_err(net_err)?;
     let status = res.status().as_u16();
-    let v: Value = res.json().await.unwrap_or(Value::Null);
+    // 본문이 JSON이 아니면(프록시 HTML 등) Null, 읽다 시간 초과면 Timeout
+    let v: Value = match res.json().await {
+        Ok(v) => v,
+        Err(e) if e.is_timeout() => return Err(Error::Timeout),
+        Err(_) => Value::Null,
+    };
     match status {
         200..=299 => {}
         401 => return Err(Error::Unauthorized),
-        403 => return Err(Error::Forbidden),
+        403 | 429 => return Err(Error::Forbidden),
         404 => return Err(Error::NotFound),
-        c if c < 500 => return Err(Error::Rejected(v["message"].as_str().unwrap_or_default().to_string())),
+        c if c < 500 => return Err(Error::Rejected(v["message"].as_str().map_or_else(|| format!("HTTP {c}"), String::from))),
         c => return Err(Error::Server(c)),
     }
     // 200이어도 errors가 있고 data(또는 부분 응답의 repository)가 비면 실패(저장소 없음·권한 없음 등)

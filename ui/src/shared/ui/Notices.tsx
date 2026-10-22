@@ -17,9 +17,11 @@ export const Notices = memo(function Notices() {
   useLocale();
   const [noGit, setNoGit] = useState(false);
   const [oldGit, setOldGit] = useState<string | null>(null);
+  /** git은 있는데 실행이 실패함(Xcode 라이선스 미동의 등): git이 낸 원문 */
+  const [gitErr, setGitErr] = useState<string | null>(null);
   const u = useSyncExternalStore(onUpdate, updateState);
 
-  useEffect(() => void api.gitVersion().then((v) => (v === null ? setNoGit(true) : gitTooOld(v) && setOldGit(v)), () => {}), []);
+  useEffect(() => void api.gitVersion().then((v) => (v === null ? setNoGit(true) : gitTooOld(v) && setOldGit(v)), (e) => setGitErr(String(e))), []);
   // 시작 직후 한 번, 이후 매시간 "하루 지났는가"만 확인한다
   useEffect(() => {
     if (IS_VSCODE) return;
@@ -35,6 +37,12 @@ export const Notices = memo(function Notices() {
           <span>{t("notice.noGit")}</span>
           <button onClick={() => api.openUrl("https://git-scm.com/downloads")}>{t("notice.installGuide")}</button>
           <button onClick={() => setNoGit(false)}>{t("common.close")}</button>
+        </div>
+      )}
+      {gitErr && (
+        <div className="banner error selectable" role="alert">
+          <span>{gitErr}</span>
+          <button onClick={() => setGitErr(null)}>{t("common.close")}</button>
         </div>
       )}
       {oldGit && (

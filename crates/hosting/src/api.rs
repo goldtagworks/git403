@@ -84,8 +84,9 @@ async fn send(b: RequestBuilder) -> Result<Value> {
     match status.as_u16() {
         200..=299 => Ok(body),
         401 => Err(Error::Unauthorized),
-        403 => Err(Error::Forbidden),
+        403 | 429 => Err(Error::Forbidden),
         404 => Err(Error::NotFound),
+        s if s < 500 && body.is_null() => Err(Error::Rejected(format!("HTTP {s}"))),
         s if s < 500 => Err(Error::Rejected(error_message(&body))),
         s => Err(Error::Server(s)),
     }
@@ -470,6 +471,12 @@ pub(crate) mod tests {
         let (host, _h) = mock(422, r#"{"message":"Validation Failed","errors":[{"message":"A pull request already exists"}]}"#).await;
         let e = create_pr(&a(&host), "t", &repo("o"), "h", "b", "T", "", false).await.unwrap_err();
         assert!(e.to_string().contains("A pull request already exists"));
+        // 한도(429)는 권한·한도 오류, JSON이 아닌 4xx(프록시 HTML)는 빈 메시지 대신 HTTP 코드
+        let (host, _h) = mock(429, "{}").await;
+        assert!(matches!(list_prs(&a(&host), "t", &repo("o")).await, Err(Error::Forbidden)));
+        let (host, _h) = mock(407, "<html>proxy</html>").await;
+        let e = list_prs(&a(&host), "t", &repo("o")).await.unwrap_err();
+        assert!(e.to_string().contains("HTTP 407"), "{e}");
     }
 
     #[tokio::test]

@@ -103,7 +103,7 @@ fn kill_tree(pid: Option<u32>) {
     }
 }
 
-/// 스트림을 `\n`과 `\r` 기준으로 잘라 이벤트로 보낸다. 마지막 줄을 돌려준다.
+/// 스트림을 `\n`과 `\r` 기준으로 잘라 이벤트로 보낸다. 오류 요약(`summarize`)을 돌려준다.
 async fn pump(
     stream: impl AsyncRead + Unpin,
     events: mpsc::UnboundedSender<JobEvent>,
@@ -111,7 +111,7 @@ async fn pump(
 ) -> String {
     let mut reader = BufReader::new(stream);
     let mut buf = Vec::new();
-    let mut last = String::new();
+    let mut recent: std::collections::VecDeque<String> = std::collections::VecDeque::new();
     loop {
         buf.clear();
         // `\r`로 덮어쓰는 진행률 표시도 줄 단위로 받기 위해 바이트 단위로 읽는다.
@@ -132,9 +132,26 @@ async fn pump(
             JobEvent::Stdout { line: line.clone() }
         };
         let _ = events.send(ev);
-        last = line;
+        if recent.len() == 40 {
+            recent.pop_front();
+        }
+        recent.push_back(line);
     }
-    last
+    summarize(recent.make_contiguous())
+}
+
+/// 실패 메시지용 stderr 요약: 원인 줄(`error:`·`fatal:`·` ! [rejected]` 등, 최대 4개). 없으면 마지막 줄.
+/// 마지막 줄만 쓰면 push 거부가 `hint: …` 한 줄로 끝나 원인이 빠진다.
+fn summarize(lines: &[String]) -> String {
+    let key = |l: &str| {
+        let t = l.trim_start();
+        ["error:", "fatal:", "! ", "remote: error", "ERROR", "Error"].iter().any(|p| t.starts_with(p))
+    };
+    let picked: Vec<&str> = lines.iter().map(String::as_str).filter(|l| key(l)).collect();
+    if picked.is_empty() {
+        return lines.last().cloned().unwrap_or_default();
+    }
+    picked[picked.len().saturating_sub(4)..].join("\n")
 }
 
 async fn read_until_any<R: AsyncBufReadExt + Unpin>(r: &mut R, buf: &mut Vec<u8>) -> std::io::Result<usize> {
@@ -228,5 +245,26 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+}
+
+#[cfg(test)]
+mod summary_tests {
+    use super::summarize;
+
+    #[test]
+    fn push_rejection_keeps_the_cause_not_the_hint() {
+        let lines: Vec<String> = [
+            "To github.com:o/r.git",
+            " ! [rejected]        main -> main (fetch first)",
+            "error: failed to push some refs to 'github.com:o/r.git'",
+            "hint: Updates were rejected because the remote contains work that you do not",
+            "hint: See the 'Note about fast-forwards' in 'git push --help' for details.",
+        ]
+        .map(String::from)
+        .to_vec();
+        assert_eq!(summarize(&lines), " ! [rejected]        main -> main (fetch first)\nerror: failed to push some refs to 'github.com:o/r.git'");
+        assert_eq!(summarize(&["Receiving objects: 100%".into(), "done".into()]), "done");
+        assert_eq!(summarize(&[]), "");
     }
 }

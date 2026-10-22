@@ -119,9 +119,11 @@ impl Backend {
             let (cell, done) = (self.git.path_cell(), self.path_done.clone());
             tokio::spawn(async move {
                 let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
-                if let Some(p) = gc_core::shellenv::login_shell_path(&shell).await {
-                    let _ = cell.set(p);
-                }
+                let p = gc_core::shellenv::login_shell_path(&shell).await.unwrap_or_else(|(fallback, why)| {
+                    eprintln!("git403: 로그인 셸 PATH를 못 얻어 기본 위치를 붙임 — {why}");
+                    fallback
+                });
+                let _ = cell.set(p);
                 done.send_replace(true);
             });
         }

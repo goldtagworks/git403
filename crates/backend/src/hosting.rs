@@ -55,11 +55,17 @@ impl Hosting {
         // 저장소에 연결된 gh 계정 토큰이 있으면 그것이 먼저(사용자가 이 저장소에 쓰기로 고른 계정)
         let stored = match (&account, bound) {
             (_, Some(b)) => Some(b),
-            (Some(a), None) => self.token(a).await.ok(),
+            // 저장된 토큰이 없으면 gh로 대신하지만, 키체인을 못 읽은 것(잠김·거부)은 그대로 알린다
+            (Some(a), None) => {
+                let (accts, a) = (self.accounts(), a.clone());
+                off(move || accts.token(&a).map_err(|e| e.ipc())).await?
+            }
             (None, None) => None,
         };
-        let host = acct.host.clone();
-        let token = pick_token(stored, || async { gh_token(&host, path).await }).await;
+        let token = match stored.filter(|t| !t.is_empty()) {
+            Some(t) => Some(t),
+            None => gh_token(&acct.host, path).await?,
+        };
         token.map(|t| (acct, t)).ok_or_else(|| gc_hosting::Error::NoToken.ipc())
     }
 
@@ -96,7 +102,7 @@ impl Hosting {
     pub async fn remote_info(&self, git: &GitRunner, repo: &Path) -> Res<Vec<RemoteInfo>> {
         let remotes = parsed_remotes(git, repo).await?;
         let accts = self.accounts();
-        let accounts = off(move || Ok(accts.list().unwrap_or_default())).await?;
+        let accounts = off(move || accts.list().map_err(|e| e.ipc())).await?;
         Ok(remotes
             .into_iter()
             .map(|(remote, url, r)| {
@@ -125,7 +131,7 @@ impl Hosting {
         .await?;
         // 저장된 토큰이 없으면 `gh` 토큰(PR 조회와 같은 규칙). 비공개 저장소도 사진을 찾는다.
         let token = match &host {
-            Some(h) if account.is_some() || h == "github.com" => pick_token(stored, || async { gh_token(h, path).await }).await,
+            Some(h) if account.is_some() || h == "github.com" => pick_token(stored, || async { gh_token(h, path).await.ok().flatten() }).await,
             _ => stored,
         };
         Ok(gc_hosting::author_avatars(&self.avatars, remote.as_ref(), account.as_ref(), token.as_deref(), &items).await)
@@ -153,8 +159,9 @@ async fn pick_token<F: std::future::Future<Output = Option<String>>>(stored: Opt
     }
 }
 
-/// `gh auth token --hostname <host>`. `path`는 보정된 로그인 셸 PATH. gh가 없거나 로그인 안 했으면 None.
-async fn gh_token(host: &str, path: Option<&str>) -> Option<String> {
+/// `gh auth token --hostname <host>`. `path`는 보정된 로그인 셸 PATH. gh가 없거나 로그인 안 했으면 Ok(None),
+/// 시간 초과·실행 실패는 Err(토큰 없음으로 뭉개지 않는다).
+async fn gh_token(host: &str, path: Option<&str>) -> Res<Option<String>> {
     let host = host.trim_start_matches("https://").trim_start_matches("http://").trim_end_matches('/');
     let mut cmd = tokio::process::Command::new("gh");
     cmd.args(["auth", "token", "--hostname", host]);
@@ -168,8 +175,13 @@ async fn gh_token(host: &str, path: Option<&str>) -> Option<String> {
     if let Some(p) = path {
         cmd.env("PATH", p);
     }
-    let out = tokio::time::timeout(std::time::Duration::from_secs(5), cmd.output()).await.ok()?.ok()?;
-    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string()).filter(|t| !t.is_empty())
+    let out = match tokio::time::timeout(std::time::Duration::from_secs(5), cmd.output()).await {
+        Err(_) => return Err(gc_i18n::coded!("gh.timeout", "gh timed out").json()),
+        Ok(Err(e)) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Ok(Err(e)) => return Err(format!("gh: {e}")),
+        Ok(Ok(o)) => o,
+    };
+    Ok(out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string()).filter(|t| !t.is_empty()))
 }
 
 #[cfg(test)]

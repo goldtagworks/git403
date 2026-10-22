@@ -91,6 +91,13 @@ test("git이 없으면 설치 안내 배너", async ({ page }) => {
   await expect(page.getByText("git을 찾을 수 없습니다")).toHaveCount(0);
 });
 
+test("git은 있는데 실행이 실패하면(Xcode 라이선스 등) 미설치가 아니라 git이 낸 원인을 보여 준다", async ({ page }) => {
+  const msg = "You have not agreed to the Xcode license agreements.";
+  await start(page, { __gitError: msg });
+  await expect(page.getByRole("alert").filter({ hasText: msg })).toBeVisible();
+  await expect(page.getByText("git을 찾을 수 없습니다")).toHaveCount(0);
+});
+
 test("git이 있으면 배너가 없다", async ({ page }) => {
   await start(page);
   await page.getByRole("button", { name: "저장소 열기" }).waitFor();

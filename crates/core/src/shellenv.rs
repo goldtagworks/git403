@@ -18,17 +18,41 @@ pub fn merge_path(login: &str, current: &str) -> String {
     login.split(':').chain(current.split(':')).filter(|p| !p.is_empty() && seen.insert(*p)).collect::<Vec<_>>().join(":")
 }
 
-/// `$SHELL -ilc 'printf …$PATH…'`. 2초 안에 못 끝나거나 실패하면 None (조용히 무시).
-pub async fn login_shell_path(shell: &str) -> Option<String> {
+/// 로그인 셸을 못 물었을 때라도 붙이는 흔한 설치 위치 (Homebrew·MacPorts·사용자 bin)
+const WELL_KNOWN: &[&str] = &["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin", "/opt/local/bin"];
+
+/// `$SHELL -ilc 'printf …$PATH…'`. rc가 무거운 셸(nvm·conda 등)도 기다리도록 10초, 실패하면 한 번 더.
+/// 끝내 못 얻으면 현재 PATH에 흔한 설치 위치를 붙인 값을 쓰고, 원인은 `Err`로 돌려준다(로그용).
+pub async fn login_shell_path(shell: &str) -> Result<String, (String, String)> {
+    let current = std::env::var("PATH").unwrap_or_default();
+    let mut why = String::new();
+    for _ in 0..2 {
+        match ask(shell, Duration::from_secs(10)).await {
+            Ok(login) => return Ok(merge_path(&login, &current)),
+            Err(e) => why = e,
+        }
+    }
+    let home = std::env::var("HOME").map(|h| format!("{h}/.local/bin")).unwrap_or_default();
+    let extra: Vec<&str> = WELL_KNOWN.iter().copied().chain([home.as_str()]).collect();
+    Err((merge_path(&current, &extra.join(":")), why))
+}
+
+async fn ask(shell: &str, limit: Duration) -> Result<String, String> {
     let run = tokio::process::Command::new(shell)
         .args(["-ilc", &format!("printf '{MARK}%s{MARK}' \"$PATH\"")])
         .stdin(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
         .kill_on_drop(true)
         .output();
-    let out = tokio::time::timeout(Duration::from_secs(2), run).await.ok()?.ok()?;
-    let login = parse_path_output(&String::from_utf8_lossy(&out.stdout))?;
-    Some(merge_path(&login, &std::env::var("PATH").unwrap_or_default()))
+    let out = match tokio::time::timeout(limit, run).await {
+        Err(_) => return Err(format!("{shell}: {}초 안에 끝나지 않음", limit.as_secs())),
+        Ok(Err(e)) => return Err(format!("{shell}: {e}")),
+        Ok(Ok(o)) => o,
+    };
+    parse_path_output(&String::from_utf8_lossy(&out.stdout)).ok_or_else(|| {
+        let err = String::from_utf8_lossy(&out.stderr);
+        format!("{shell}: PATH를 못 읽음 (종료 {:?}) {}", out.status.code(), err.lines().last().unwrap_or("").trim())
+    })
 }
 
 #[cfg(test)]
@@ -52,6 +76,9 @@ mod tests {
     async fn asks_the_shell_and_gives_up_on_failure() {
         let p = login_shell_path("/bin/sh").await.expect("sh가 PATH를 돌려줌");
         assert!(p.contains("/bin"));
-        assert_eq!(login_shell_path("/no/such/shell").await, None);
+        // 셸이 없어도 흔한 설치 위치는 붙이고 원인을 알려 준다
+        let (fallback, why) = login_shell_path("/no/such/shell").await.unwrap_err();
+        assert!(fallback.contains("/opt/homebrew/bin") && fallback.contains("/usr/local/bin"), "{fallback}");
+        assert!(why.contains("/no/such/shell"), "{why}");
     }
 }

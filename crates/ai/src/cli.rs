@@ -36,14 +36,21 @@ fn command(program: &str, path: Option<&str>) -> std::io::Result<(Command, tempf
 }
 
 /// 공급자 CLI의 버전 명령(`--version`, Grok은 `version`)이 성공하면 버전 문자열. 못 찾거나 실패하면 None.
+/// 실행은 됐는데 시간 안에 안 끝나면(설치 직후 첫 실행 등) 있는 것으로 본다 — "설치 안 됨"으로 굳히지 않는다.
 pub async fn detect(provider: Provider, path: Option<&str>) -> Option<String> {
-    detect_program(provider.program(), provider, path).await
+    detect_program(provider.program(), provider, path, Duration::from_secs(15)).await
 }
 
-async fn detect_program(program: &str, provider: Provider, path: Option<&str>) -> Option<String> {
+/// 버전을 못 읽었지만 실행 파일은 있음
+pub const VERSION_UNKNOWN: &str = "?";
+
+async fn detect_program(program: &str, provider: Provider, path: Option<&str>, limit: Duration) -> Option<String> {
     let (mut c, _cwd) = command(program, path).ok()?;
     c.args(provider.version_args()).stdin(Stdio::null());
-    let out = tokio::time::timeout(Duration::from_secs(5), c.output()).await.ok()?.ok()?;
+    let out = match tokio::time::timeout(limit, c.output()).await {
+        Err(_) => return Some(VERSION_UNKNOWN.into()),
+        Ok(r) => r.ok()?,
+    };
     let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
     (out.status.success() && !v.is_empty()).then_some(v)
 }
@@ -218,7 +225,7 @@ mod tests {
         let script = format!("#!/bin/sh\npwd -P > '{d}/vcwd'\nls -A . > '{d}/vls'\necho 1.0\n", d = d.path().display());
         std::fs::write(v.join("claude"), script).unwrap();
         std::fs::set_permissions(v.join("claude"), std::fs::Permissions::from_mode(0o755)).unwrap();
-        assert_eq!(detect_program(&v.join("claude").to_string_lossy(), Provider::Anthropic, None).await.as_deref(), Some("1.0"));
+        assert_eq!(detect_program(&v.join("claude").to_string_lossy(), Provider::Anthropic, None, Duration::from_secs(5)).await.as_deref(), Some("1.0"));
         assert!(std::fs::read_to_string(d.path().join("vls")).unwrap().is_empty());
         assert!(!Path::new(std::fs::read_to_string(d.path().join("vcwd")).unwrap().trim()).exists());
     }
@@ -288,7 +295,11 @@ mod tests {
         std::fs::create_dir(&bad).unwrap();
         std::fs::write(bad.join("claude"), "#!/bin/sh\nexit 3\n").unwrap();
         std::fs::set_permissions(bad.join("claude"), std::fs::Permissions::from_mode(0o755)).unwrap();
-        assert!(detect_program(&bad.join("claude").to_string_lossy(), Provider::Anthropic, None).await.is_none());
+        assert!(detect_program(&bad.join("claude").to_string_lossy(), Provider::Anthropic, None, Duration::from_secs(5)).await.is_none());
+        // 느린 첫 실행: 시간 초과여도 실행 파일이 있으면 "있음"
+        std::fs::write(bad.join("claude"), "#!/bin/sh\nsleep 5\n").unwrap();
+        let slow = detect_program(&bad.join("claude").to_string_lossy(), Provider::Anthropic, None, Duration::from_millis(300)).await;
+        assert_eq!(slow.as_deref(), Some(VERSION_UNKNOWN));
     }
 
     #[tokio::test]

@@ -90,7 +90,12 @@ impl Gh {
             let text_args = [&["auth", "status"][..], &host_args].concat();
             if let Some(o) = self.run(&text_args, &[]).await? {
                 let text = format!("{}\n{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
-                hosts = Some(parse_status_text(&text));
+                let parsed = parse_status_text(&text);
+                // 아무 계정도 못 읽었는데 실패로 끝났으면 "로그인 없음"이 아니라 오류다(원인은 stderr 마지막 줄)
+                if parsed.is_empty() && !o.status.success() && !text.contains("not logged in") {
+                    return Err(gh_err(&o));
+                }
+                hosts = Some(parsed);
             }
         }
         let mut hosts = hosts.unwrap_or_default();
@@ -100,9 +105,15 @@ impl Gh {
         Ok(GhAccounts { installed: true, hosts })
     }
 
+    /// 표시용: 못 읽으면 None
     pub async fn active_user(&self, host: &str) -> Option<String> {
-        let all = self.accounts(Some(host)).await.ok()?;
-        all.hosts.into_iter().find(|h| h.host == host)?.accounts.into_iter().find(|a| a.active).map(|a| a.user)
+        self.active_user_checked(host).await.ok().flatten()
+    }
+
+    /// 활성 계정. gh 실행 실패·시간 초과는 Err (전환 전 원래 계정을 꼭 알아야 할 때)
+    pub async fn active_user_checked(&self, host: &str) -> Res<Option<String>> {
+        let all = self.accounts(Some(host)).await?;
+        Ok(all.hosts.into_iter().find(|h| h.host == host).and_then(|h| h.accounts.into_iter().find(|a| a.active)).map(|a| a.user))
     }
 
     pub async fn switch(&self, host: &str, user: &str) -> Res<()> {
@@ -116,8 +127,14 @@ impl Gh {
 
     /// `gh auth token --hostname H --user U` (활성 계정을 바꾸지 않는다). 없거나 실패하면 None.
     pub async fn token(&self, host: &str, user: &str) -> Option<String> {
-        let out = self.run(&["auth", "token", "--hostname", host, "--user", user], &[]).await.ok()??;
-        out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string()).filter(|t| !t.is_empty())
+        self.token_checked(host, user).await.ok().flatten()
+    }
+
+    /// 위와 같되 gh 미설치만 None, 실행 실패·시간 초과·토큰 없음은 원인을 담은 Err
+    pub async fn token_checked(&self, host: &str, user: &str) -> Res<Option<String>> {
+        let Some(out) = self.run(&["auth", "token", "--hostname", host, "--user", user], &[]).await? else { return Ok(None) };
+        let tok = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if out.status.success() && !tok.is_empty() { Ok(Some(tok)) } else { Err(gh_err(&out)) }
     }
 
     /// 그 계정 토큰으로 `repos/{owner}/{name}`에 접근되는지(전역 전환 없이 환경 변수로 토큰 전달).
@@ -316,7 +333,14 @@ impl Gate {
                 n.await;
                 continue;
             }
-            let original = gh.active_user(host).await;
+            // 원래 계정을 모르면 전환하지 않는다: 끝나고 되돌릴 수 없어 전역 gh 계정이 바뀐 채 남는다
+            let original = match gh.active_user_checked(host).await {
+                Ok(o) => o,
+                Err(e) => {
+                    drop(op);
+                    return Err(e);
+                }
+            };
             let switch = original.as_deref() != Some(user);
             *h.slot.lock() = Slot { user: Some(user.into()), count: 1, original: original.clone() };
             if switch {
@@ -373,9 +397,19 @@ pub(crate) struct Bound {
     pub user: String,
 }
 
-async fn config_get(git: &GitRunner, repo: &Path, key: &str) -> Option<String> {
-    let out = git.output_allow(repo, &["config", "--local", "--get", key], &[1]).await.ok()?;
-    Some(String::from_utf8_lossy(&out).trim().to_string()).filter(|s| !s.is_empty())
+/// 없는 키(종료 1)만 None, 그 밖의 git 실패는 Err
+async fn config_get(git: &GitRunner, repo: &Path, key: &str) -> Res<Option<String>> {
+    let out = git.output_allow(repo, &["config", "--local", "--get", key], &[1]).await.map_err(|e| e.to_string())?;
+    Ok(Some(String::from_utf8_lossy(&out).trim().to_string()).filter(|s| !s.is_empty()))
+}
+
+/// gh 실패 출력 → 오류 문구(stderr 마지막 줄, 없으면 종료 코드)
+fn gh_err(out: &std::process::Output) -> String {
+    let err = String::from_utf8_lossy(&out.stderr);
+    match err.lines().rev().find(|l| !l.trim().is_empty()) {
+        Some(l) => format!("gh: {}", l.trim()),
+        None => format!("gh exited with {:?}", out.status.code()),
+    }
 }
 
 impl Backend {
@@ -389,7 +423,7 @@ impl Backend {
         let tracking = match self.git.output_allow(repo, &["symbolic-ref", "--short", "-q", "HEAD"], &[1]).await {
             Ok(b) => {
                 let br = String::from_utf8_lossy(&b).trim().to_string();
-                if br.is_empty() { None } else { config_get(&self.git, repo, &format!("branch.{br}.remote")).await }
+                if br.is_empty() { None } else { config_get(&self.git, repo, &format!("branch.{br}.remote")).await? }
             }
             Err(_) => None,
         };
@@ -411,7 +445,7 @@ impl Backend {
     pub(crate) async fn gh_repo_account(&self, repo: &Path) -> Res<RepoAccount> {
         let remote = self.gh_remote(repo, None).await?.map(|(_, r)| r);
         let host = remote.as_ref().map(|r| r.host.clone()).unwrap_or_else(|| "github.com".into());
-        let bound = config_get(&self.git, repo, BIND_KEY).await;
+        let bound = config_get(&self.git, repo, BIND_KEY).await?;
         let active = self.gh().active_user(&host).await;
         Ok(RepoAccount { host, bound, active, remote: remote.map(|r| r.path()) })
     }
@@ -437,17 +471,24 @@ impl Backend {
     }
 
     /// 이 저장소·원격에 연결된 계정(그 계정이 원격 host의 gh에 로그인돼 있을 때만).
-    async fn bound_for(&self, repo: &Path, remote: &RemoteRepo) -> Option<Bound> {
-        let user = config_get(&self.git, repo, BIND_KEY).await?;
-        let all = self.gh().accounts(Some(&remote.host)).await.ok()?;
+    /// 연결이 없거나 그 계정이 로그아웃됐으면 Ok(None). 읽기 실패(gh 시간 초과 등)는 Err —
+    /// "연결 없음"으로 넘기면 다른 계정으로 push·PR이 진행된다.
+    async fn bound_for(&self, repo: &Path, remote: &RemoteRepo) -> Res<Option<Bound>> {
+        let Some(user) = config_get(&self.git, repo, BIND_KEY).await? else { return Ok(None) };
+        let all = self.gh().accounts(Some(&remote.host)).await?;
+        if !all.installed {
+            return Ok(None);
+        }
         let has = all.hosts.iter().any(|h| h.host == remote.host && h.accounts.iter().any(|a| a.user == user));
-        has.then(|| Bound { host: remote.host.clone(), user })
+        Ok(has.then(|| Bound { host: remote.host.clone(), user }))
     }
 
     /// PR API용 토큰: 저장소에 연결된 계정의 토큰(전역 전환 없음). 연결이 없거나 `local`이 없으면 None.
-    pub(crate) async fn gh_bound_token(&self, local: Option<&Path>, remote: &RemoteRepo) -> Option<String> {
-        let b = self.bound_for(local?, remote).await?;
-        self.gh().token(&b.host, &b.user).await
+    /// 연결은 있는데 토큰을 못 얻으면 Err(다른 계정으로 대신하지 않는다).
+    pub(crate) async fn gh_bound_token(&self, local: Option<&Path>, remote: &RemoteRepo) -> Res<Option<String>> {
+        let Some(local) = local else { return Ok(None) };
+        let Some(b) = self.bound_for(local, remote).await? else { return Ok(None) };
+        self.gh().token_checked(&b.host, &b.user).await
     }
 
     /// push/fetch/pull이고 연결된 계정이 있으면 자리를 얻는다(필요하면 전환). 로그 줄은 `tx`로 보낸다.
@@ -458,7 +499,7 @@ impl Backend {
         let remotes = parsed_remotes(&self.git, repo).await?;
         let hint = remote_hint(args, &remotes).map(String::from);
         let Some((_, remote)) = self.gh_remote(repo, hint.as_deref()).await? else { return Ok(None) };
-        let Some(b) = self.bound_for(repo, &remote).await else { return Ok(None) };
+        let Some(b) = self.bound_for(repo, &remote).await? else { return Ok(None) };
         let log = progress_logger(tx);
         self.gh_gate.acquire(&self.gh(), &b.host, &b.user, log).await.map(Some)
     }
@@ -564,6 +605,7 @@ mod tests {
         let script = format!(
             r#"#!/bin/sh
 D="{d}"
+[ -f "$D/fail_status" ] && case "$*" in "auth status"*|"auth token"*) echo "error connecting to api.github.com" >&2; exit 1;; esac
 case "$*" in
 "auth status"*"--json hosts")
   a=$(cat "$D/active")
@@ -829,6 +871,26 @@ esac
     }
 
     #[tokio::test]
+    async fn gh_조회가_실패하면_계정을_바꾸지_않고_원인을_담아_실패한다() {
+        let missing = std::env::temp_dir().join("git403-no-such-remote-dir");
+        let (d, repo, be, log) = job_setup(&missing, Some("gold")).await;
+        std::fs::write(d.path().join("fail_status"), "").unwrap();
+        // 연결 계정을 못 확인하면 현재 계정으로 진행하지 않는다
+        let _ = &log;
+        let e = be.start_job(repo.path().to_path_buf(), vec!["fetch".into()], None, true).await.unwrap_err();
+        assert!(e.contains("error connecting"), "{e}");
+        assert!(switches(d.path()).is_empty(), "전환하지 않는다");
+        // PR 토큰도 다른 계정으로 대신하지 않는다
+        let remote = RemoteRepo { host: "github.com".into(), owner: "o".into(), name: "r".into() };
+        assert!(be.gh_bound_token(Some(repo.path()), &remote).await.is_err());
+        // 원래 계정을 모르면 Gate도 전환하지 않는다
+        let gh = Gh::new(Some(&format!("{}:{}", d.path().display(), std::env::var("PATH").unwrap_or_default())));
+        let (_, l) = collector();
+        assert!(Gate::default().acquire(&gh, "github.com", "gold", l).await.is_err());
+        assert!(switches(d.path()).is_empty());
+    }
+
+    #[tokio::test]
     async fn 연결이_없거나_push_fetch_pull이_아니면_gh를_건드리지_않는다() {
         let missing = std::env::temp_dir().join("git403-no-such-remote-dir");
         let (d, repo, be, log) = job_setup(&missing, None).await;
@@ -853,7 +915,7 @@ esac
         assert_eq!(be.gh_repo_account(repo.path()).await.unwrap().bound.as_deref(), Some("gold"));
         let p = be.gh_probe(repo.path()).await.unwrap();
         assert_eq!(p.iter().map(|x| (x.user.as_str(), x.ok)).collect::<Vec<_>>(), [("alice", false), ("gold", true), ("vk", false)]);
-        assert_eq!(be.gh_bound_token(Some(repo.path()), &RemoteRepo { host: "github.com".into(), owner: "o".into(), name: "r".into() }).await.as_deref(), Some("tok-gold"));
+        assert_eq!(be.gh_bound_token(Some(repo.path()), &RemoteRepo { host: "github.com".into(), owner: "o".into(), name: "r".into() }).await.unwrap().as_deref(), Some("tok-gold"));
         be.gh_bind(repo.path(), None).await.unwrap();
         be.gh_bind(repo.path(), None).await.unwrap(); // 이미 없어도 오류 아님
         assert_eq!(be.gh_repo_account(repo.path()).await.unwrap().bound, None);

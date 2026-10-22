@@ -22,7 +22,7 @@ impl Backend {
                 gc_i18n::set(&a.get::<String>("locale")?);
                 Ok(Value::Null)
             }
-            "git_version" => json(gc_core::git_version(git).await),
+            "git_version" => json(gc_core::git_version(git).await.map_err(|e| e.ipc())?),
             "initial_repo" => json(&self.initial_repo),
             // ---- 조회 ----
             "load_graph" => {
@@ -247,7 +247,7 @@ impl Backend {
                     a.get::<bool>("draft")?,
                 );
                 let local = a.get::<Option<PathBuf>>("localRepo")?;
-                let token = match self.gh_bound_token(local.as_deref(), &repo).await {
+                let token = match self.gh_bound_token(local.as_deref(), &repo).await? {
                     Some(t) => t,
                     None => self.hosting.token(&account).await?,
                 };
@@ -256,7 +256,7 @@ impl Backend {
             "pr_list" => {
                 let (account, repo) = (a.get::<Account>("account")?, a.get::<RemoteRepo>("repo")?);
                 let local = a.get::<Option<PathBuf>>("localRepo")?;
-                let token = match self.gh_bound_token(local.as_deref(), &repo).await {
+                let token = match self.gh_bound_token(local.as_deref(), &repo).await? {
                     Some(t) => t,
                     None => self.hosting.token(&account).await?,
                 };
@@ -273,12 +273,12 @@ impl Backend {
                 };
                 // activity: 최근 활동(타임라인)도 받을지. 생략 = 받음. 끄면 응답이 훨씬 빠르다
                 let activity = a.get::<Option<bool>>("activity")?.unwrap_or(true);
-                let bound = self.gh_bound_token(a.get::<Option<PathBuf>>("localRepo")?.as_deref(), &repo).await;
+                let bound = self.gh_bound_token(a.get::<Option<PathBuf>>("localRepo")?.as_deref(), &repo).await?;
                 json(self.hosting.pr_inbox(account, &repo, me, closed, activity, git.path_override(), bound).await?)
             }
             "pr_detail" => {
                 let (account, repo, number) = (a.get::<Option<Account>>("account")?, a.get::<RemoteRepo>("repo")?, a.get::<u64>("number")?);
-                let bound = self.gh_bound_token(a.get::<Option<PathBuf>>("localRepo")?.as_deref(), &repo).await;
+                let bound = self.gh_bound_token(a.get::<Option<PathBuf>>("localRepo")?.as_deref(), &repo).await?;
                 json(self.hosting.pr_detail(account, &repo, number, git.path_override(), bound).await?)
             }
             // PR 리뷰 게시: event = COMMENT|APPROVE|REQUEST_CHANGES, comments[{path,line,startLine?,side?,body}] → 리뷰 URL
@@ -286,7 +286,7 @@ impl Backend {
                 let (account, repo, number) = (a.get::<Option<Account>>("account")?, a.get::<RemoteRepo>("repo")?, a.get::<u64>("number")?);
                 let (commit_id, event, body) = (a.get::<String>("commitId")?, a.get::<String>("event")?, a.get::<String>("body")?);
                 let comments = a.get::<Vec<gc_hosting::ReviewComment>>("comments")?;
-                let bound = self.gh_bound_token(a.get::<Option<PathBuf>>("localRepo")?.as_deref(), &repo).await;
+                let bound = self.gh_bound_token(a.get::<Option<PathBuf>>("localRepo")?.as_deref(), &repo).await?;
                 json(self.hosting.pr_review_submit(account, &repo, number, &commit_id, &event, &body, &comments, git.path_override(), bound).await?)
             }
             // ---- gh(GitHub CLI) 계정: 표시·전환·저장소 연결 (docs/reuse.md gh 절) ----

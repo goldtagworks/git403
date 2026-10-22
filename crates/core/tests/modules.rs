@@ -103,3 +103,26 @@ async fn lfs_status_tracks_and_lists() {
     assert!(st.files[0].downloaded);
     assert_eq!(st.files[0].oid.len(), 64);
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn lfs_status_is_not_installed_only_when_git_lfs_is_missing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let d = tmp.path();
+    repo(d);
+    // git-lfs가 없는 PATH: "미설치"로 정상 응답
+    let bare = GitRunner::default();
+    bare.path_cell().set("/usr/bin:/bin".into()).unwrap();
+    if !std::process::Command::new("/usr/bin/git").args(["lfs", "version"]).env("PATH", "/usr/bin:/bin").output().is_ok_and(|o| o.status.success()) {
+        assert!(!lfs_status(&bare, d).await.unwrap().installed);
+    }
+    // git-lfs가 있는데 실행이 실패하면 "미설치"로 숨기지 않고 오류
+    let bin = tempfile::tempdir().unwrap();
+    let fake = bin.path().join("git-lfs");
+    std::fs::write(&fake, "#!/bin/sh\necho 'lfs broke' >&2\nexit 3\n").unwrap();
+    std::fs::set_permissions(&fake, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let broken = GitRunner::default();
+    broken.path_cell().set(format!("{}:/usr/bin:/bin", bin.path().display())).unwrap();
+    let e = lfs_status(&broken, d).await.unwrap_err();
+    assert!(e.to_string().contains("lfs broke"), "{e}");
+}
