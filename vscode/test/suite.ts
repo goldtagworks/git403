@@ -266,7 +266,7 @@ async function treeTests(folder: string) {
 const branchNode = (label: string) => vscode.commands.executeCommand<unknown>("git403.debugNode", "branches", label);
 
 export async function run() {
-  const ext = vscode.extensions.getExtension("goldtagworks.git403");
+  const ext = vscode.extensions.getExtension("goldtagworks.git403-vscode");
   assert.ok(ext, "확장이 설치돼 있다");
   const folder0 = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   assert.ok(folder0, "워크스페이스가 열려 있다");

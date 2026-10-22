@@ -42,7 +42,7 @@ git이 설치되어 있어야 합니다. 없으면 앱이 설치 방법을 안�
 
 ### VS Code 확장
 
-VS Code 마켓플레이스에서 `git403`(`goldtagworks.git403`)을 검색해 설치하세요. 명령 팔레트에서 `git403: Open Commit Graph`로 그래프를 엽니다.
+VS Code 마켓플레이스에서 `git403`(`goldtagworks.git403-vscode`)을 검색해 설치하세요. 명령 팔레트에서 `git403: Open Commit Graph`로 그래프를 엽니다.
 
 - 커밋 그래프: 파일·hunk·줄 단위 스테이지, merge, rebase, cherry-pick, 충돌 해결
 - 인라인 blame과 hover (`git403: Toggle Inline Blame`)
