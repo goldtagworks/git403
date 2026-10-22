@@ -6,7 +6,7 @@ A fast, lightweight Git client with a rich commit graph — inside VS Code.
 
 ## Features
 
-- **Commit graph** — open with `git403: Open Commit Graph`. Branch-colored lanes, stage files/hunks/lines, merge, rebase, cherry-pick, conflict resolution.
+- **Commit graph** — click **git403** in the status bar to open the full view in an editor tab, or press `⌥⌘G` (`Ctrl+Alt+G`) / run `git403: Open Commit Graph` to open it where `git403.graph.location` says (sidebar by default). Branch-colored lanes, stage files/hunks/lines, merge, rebase, cherry-pick, conflict resolution.
 - **Inline blame** and hover — toggle with `git403: Toggle Inline Blame`.
 - **Views** — Branches, Tags, Stashes, Remotes, File History, Line History.
 - **CodeLens** and file/line history with diffs.
@@ -31,4 +31,4 @@ git403 is free. If it helps you, consider [sponsoring on GitHub](https://github.
 
 ---
 
-**한국어**: 커밋 그래프를 VS Code 안에서 여는 가벼운 Git 클라이언트입니다. 명령 팔레트에서 `git403: Open Commit Graph`. 도움이 됐다면 [GitHub Sponsors](https://github.com/sponsors/goldtagworks)로 후원해 주세요.
+**한국어**: 커밋 그래프를 VS Code 안에서 여는 가벼운 Git 클라이언트입니다. 상태바의 **git403** 버튼은 편집기 탭에 전체 화면을, `⌥⌘G`·`git403: Open Commit Graph`는 설정한 위치(기본: 사이드바)에 엽니다. 도움이 됐다면 [GitHub Sponsors](https://github.com/sponsors/goldtagworks)로 후원해 주세요.
