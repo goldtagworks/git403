@@ -36,7 +36,7 @@
 
 ## 설치
 
-설치 파일과 설치 방법은 [git403-releases](https://github.com/goldtagworks/git403-releases)에 있습니다(macOS는 Homebrew). 설치한 뒤에는 앱이 자동으로 업데이트됩니다. 소스에서 설치하려면 아래처럼 하세요.
+설치 파일은 [Releases](https://github.com/goldtagworks/git403/releases)에 있습니다. macOS는 Homebrew로 설치합니다: `brew tap goldtagworks/git403 https://github.com/goldtagworks/git403 && brew install --cask git403`. 설치한 뒤에는 앱이 자동으로 업데이트됩니다. 소스에서 설치하려면 아래처럼 하세요.
 
 git이 설치되어 있어야 합니다. 없으면 앱이 설치 방법을 안내합니다.
 

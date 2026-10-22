@@ -1,24 +1,24 @@
 # 릴리스 절차
 
-패키징·배포·자동 업데이트의 단일 문서. 빌드·배포는 로컬에서 한다. CI(`.github/workflows/ci.yml`·`vscode.yml`)는 비공개 저장소라 Actions 시간이 들어(macOS 10배) 수동 실행만. 지금 배포 방법은 아래 "개인 배포". 코드 서명·공증은 쓰지 않는다(아래 해당 절은 나중을 위한 참고). 앱 안 업데이트는 업데이터 키로 서명한다.
+패키징·배포·자동 업데이트의 단일 문서. 빌드·배포는 로컬에서 한다. CI(`.github/workflows/ci.yml`·`vscode.yml`)는 수동 실행만. 지금 배포 방법은 아래 "개인 배포". 코드 서명·공증은 쓰지 않는다(아래 해당 절은 나중을 위한 참고). 앱 안 업데이트는 업데이터 키로 서명한다.
 
 릴리스 노트는 루트 `CHANGELOG.md`의 `## <버전>` 절을 쓴다(`scripts/release-notes.mjs`가 뽑아 배포 스크립트의 `gh release create --notes`로 넘김). 배포 전에 그 절을 먼저 적는다. 확장은 `vscode/CHANGELOG.md`(마켓플레이스 Changelog 탭).
 
 ## 개인 배포 (macOS Homebrew·Windows 설치 파일, 서명 없음)
 
-소스 저장소(`goldtagworks/git403`)는 비공개. 바이너리·캐스크·스크린샷만 공개 저장소 [`goldtagworks/git403-releases`](https://github.com/goldtagworks/git403-releases)에 둔다(브랜치 `main`: `README.md`, `images/`, `Casks/git403.rb`). 이력에 회사 흔적이 있어 소스 저장소는 공개하지 않는다.
+공개 저장소 [`goldtagworks/git403`](https://github.com/goldtagworks/git403) 하나에 소스·릴리스·캐스크(`main`의 `Casks/git403.rb`)를 둔다. 릴리스 노트도 공개되므로 `CHANGELOG.md`에는 사용자에게 보여도 되는 내용만 적는다.
 
 1. `src-tauri/tauri.conf.json`의 `version`을 올린다.
 2. Mac에서 `scripts/release-mac.sh`: Apple Silicon dmg 빌드 → 릴리스 `v<version>`(없으면 생성)에 dmg 업로드 → `Casks/git403.rb` 버전·sha256 갱신·push. 활성 gh 계정과 상관없이 goldtagworks 토큰(`gh auth token -u goldtagworks`)을 쓴다.
    - Windows PC에서 `powershell -ExecutionPolicy Bypass -File scripts\windows\release.ps1`: `build.ps1` 빌드 → 같은 릴리스에 `git403_<version>_x64-setup.exe` 업로드. 그 PC의 gh에도 goldtagworks 계정이 로그인돼 있어야 한다. 순서는 상관없다(먼저 도는 쪽이 릴리스를 만든다).
-3. Windows 설치: 릴리스의 `-setup.exe`를 받아 실행(SmartScreen → 추가 정보 → 실행). macOS 설치: `brew tap goldtagworks/git403 https://github.com/goldtagworks/git403-releases && brew install --cask git403`. 업데이트: `brew update && brew upgrade --cask git403`. 캐스크 `postflight`가 격리 속성을 지워 Gatekeeper 경고 없이 열린다.
+3. Windows 설치: 릴리스의 `-setup.exe`를 받아 실행(SmartScreen → 추가 정보 → 실행). macOS 설치: `brew tap goldtagworks/git403 https://github.com/goldtagworks/git403 && brew install --cask git403`. 업데이트: `brew update && brew upgrade --cask git403`. 캐스크 `postflight`가 격리 속성을 지워 Gatekeeper 경고 없이 열린다.
 
-- 앱 안 자동 업데이트도 git403-releases에서 받는다: Mac은 `git403_<version>_aarch64.app.tar.gz`, Windows는 `-setup.exe`와 각 `.sig`, 그리고 `latest.json`. 캐스크는 `auto_updates true`라 앱이 스스로 업데이트해도 brew와 충돌하지 않는다. 서명 키 `~/.tauri/git403.key`(2026-10-21 새로 만듦, 암호 없음)를 Windows PC의 `%USERPROFILE%\.tauri\`에도 복사해 둔다.
+- 앱 안 자동 업데이트도 같은 저장소 릴리스에서 받는다: Mac은 `git403_<version>_aarch64.app.tar.gz`, Windows는 `-setup.exe`와 각 `.sig`, 그리고 `latest.json`. 캐스크는 `auto_updates true`라 앱이 스스로 업데이트해도 brew와 충돌하지 않는다. 서명 키 `~/.tauri/git403.key`(2026-10-21 새로 만듦, 암호 없음)를 Windows PC의 `%USERPROFILE%\.tauri\`에도 복사해 둔다.
 - 스크린샷(`images/`)은 mock UI를 Playwright로 찍는다(1440×900, 라이트·다크): 그래프·커밋 diff, 나란히 diff·변경사항, 저장소 통계, 설정. mock 기본 diff에는 다른 프로젝트 식별자가 섞여 있으니 `window.__fileDiff`로 중립 diff를 넣어 찍고, 올리기 전에 이미지를 눈으로 확인한다. 화면이 바뀌면 다시 찍어 이 저장소의 `images/`를 교체한다.
 
 ## VS Code 확장 (Marketplace)
 
-확장 ID `goldtagworks.git403`(publisher `goldtagworks`). 서버 바이너리가 플랫폼마다 달라 각 OS에서 그 OS용 VSIX를 만들어 올린다. 상세 페이지는 `vscode/README.md`(이미지는 git403-releases의 절대 URL).
+확장 ID `goldtagworks.git403`(publisher `goldtagworks`). 서버 바이너리가 플랫폼마다 달라 각 OS에서 그 OS용 VSIX를 만들어 올린다. 상세 페이지는 `vscode/README.md`(이미지는 이 저장소 `docs/images`의 raw 절대 URL).
 
 - PAT(`vsce publish`)는 쓰지 않는다: 새 Azure DevOps 조직은 Azure 구독(카드 등록)이 필요하다. 대신 웹 업로드.
 - 배포: `vscode/package.json`의 `version`을 올리고 각 OS에서 `pnpm --dir vscode package` → marketplace.visualstudio.com/manage/publishers/goldtagworks 에서 처음엔 New extension → Visual Studio Code, 이후엔 확장 `…` → Update로 VSIX 업로드. 플랫폼별 VSIX를 각각 올린다.
@@ -52,7 +52,7 @@ TAURI_SIGNING_PRIVATE_KEY="$HOME/.tauri/git403.key" TAURI_SIGNING_PRIVATE_KEY_PA
 
 ## 자동 업데이트 동작
 
-- endpoint: `https://github.com/goldtagworks/git403-releases/releases/latest/download/latest.json`. `latest.json`은 배포 스크립트가 `scripts/latest-json.mjs`로 플랫폼별(darwin-aarch64·windows-x86_64)로 합쳐 올린다.
+- endpoint: `https://github.com/goldtagworks/git403/releases/latest/download/latest.json`. `latest.json`은 배포 스크립트가 `scripts/latest-json.mjs`로 플랫폼별(darwin-aarch64·windows-x86_64)로 합쳐 올린다.
 - 앱은 시작 5초 뒤와 이후 매시간 "마지막 성공 확인이 하루 넘었는가"를 보고 확인한다(설정 > 일반 > 업데이트 자동 확인으로 끔). 실패는 조용히 넘어가고, 설정의 "지금 확인"만 결과를 보여 준다.
 - 새 버전이 있으면 상단 배너 → "업데이트하고 재시작" → 다운로드 진행률 → 설치 → 재시작(Windows는 설치 프로그램이 앱을 종료).
 - git은 번들하지 않는다. 시작 시 `git --version`이 실패하면 설치 안내 배너를 띄운다. deb/rpm은 `git`에 의존한다.

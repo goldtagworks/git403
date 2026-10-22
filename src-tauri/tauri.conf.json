@@ -67,7 +67,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFBMjFGNzE1N0NGMERBQzkKUldUSjJ2QjhGZmNocW1vL0Vzb1dSZ2k5R0ZOS0lhR3hTRDRtdFF2WEFUemhNRElVeWFmL1RqWHEK",
       "endpoints": [
-        "https://github.com/goldtagworks/git403-releases/releases/latest/download/latest.json"
+        "https://github.com/goldtagworks/git403/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"

@@ -8,7 +8,7 @@
   "private": true,
   "repository": {
     "type": "git",
-    "url": "https://github.com/goldtagworks/git403-releases"
+    "url": "https://github.com/goldtagworks/git403"
   },
   "sponsor": {
     "url": "https://github.com/sponsors/goldtagworks"

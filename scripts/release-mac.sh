@@ -1,11 +1,11 @@
 #!/bin/bash
-# macOS 배포 (서명 없음): 빌드 → git403-releases 릴리스 → 같은 저장소의 캐스크 갱신. Windows는 scripts/windows/release.ps1.
-# 설치: brew tap goldtagworks/git403 https://github.com/goldtagworks/git403-releases && brew install --cask git403 · 절차: docs/release.md
+# macOS 배포 (서명 없음): 빌드 → 이 저장소(goldtagworks/git403) 릴리스 → main의 캐스크 갱신. Windows는 scripts/windows/release.ps1.
+# 설치: brew tap goldtagworks/git403 https://github.com/goldtagworks/git403 && brew install --cask git403 · 절차: docs/release.md
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 OWNER=goldtagworks
-RELEASES=$OWNER/git403-releases
+RELEASES=$OWNER/git403
 VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
 DMG=target/release/bundle/dmg/git403_${VERSION}_aarch64.dmg
 APP=target/release/bundle/macos/git403.app.tar.gz
@@ -34,7 +34,7 @@ rm -rf "$TMPD"
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-git clone -q "https://x-access-token:$GH_TOKEN@github.com/$RELEASES.git" "$TMP"
+git clone -q --depth 1 "https://x-access-token:$GH_TOKEN@github.com/$RELEASES.git" "$TMP"
 mkdir -p "$TMP/Casks"
 cat > "$TMP/Casks/git403.rb" <<EOF
 cask "git403" do

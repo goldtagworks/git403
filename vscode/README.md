@@ -2,7 +2,7 @@
 
 A fast, lightweight Git client with a rich commit graph — inside VS Code.
 
-![Commit graph](https://raw.githubusercontent.com/goldtagworks/git403-releases/main/images/1-graph-dark.png)
+![Commit graph](https://raw.githubusercontent.com/goldtagworks/git403/main/docs/images/screenshot-dark.png)
 
 ## Features
 
@@ -10,8 +10,6 @@ A fast, lightweight Git client with a rich commit graph — inside VS Code.
 - **Inline blame** and hover — toggle with `git403: Toggle Inline Blame`.
 - **Views** — Branches, Tags, Stashes, Remotes, File History, Line History.
 - **CodeLens** and file/line history with diffs.
-
-![Changes](https://raw.githubusercontent.com/goldtagworks/git403-releases/main/images/2-changes-dark.png)
 
 ## Requirements
 
@@ -28,7 +26,7 @@ git403 is free. If it helps you, consider [sponsoring on GitHub](https://github.
 
 ## Notes
 
-- Personal project. Source code is not public; binaries and issues live at [git403-releases](https://github.com/goldtagworks/git403-releases).
+- Personal project. Source, releases and issues: [goldtagworks/git403](https://github.com/goldtagworks/git403).
 - The bundled `git403-server` binary is not code-signed.
 
 ---

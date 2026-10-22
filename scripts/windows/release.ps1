@@ -1,10 +1,10 @@
-﻿# Windows 설치 파일 배포 (서명 없음): build.ps1 빌드 → git403-releases 릴리스 v<version>에 setup.exe 업로드.
+﻿# Windows 설치 파일 배포 (서명 없음): build.ps1 빌드 → goldtagworks/git403 릴리스 v<version>에 setup.exe 업로드.
 # macOS(scripts/release-mac.sh)와 순서 상관없음 — 릴리스가 없으면 만든다. 절차: docs/release.md
 $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..\..")
 function Fail($m) { Write-Host "`n✘ $m" -ForegroundColor Red; exit 1 }
 
-$repo = "goldtagworks/git403-releases"
+$repo = "goldtagworks/git403"
 $v = node -p "require('./src-tauri/tauri.conf.json').version"
 # 활성 gh 계정과 상관없이 goldtagworks 토큰으로 올린다.
 $env:GH_TOKEN = gh auth token -u goldtagworks; if ($LASTEXITCODE) { Fail "gh auth login 으로 goldtagworks 계정을 추가하세요." }
