@@ -18,7 +18,7 @@
 
 ## VS Code 확장 (Marketplace)
 
-확장 ID `goldtagworks.git403-vscode`(publisher `goldtagworks`, `name`은 `git403-vscode`). `goldtagworks.git403`은 한 번 올렸다 지워서 마켓이 영구 예약해 다시 쓸 수 없다. 서버 바이너리가 플랫폼마다 달라 각 OS에서 그 OS용 VSIX를 만들어 올린다. 상세 페이지는 `vscode/README.md`(이미지는 이 저장소 `docs/images`의 raw 절대 URL).
+확장 ID `goldtagworks.git403-vscode`(publisher `goldtagworks`, `name`은 `git403-vscode`). `goldtagworks.git403`과 표시 이름 `git403`은 한 번 올렸다 지워서 마켓이 영구 예약해 다시 쓸 수 없다(표시 이름은 `git403 for VS Code`). 잘못 올렸으면 지우지 말고 Update로 덮어쓴다. 서버 바이너리가 플랫폼마다 달라 각 OS에서 그 OS용 VSIX를 만들어 올린다. 상세 페이지는 `vscode/README.md`(이미지는 이 저장소 `docs/images`의 raw 절대 URL).
 
 - PAT(`vsce publish`)는 쓰지 않는다: 새 Azure DevOps 조직은 Azure 구독(카드 등록)이 필요하다. 대신 웹 업로드.
 - 배포: `vscode/package.json`의 `version`을 올리고 각 OS에서 `pnpm --dir vscode package` → marketplace.visualstudio.com/manage/publishers/goldtagworks 에서 처음엔 New extension → Visual Studio Code, 이후엔 확장 `…` → Update로 VSIX 업로드. 플랫폼별 VSIX를 각각 올린다.

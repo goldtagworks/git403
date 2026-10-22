@@ -1,6 +1,6 @@
 {
   "name": "git403-vscode",
-  "displayName": "git403",
+  "displayName": "git403 for VS Code",
   "description": "%git403.description%",
   "version": "1.0.0",
   "publisher": "goldtagworks",
