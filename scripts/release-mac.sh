@@ -19,6 +19,7 @@ pnpm install --frozen-lockfile && pnpm --dir ui install --frozen-lockfile
 # Windows가 먼저 만들었을 수 있다.
 gh release view "v$VERSION" -R $RELEASES >/dev/null 2>&1 || gh release create "v$VERSION" -R $RELEASES --title "git403 v$VERSION" --notes "$(node scripts/release-notes.mjs "$VERSION")"
 TMPD=$(mktemp -d)
+rm -rf out
 gh release download "v$VERSION" -R $RELEASES -p latest.json -D "$TMPD" 2>/dev/null || true
 for T in aarch64-apple-darwin:aarch64:darwin-aarch64 x86_64-apple-darwin:x64:darwin-x86_64; do
   IFS=: read -r TRIPLE ARCH PLATFORM <<<"$T"
@@ -32,6 +33,8 @@ for T in aarch64-apple-darwin:aarch64:darwin-aarch64 x86_64-apple-darwin:x64:dar
   TAR=git403_${VERSION}_${ARCH}.app.tar.gz
   cp "$APP" "$TMPD/$TAR"
   node scripts/latest-json.mjs "$TMPD/latest.json" "$VERSION" "$PLATFORM" "https://github.com/$RELEASES/releases/download/v$VERSION/$TAR" "$APP.sig"
+  # 로컬 확인용으로 out/<아키텍처>에 복사한다(pnpm build와 같은 자리).
+  mkdir -p out && cp -R "target/$TRIPLE/release/bundle" "out/$ARCH"
   gh release upload "v$VERSION" "$DMG" "$TMPD/$TAR" -R $RELEASES --clobber
 done
 gh release upload "v$VERSION" "$TMPD/latest.json" -R $RELEASES --clobber
