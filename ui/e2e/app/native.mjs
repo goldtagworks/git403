@@ -106,6 +106,9 @@ mkdirSync(join(home, "loginbin"));
 writeFileSync(join(home, ".zprofile"), 'export PATH="$HOME/loginbin:$PATH"\n');
 writeFileSync(join(home, "loginbin", "e2e-login-tool"), `#!/bin/sh\necho ok > '${out}/hook'\n`);
 chmodSync(join(home, "loginbin", "e2e-login-tool"), 0o755);
+// AI CLI도 ~/.zprofile PATH에만 있다 → 시작 직후 감지가 PATH 보정을 기다려야 찾는다
+writeFileSync(join(home, "loginbin", "claude"), "#!/bin/sh\necho '9.9.9 (e2e)'\n");
+chmodSync(join(home, "loginbin", "claude"), 0o755);
 writeFileSync(join(repo, ".git", "hooks", "pre-commit"), "#!/bin/sh\ne2e-login-tool\n");
 chmodSync(join(repo, ".git", "hooks", "pre-commit"), 0o755);
 
@@ -160,6 +163,12 @@ try {
   await sleep(1000);
   await js(`await waitFor(() => byText(".commits .subject", "a를 바꿈"), "그래프");`);
   front();
+
+  await step("로그인 셸 PATH: 시작 직후 AI 상태 조회도 ~/.zprofile의 claude CLI를 찾는다", async () => {
+    const st = await js(`return await window.__TAURI_INTERNALS__.invoke("ai_status");`);
+    const a = st.providers.find((p) => p.provider === "anthropic");
+    if (!a.cli || a.cliVersion !== "9.9.9 (e2e)") throw new Error("claude CLI 감지 실패: " + JSON.stringify(a));
+  });
 
   await step("로그인 셸 PATH: 최소 PATH로 띄워도 ~/.zprofile의 도구를 pre-commit 훅이 찾는다", async () => {
     await sleep(2500); // 로그인 셸 PATH는 시작 뒤 백그라운드로 채워진다 (최대 2초)

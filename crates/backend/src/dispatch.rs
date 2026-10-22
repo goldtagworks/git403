@@ -15,6 +15,10 @@ impl Backend {
         let mut a = Args(args);
         let a = &mut a;
         let git = &self.git;
+        // 외부 CLI(gh·claude 등)를 찾는 명령은 로그인 셸 PATH가 채워진 뒤에 돈다
+        if cmd.starts_with("gh_") || cmd.starts_with("ai_") || cmd.starts_with("pr_") || cmd == "author_avatars" {
+            self.path_ready().await;
+        }
         match cmd {
             "set_locale" => {
                 gc_i18n::set(&a.get::<String>("locale")?);

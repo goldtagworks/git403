@@ -57,6 +57,8 @@ pub struct Inner {
     hosting: hosting::Hosting,
     /// gh 계정 임시 전환 구간의 직렬화 (docs/reuse.md gh 절)
     gh_gate: gh::Gate,
+    /// 로그인 셸 PATH 확인이 끝났는지(성공·실패 무관). `start`가 true로 바꾼다
+    path_done: tokio::sync::watch::Sender<bool>,
 }
 
 /// 백엔드 핸들. 복제는 같은 상태를 가리킨다.
@@ -101,6 +103,7 @@ impl Backend {
             config_dir: config_dir.clone(),
             hosting: hosting::Hosting::new(&config_dir),
             gh_gate: Default::default(),
+            path_done: tokio::sync::watch::channel(false).0,
         }))
     }
 
@@ -111,14 +114,24 @@ impl Backend {
         // GUI로 실행하면 로그인 셸의 PATH(homebrew·nvm 등)가 없다. 시작을 막지 않게 백그라운드에서 물어 GitRunner에 채운다.
         #[cfg(unix)]
         {
-            let cell = self.git.path_cell();
+            let (cell, done) = (self.git.path_cell(), self.path_done.clone());
             tokio::spawn(async move {
                 let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
                 if let Some(p) = gc_core::shellenv::login_shell_path(&shell).await {
                     let _ = cell.set(p);
                 }
+                done.send_replace(true);
             });
         }
+        #[cfg(not(unix))]
+        self.path_done.send_replace(true);
+    }
+
+    /// 로그인 셸 PATH 확인이 끝나길 기다린다(최대 3초). `gh`·`claude` 같은 CLI를 찾기 전에 부른다 —
+    /// 시작 직후 첫 조회가 PATH 없이 돌면 "없음"으로 굳는다(GUI 실행에서만 생기는 문제).
+    pub(crate) async fn path_ready(&self) {
+        let mut rx = self.path_done.subscribe();
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(3), rx.wait_for(|d| *d)).await;
     }
 }
 

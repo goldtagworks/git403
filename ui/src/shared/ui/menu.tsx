@@ -28,7 +28,8 @@ export async function nativeItems(list: MenuEntry[], roles: Roles = {}): Promise
           if (e.role) roles[e.role] = sub;
           return sub;
         }
-        const opts = { text: e.hint ? `${e.label} — ${e.hint}` : e.label, enabled: !e.disabled, accelerator: e.accelerator, action: e.action };
+        // Tauri는 action(메뉴 id)로 부른다 → 인자 없이 감싼다 (`open(path?)`이 id를 경로로 받지 않게)
+        const opts = { text: e.hint ? `${e.label} — ${e.hint}` : e.label, enabled: !e.disabled, accelerator: e.accelerator, action: () => void e.action() };
         return e.checked === undefined ? MenuItem.new(opts) : CheckMenuItem.new({ ...opts, checked: e.checked });
       }),
     );
