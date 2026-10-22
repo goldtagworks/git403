@@ -49,7 +49,7 @@ VS Code 마켓플레이스에서 `git403`(`goldtagworks.git403`)을 검색해 �
 - 사이드바 뷰: 브랜치, 태그, 스태시, 원격, 파일 히스토리, 줄 히스토리
 - CodeLens, 파일·줄 히스토리 diff
 
-지원 플랫폼은 macOS(Apple Silicon)와 Windows x64입니다.
+지원 플랫폼은 macOS(Apple Silicon·Intel)와 Windows x64입니다.
 
 ### 소스에서 설치
 

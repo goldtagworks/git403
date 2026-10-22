@@ -14,7 +14,7 @@ A fast, lightweight Git client with a rich commit graph — inside VS Code.
 ## Requirements
 
 - `git` installed on your system.
-- Platforms: macOS (Apple Silicon), Windows x64.
+- Platforms: macOS (Apple Silicon, Intel), Windows x64.
 
 ## Why
 
