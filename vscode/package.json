@@ -2,7 +2,7 @@
   "name": "git403-vscode",
   "displayName": "git403 for VS Code",
   "description": "%git403.description%",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "goldtagworks",
   "license": "GPL-3.0-only",
   "private": true,
