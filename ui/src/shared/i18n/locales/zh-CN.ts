@@ -356,6 +356,7 @@ export const zhCN: Record<Key, string> = {
   "rebase.pickAncestor": "请选择当前分支的祖先提交。",
   "rebase.hasMerge": "包含合并提交的范围无法进行交互式变基。",
   "pr.refresh": "刷新拉取请求",
+  "pr.loadFailed": "{remote}：无法加载（点击重试）",
   "pr.create": "创建拉取请求…",
   "pr.openBrowser": "在浏览器中打开",
   "pr.checkout": "检出 {head}",

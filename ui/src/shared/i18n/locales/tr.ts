@@ -356,6 +356,7 @@ export const tr: Record<Key, string> = {
   "rebase.pickAncestor": "Geçerli dalın atası olan bir commit seçin.",
   "rebase.hasMerge": "Merge commit'leri içeren bir aralıkta etkileşimli rebase yapılamaz.",
   "pr.refresh": "Pull Request'leri yenile",
+  "pr.loadFailed": "{remote}: yüklenemedi (yeniden denemek için tıklayın)",
   "pr.create": "Pull Request oluştur…",
   "pr.openBrowser": "Tarayıcıda aç",
   "pr.checkout": "{head} dalına geç",

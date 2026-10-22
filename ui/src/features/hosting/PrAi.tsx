@@ -11,7 +11,7 @@ import { shiftLines, sliceDiff, type SliceRow } from "../../shared/lib/diffSlice
 import { toast } from "../../shared/lib/toast";
 import { intlTag, t, useLocale, type Key } from "../../shared/i18n/i18n";
 import { countRender } from "../../shared/lib/profile";
-import { ensurePrepared, prFileDiff } from "./PrFiles";
+import { ensurePrepared, hasCommit, prFileDiff } from "./PrFiles";
 import type { AiEffort, AiPrReview, InboxPr, PrDetail, PrTimelineItem, RemoteInfo } from "../../shared/api/types";
 
 // PR AI 리뷰 탭(26c). 결과·체크·편집은 모두 shared/model/prai.ts 외부 스토어(PR별)라 탭·PR을 오가도 남고,
@@ -149,11 +149,12 @@ export function PrAi({ repo, target, pr, d, onCode }: PrAiProps) {
 
 const INC_WHY = { gone: "prr.ai.inc.gone", diverged: "prr.ai.inc.diverged" } as const;
 const INC_WHY_SHORT = { gone: "prr.ai.re.new.gone", diverged: "prr.ai.re.new.diverged" } as const;
-const has = (repo: string, sha: string) => api.git(repo, ["cat-file", "-e", `${sha}^{commit}`]).then(() => true, () => false);
 /** 이전에 리뷰한 head(old)로 범위 diff를 만들 수 있는지: 로컬에 있고(강제 푸시로 사라지지 않음) 새 head의 조상일 때. head가 아직 로컬에 없으면 조상 여부는 모르므로 통과 */
 async function checkInc(repo: string, old: string, head: string): Promise<"gone" | "diverged" | null> {
-  if (!(await has(repo, old))) return "gone";
-  if ((await has(repo, head)) && !(await api.git(repo, ["merge-base", "--is-ancestor", old, head]).then(() => true, () => false))) return "diverged";
+  // git 실패는 던진다: "사라짐·갈라짐"으로 오판하면 새 커밋만 리뷰가 틀린 이유로 막힌다
+  if (!(await hasCommit(repo, old))) return "gone";
+  // old가 head의 조상 ⇔ merge-base(old, head) == old (공통 조상 없음 = 종료 1 = 빈 값)
+  if ((await hasCommit(repo, head)) && (await api.git(repo, ["merge-base", old, head], [1])).trim() !== old) return "diverged";
   return null;
 }
 /** 이전 리뷰를 AI에 알리는 글: 요약(편집 전 AI 원문)과 코멘트 요약(file:line [level] title, 게시 여부). 각 줄을 들여써서 diff 헤더처럼 읽히지 않게 한다 */
@@ -186,7 +187,7 @@ async function analyze(repo: string, old: string, head: string, _r: AiPrReview, 
         const renamed = to !== c.c.file ? c.c.file : undefined;
         const sh = shiftLines(await diff0(c.c.file, to), c.c.line, c.c.endLine);
         if (c.posted) return { ...sh, file: c.c.file, line: c.c.line, endLine: c.c.endLine, risk: false };
-        const risk = await prFileDiff(repo, head, to).then((x) => sliceDiff(x, sh.line, sh.endLine) === null, () => false);
+        const risk = await prFileDiff(repo, head, to).then((x) => sliceDiff(x, sh.line, sh.endLine) === null, () => true); // 못 살핀 카드는 위험으로
         return { ...sh, file: to, renamed, risk };
       } catch {
         return null;
@@ -242,7 +243,7 @@ function Result({ k, rec, repo, target, pr, tl, head, aiOn, onCode, onAgain, onN
   useEffect(() => {
     if (!stale) return setChk(null);
     let live = true;
-    checkInc(repo, rec.sha, head).then((x) => live && setChk(x));
+    checkInc(repo, rec.sha, head).then((x) => live && setChk(x), () => live && setChk(null)); // 확인 실패는 막지 않는다(실행 때 다시 확인해 원인을 알린다)
     return () => void (live = false);
   }, [repo, rec.sha, head, stale, rec.note]);
   const praiseInit = result.praise.map((x) => `- ${x}`).join("\n");

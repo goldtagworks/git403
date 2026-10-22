@@ -356,6 +356,7 @@ export const ptBR: Record<Key, string> = {
   "rebase.pickAncestor": "Escolha um commit ancestral do branch atual.",
   "rebase.hasMerge": "Rebase interativo não é possível em um intervalo que contém commits de merge.",
   "pr.refresh": "Atualizar pull requests",
+  "pr.loadFailed": "{remote}: não foi possível carregar (clique para tentar de novo)",
   "pr.create": "Criar pull request…",
   "pr.openBrowser": "Abrir no navegador",
   "pr.checkout": "Fazer checkout de {head}",

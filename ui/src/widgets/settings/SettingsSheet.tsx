@@ -145,8 +145,8 @@ function GitTab() {
     setV(vals);
     setSign(signingState(all));
   }, [hasRepo]);
-  useEffect(() => void load(), [load]);
-  if (!v || !init) return <p className="help">{t("settings.reading")}</p>;
+  useEffect(() => void load().catch((e) => setErr(errText(e))), [load]);
+  if (!v || !init) return err ? <p className="warn selectable" role="alert">{err}</p> : <p className="help">{t("settings.reading")}</p>;
 
   const set = (k: keyof Vals, x: string) => setV({ ...v, [k]: x } as Vals);
   const dirty = (Object.keys(v) as (keyof Vals)[]).some((k) => v[k] !== init[k]);
@@ -247,7 +247,8 @@ function IgnoreTab() {
   const repo = ctx.repo;
   const [path, setPath] = useState<string | null>(null);
   const [err, setErr] = useState("");
-  useEffect(() => void ops.cfgRead("global").then((g) => setPath(g["core.excludesfile"] ?? "")), []);
+  // 못 읽으면 path는 null(만들기 버튼 없음) + 오류 — ""로 두면 기존 core.excludesFile을 덮어쓰는 버튼이 뜬다
+  useEffect(() => void ops.cfgRead("global").then((g) => setPath(g["core.excludesfile"] ?? ""), (e) => setErr(errText(e))), []);
   const loadRepo = useCallback(() => api.ignoreRead(repo), [repo]);
   const saveRepo = useCallback((t: string) => api.ignoreWrite(repo, t), [repo]);
   const loadGlobal = useCallback(() => api.globalIgnoreRead(path!), [path]);
@@ -308,7 +309,7 @@ function SshTab() {
       while (taken.has(`${n}.pub`)) n = `id_ed25519_${i++}`;
       setName(n);
     });
-    ops.cfgRead("all", "^user\\.email$").then((c) => setComment((x) => x || (c["user.email"] ?? "")));
+    ops.cfgRead("all", "^user\\.email$").then((c) => setComment((x) => x || (c["user.email"] ?? "")), () => {}); // 주석 기본값 추천일 뿐
   }, [refresh]);
   const generate = async () => {
     if (pass !== pass2) return setErr(t("settings.passMismatch"));
@@ -374,7 +375,7 @@ function ToolRow({ label, value, action, onClick, disabled }: { label: string; v
 function ToolsTab({ refocus }: { refocus: () => void }) {
   const [rev, setRev] = useState(0); // 시트에서 돌아오면 현재 값을 다시 읽는다
   const [tools, setTools] = useState<Record<string, string>>({});
-  useEffect(() => void ops.cfgRead("all", "^(diff|merge)\\.tool$").then(setTools), [rev]);
+  useEffect(() => void ops.cfgRead("all", "^(diff|merge)\\.tool$").then(setTools, (e) => ctx.error(errText(e))), [rev]);
   const run = (f: () => Promise<unknown>) => async () => (await f(), setRev((n) => n + 1), refocus());
   const none = !ctx.repo;
   const custom = stored<CustomCommand[]>("customCommands", []).length;
@@ -424,9 +425,9 @@ function JiraGroup({ refocus, onChange }: { refocus: () => void; onChange: () =>
       if (!repo || vals.off || vals.g.url || vals.l.url || ops.jiraDismissed(repo)) return;
       const s = await ops.jiraSuggest(repo).catch(() => null);
       if (s && my === seq.current && repo === ctx.repo) setSug(s);
-    });
+    }, (e) => setErr(errText(e))); // 못 읽었으면 "Jira 없음"으로 추천하지 않는다
   }, [load, repo]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!init) return null;
+  if (!init) return err ? <p className="warn selectable" role="alert">{err}</p> : null;
   const setScope = (sc: JiraScope) => {
     setScopeState(sc);
     try {

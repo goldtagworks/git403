@@ -67,7 +67,8 @@ export const api = {
   commitMessage: (repo: string, sha: string) => invoke<string>("commit_message", { repo, sha }),
   coAuthors: (repo: string, sha: string) => invoke<string[]>("co_authors", { repo, sha }),
   /** 결과만 필요한 짧은 git 명령. 긴 작업(네트워크)은 startJob. */
-  git: (repo: string, args: string[]) => invoke<string>("git", { repo, args }),
+  /** ok: 실패로 보지 않을 종료 코드(예: config --get 키 없음 = [1]) */
+  git: (repo: string, args: string[], ok?: number[]) => invoke<string>("git", ok ? { repo, args, ok } : { repo, args }),
   /** terminal(app: 터미널 앱 이름) | folder | reveal(파일을 탐색기에서 선택) | open(기본 앱). reveal·open의 path는 저장소 기준 상대 경로 */
   openIn: (repo: string, what: "terminal" | "folder" | "reveal" | "open", extra: { app?: string; path?: string } = {}) =>
     invoke<void>("open_in", { repo, what, app: extra.app ?? null, path: extra.path ?? null }),

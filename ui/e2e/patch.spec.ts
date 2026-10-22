@@ -23,7 +23,7 @@ test("커밋 우클릭: format-patch로 고른 폴더에 저장 (범위 포함)"
   await page.locator(".commits").getByText("Initial commit").click({ button: "right" });
   await menuItem(page, /여기부터 현재 브랜치 끝까지/).click();
   await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["format-patch", "-o", "/demo", expect.stringMatching(/^[0-9a-f]+\^\.\.HEAD$/)]);
-  expect((await gitCalls(page)).some((a) => a[0] === "merge-base" && a[1] === "--is-ancestor" && a[3] === "HEAD")).toBe(true);
+  expect((await gitCalls(page)).some((a) => a[0] === "merge-base" && a[2] === "HEAD")).toBe(true);
 });
 
 test("범위 패치: 루트 커밋이면 --root, 현재 브랜치에 없는 커밋이면 안내만", async ({ page }) => {

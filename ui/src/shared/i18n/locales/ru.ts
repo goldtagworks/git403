@@ -356,6 +356,7 @@ export const ru: Record<Key, string> = {
   "rebase.pickAncestor": "Выберите коммит-предок текущей ветки.",
   "rebase.hasMerge": "Интерактивный rebase невозможен для диапазона с merge-коммитами.",
   "pr.refresh": "Обновить Pull Requests",
+  "pr.loadFailed": "{remote}: не удалось загрузить (нажмите, чтобы повторить)",
   "pr.create": "Создать Pull Request…",
   "pr.openBrowser": "Открыть в браузере",
   "pr.checkout": "Checkout {head}",

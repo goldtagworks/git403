@@ -356,6 +356,7 @@ export const uk: Record<Key, string> = {
   "rebase.pickAncestor": "Виберіть коміт-предок поточної гілки.",
   "rebase.hasMerge": "Інтерактивний rebase неможливий для діапазону з комітами злиття.",
   "pr.refresh": "Оновити Pull Requests",
+  "pr.loadFailed": "{remote}: не вдалося завантажити (натисніть, щоб повторити)",
   "pr.create": "Створити Pull Request…",
   "pr.openBrowser": "Відкрити в браузері",
   "pr.checkout": "Перейти на {head}",

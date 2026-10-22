@@ -739,7 +739,7 @@ export const ops = {
     if (!r) return;
     // git에는 이름 변경이 없어서: 같은 커밋을 새 메시지로 다시 저장하고 원래 항목을 지운다.
     // 먼저 저장하고(실패해도 원본이 남는다) 그 뒤 한 칸 밀린 원래 항목을 지운다.
-    const sha = (await api.git(ctx.repo, ["rev-parse", name]).catch(() => "")).trim();
+    const sha = (await api.git(ctx.repo, ["rev-parse", name]).catch((e) => (ctx.error(String(e)), ""))).trim();
     const n = /^stash@\{(\d+)\}$/.exec(name)?.[1];
     if (sha && n && (await git(["stash", "store", "-m", String(r.message), sha]))) git(["stash", "drop", `stash@{${Number(n) + 1}}`], t("ops.stash.renamed"));
   },
@@ -766,10 +766,14 @@ export const ops = {
   savePatchCommits: async (id: string, toHead = false) => {
     let args = ["-1", id];
     if (toHead) {
-      if (!(await api.git(ctx.repo, ["merge-base", "--is-ancestor", id, "HEAD"]).then(() => true, () => false)))
-        return ctx.notify(t("ops.patch.notInBranch"));
-      // 루트 커밋이면 `id^`가 없다: 이때만 --root (전체 이력이 곧 id부터의 범위)
-      const hasParent = await api.git(ctx.repo, ["rev-parse", "--verify", "-q", `${id}^`]).then(() => true, () => false);
+      // 조상 ⇔ merge-base(id, HEAD) == id (공통 조상 없음 = 종료 1). git 실패는 "브랜치에 없음"으로 오판하지 않고 알린다
+      const base = await api.git(ctx.repo, ["merge-base", id, "HEAD"], [1]).catch((e) => (ctx.error(String(e)), null));
+      if (base === null) return;
+      if (base.trim() !== id) return ctx.notify(t("ops.patch.notInBranch"));
+      // 루트 커밋이면 `id^`가 없다(종료 1): 이때만 --root (전체 이력이 곧 id부터의 범위)
+      const parent = await api.git(ctx.repo, ["rev-parse", "--verify", "-q", `${id}^`], [1]).catch((e) => (ctx.error(String(e)), null));
+      if (parent === null) return;
+      const hasParent = !!parent.trim();
       args = hasParent ? [`${id}^..HEAD`] : ["--root", "HEAD"];
     }
     const dir = await api.pickFolder(t("ops.patch.folder"));
@@ -1233,7 +1237,8 @@ export const ops = {
   },
   /** 커밋을 원격 호스트 웹에서 연다. 원격이 여럿이면 현재 브랜치의 추적 원격(없으면 origin) 우선 */
   openCommitWeb: async (sha: string) => {
-    const infos = await api.remoteInfo(ctx.repo).catch(() => [] as RemoteInfo[]);
+    const infos = await api.remoteInfo(ctx.repo).catch((e) => (ctx.error(String(e)), null));
+    if (!infos) return; // 조회 실패는 "원격 없음"이 아니라 그 원인을 알린다
     const want = ctx.status?.upstream?.split("/")[0] ?? "origin";
     const i = infos.find((x) => x.provider && x.remote === want) ?? infos.find((x) => x.provider);
     if (!i?.provider) return ctx.error(t("ops.web.none"));
@@ -1243,7 +1248,9 @@ export const ops = {
   createPr: async (branch?: string, into?: string) => {
     const head = branch ?? ops.head();
     if (!head) return ctx.error(t("ops.pr.pickBranch"));
-    const infos = (await api.remoteInfo(ctx.repo).catch(() => [])).filter((i) => i.provider);
+    const all = await api.remoteInfo(ctx.repo).catch((e) => (ctx.error(String(e)), null));
+    if (!all) return; // 조회 실패는 "원격 없음"이 아니라 그 원인을 알린다
+    const infos = all.filter((i) => i.provider);
     if (!infos.length) return ctx.error(t("ops.pr.noRemote"));
     const to = into ? infos.find((i) => into.startsWith(`${i.remote}/`))?.remote : undefined;
     // 기본 원격: base로 고른 원격 → 브랜치의 추적(upstream) 원격 → origin → 첫 원격
@@ -1354,7 +1361,7 @@ export const ops = {
       const id = String(Math.max(-1, ...list.map((x) => Number(x.id) || 0)) + 1);
       try {
         if (cur && r.del) {
-          for (const k of ["regex", "url"]) await api.git(ctx.repo, ["config", "--local", "--unset", `git403.issue.${cur.id}.${k}`]).catch(() => "");
+          for (const k of ["regex", "url"]) await api.git(ctx.repo, ["config", "--local", "--unset", `git403.issue.${cur.id}.${k}`], [5]);
           ctx.notify(t("ops.issue.deleted"));
         } else {
           const regex = String(r.regex).trim(), url = String(r.url).trim();
@@ -1414,15 +1421,16 @@ export const ops = {
   aiOn,
   /** 방식 감지(`claude --version`·키 유무)와 저장소별 끄기를 읽는다. 저장소를 열 때·설정이 바뀔 때 부른다 */
   aiLoad: async (repo?: string) => {
-    const [status, cfg] = await Promise.all([api.aiStatus().catch(() => null), repo ? ops.cfgRead("local", "^git403\\.ai(conventions)?$") : Promise.resolve({} as Record<string, string>)]);
+    // 설정을 못 읽으면(null) 저장소별 끄기 값을 그대로 둔다 — "설정 없음"으로 보면 꺼 둔 AI가 켜진다
+    const [status, cfg] = await Promise.all([api.aiStatus().catch(() => null), repo ? ops.cfgRead("local", "^git403\\.ai(conventions)?$").catch(() => null) : Promise.resolve({} as Record<string, string>)]);
     if (repo && repo !== ctx.repo) return; // 그사이 다른 탭으로 바뀜
-    const falsy = (k: string) => ["false", "0", "no", "off"].includes((cfg[k] ?? "").toLowerCase());
+    const falsy = (k: string) => ["false", "0", "no", "off"].includes((cfg?.[k] ?? "").toLowerCase());
     const was = aiSig();
     ctx.ai.status = status;
-    if (repo) [ctx.ai.repoOff, ctx.ai.convOff] = [falsy("git403.ai"), falsy("git403.aiconventions")];
+    if (repo && cfg) [ctx.ai.repoOff, ctx.ai.convOff] = [falsy("git403.ai"), falsy("git403.aiconventions")];
     if (was !== aiSig()) aiBus.emit();
-    // 앱을 막 켠 직후엔 로그인 셸 PATH가 아직 없어 CLI를 못 찾을 수 있다 → 한 번만 늦게 다시 본다
-    if (status && !status.cli && !aiRetried) {
+    // 앱을 막 켠 직후엔 로그인 셸 PATH가 아직 없어 CLI를 못 찾을 수 있고, 조회 자체가 실패할 수도 있다 → 한 번만 늦게 다시 본다
+    if ((!status || !status.cli) && !aiRetried) {
       aiRetried = true;
       setTimeout(() => ops.aiLoad(repo && ctx.repo), 3000);
     }
@@ -1555,12 +1563,13 @@ export const ops = {
   cfgRead: async (scope: "global" | "local" | "all", re: string = GIT_SETTINGS_RE) => {
     const cwd = ctx.repo || (await api.homeDir());
     const flag = scope === "all" ? [] : [`--${scope}`];
-    return parseConfig(await api.git(cwd, ["config", ...flag, "--get-regexp", re]).catch(() => ""));
+    // 맞는 키가 없으면 git이 1로 끝난다(정상). 그 밖의 실패(락·설정 파일 오류)는 "설정 없음"으로 숨기지 않고 던진다
+    return parseConfig(await api.git(cwd, ["config", ...flag, "--get-regexp", re], [1]));
   },
-  /** git config 쓰기. value가 null이면 키를 지운다(없는 키 삭제는 오류로 보지 않음) */
+  /** git config 쓰기. value가 null이면 키를 지운다(없는 키 삭제 = 종료 5는 오류로 보지 않음, 그 밖의 실패는 던진다) */
   cfgWrite: async (scope: "global" | "local", key: string, value: string | null) => {
     const cwd = ctx.repo || (await api.homeDir());
-    if (value === null) await api.git(cwd, ["config", `--${scope}`, "--unset", key]).catch(() => "");
+    if (value === null) await api.git(cwd, ["config", `--${scope}`, "--unset", key], [5]);
     else await api.git(cwd, ["config", `--${scope}`, key, value]);
   },
   /** UI 설정 저장. 그래프 커밋 상한이 바뀌면 현재 저장소를 다시 읽는다 */

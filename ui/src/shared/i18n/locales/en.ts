@@ -355,6 +355,7 @@ export const en = {
   "rebase.pickAncestor": "Choose an ancestor commit of the current branch.",
   "rebase.hasMerge": "Interactive rebase is not possible over a range that contains merge commits.",
   "pr.refresh": "Refresh Pull Requests",
+  "pr.loadFailed": "{remote}: couldn't load (click to retry)",
   "pr.create": "Create Pull Request…",
   "pr.openBrowser": "Open in browser",
   "pr.checkout": "Check out {head}",

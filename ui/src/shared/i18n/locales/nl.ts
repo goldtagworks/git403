@@ -356,6 +356,7 @@ export const nl: Record<Key, string> = {
   "rebase.pickAncestor": "Kies een voorouder-commit van de huidige branch.",
   "rebase.hasMerge": "Interactieve rebase is niet mogelijk over een bereik met merge-commits.",
   "pr.refresh": "Pull requests vernieuwen",
+  "pr.loadFailed": "{remote}: laden mislukt (klik om opnieuw te proberen)",
   "pr.create": "Pull request aanmaken…",
   "pr.openBrowser": "Openen in browser",
   "pr.checkout": "{head} uitchecken",

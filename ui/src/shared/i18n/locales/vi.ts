@@ -356,6 +356,7 @@ export const vi: Record<Key, string> = {
   "rebase.pickAncestor": "Hãy chọn một commit tổ tiên của nhánh hiện tại.",
   "rebase.hasMerge": "Không thể rebase tương tác trên dải có chứa merge commit.",
   "pr.refresh": "Làm mới Pull Request",
+  "pr.loadFailed": "{remote}: không tải được (nhấn để thử lại)",
   "pr.create": "Tạo Pull Request…",
   "pr.openBrowser": "Mở trong trình duyệt",
   "pr.checkout": "Checkout {head}",

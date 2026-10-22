@@ -356,6 +356,7 @@ export const zhTW: Record<Key, string> = {
   "rebase.pickAncestor": "請選擇目前分支的祖先提交。",
   "rebase.hasMerge": "包含合併提交的範圍無法進行互動式 rebase。",
   "pr.refresh": "重新整理提取要求",
+  "pr.loadFailed": "{remote}：無法載入（點擊重試）",
   "pr.create": "建立提取要求…",
   "pr.openBrowser": "在瀏覽器中開啟",
   "pr.checkout": "簽出 {head}",

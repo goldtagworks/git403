@@ -356,6 +356,7 @@ export const it: Record<Key, string> = {
   "rebase.pickAncestor": "Scegli un commit antenato del branch corrente.",
   "rebase.hasMerge": "Il rebase interattivo non è possibile su un intervallo che contiene commit di merge.",
   "pr.refresh": "Aggiorna pull request",
+  "pr.loadFailed": "{remote}: impossibile caricare (clic per riprovare)",
   "pr.create": "Crea pull request…",
   "pr.openBrowser": "Apri nel browser",
   "pr.checkout": "Checkout di {head}",

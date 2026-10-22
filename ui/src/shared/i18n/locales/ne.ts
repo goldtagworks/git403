@@ -356,6 +356,7 @@ export const ne: Record<Key, string> = {
   "rebase.pickAncestor": "हालको ब्रान्चको पुर्खा कमिट छान्नुहोस्।",
   "rebase.hasMerge": "merge कमिट भएको दायरामा interactive rebase सम्भव छैन।",
   "pr.refresh": "Pull Request हरू ताजा गर्नुहोस्",
+  "pr.loadFailed": "{remote}: लोड गर्न सकिएन (फेरि प्रयास गर्न क्लिक गर्नुहोस्)",
   "pr.create": "Pull Request बनाउनुहोस्…",
   "pr.openBrowser": "ब्राउजरमा खोल्नुहोस्",
   "pr.checkout": "{head} चेकआउट गर्नुहोस्",

@@ -558,3 +558,20 @@ test("gh 계정 항목: 전환·연결·해제는 응답을 기다리지 않고 
   await expect(ghItem(page)).toHaveText("GitHub 계정 goldtagworks → me");
   await expect(page.locator("body")).toContainText("gh auth switch 실패");
 });
+
+test("PR 섹션: 목록을 못 불러오면 \"0개\"로 숨기지 않고 원격별 경고 줄(툴팁에 원인), 누르면 다시 조회", async ({ page }) => {
+  await open(page, { __prListFail: "Authentication failed" });
+  const row = page.locator(".sidebar").getByRole("button", { name: /origin: 불러오지 못함/ });
+  await expect(row).toBeVisible();
+  await expect(row).toHaveAttribute("title", /Authentication failed/);
+  await page.evaluate(() => ((window as any).__prListFail = null));
+  await row.click();
+  await expect(row).toHaveCount(0);
+  await expect(page.locator(".sidebar").getByRole("button", { name: /^Pull Requests/ })).toBeVisible();
+});
+
+test("커밋 상세: 변경 파일을 못 읽으면 \"변경 없음\" 대신 알린다", async ({ page }) => {
+  await open(page, { __changedFilesFail: "fatal: bad object" });
+  await page.locator(".commits").getByText("Initial commit").click();
+  await expect(page.locator(".toast", { hasText: "fatal: bad object" }).first()).toBeVisible();
+});

@@ -356,6 +356,7 @@ export const uz: Record<Key, string> = {
   "rebase.pickAncestor": "Joriy tarmoqning ajdod kommitini tanlang.",
   "rebase.hasMerge": "Merge kommitlari bor oraliqda interaktiv rebase qilib bo'lmaydi.",
   "pr.refresh": "Pull Request'larni yangilash",
+  "pr.loadFailed": "{remote}: yuklab bo'lmadi (qayta urinish uchun bosing)",
   "pr.create": "Pull Request yaratish…",
   "pr.openBrowser": "Brauzerda ochish",
   "pr.checkout": "{head} ni checkout qilish",

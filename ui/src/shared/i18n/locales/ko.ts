@@ -356,6 +356,7 @@ export const ko: Record<Key, string> = {
   "rebase.pickAncestor": "현재 브랜치의 조상 커밋을 고르세요.",
   "rebase.hasMerge": "머지 커밋이 포함된 구간은 interactive rebase할 수 없습니다.",
   "pr.refresh": "Pull Request 새로고침",
+  "pr.loadFailed": "{remote}: 불러오지 못함 (눌러서 다시 시도)",
   "pr.create": "Pull Request 만들기…",
   "pr.openBrowser": "브라우저에서 열기",
   "pr.checkout": "{head} 체크아웃",

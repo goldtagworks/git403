@@ -356,6 +356,7 @@ export const pl: Record<Key, string> = {
   "rebase.pickAncestor": "Wybierz commit będący przodkiem bieżącej gałęzi.",
   "rebase.hasMerge": "Interaktywny rebase nie jest możliwy w zakresie zawierającym commity scalające.",
   "pr.refresh": "Odśwież pull requesty",
+  "pr.loadFailed": "{remote}: nie udało się wczytać (kliknij, aby ponowić)",
   "pr.create": "Utwórz pull request…",
   "pr.openBrowser": "Otwórz w przeglądarce",
   "pr.checkout": "Checkout {head}",

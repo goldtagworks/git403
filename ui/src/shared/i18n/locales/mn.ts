@@ -356,6 +356,7 @@ export const mn: Record<Key, string> = {
   "rebase.pickAncestor": "Одоогийн салбарын өвөг коммитыг сонгоно уу.",
   "rebase.hasMerge": "Merge коммит агуулсан мужид интерактив rebase хийх боломжгүй.",
   "pr.refresh": "Pull Request-үүдийг сэргээх",
+  "pr.loadFailed": "{remote}: ачаалж чадсангүй (дахин оролдохын тулд дарна уу)",
   "pr.create": "Pull Request үүсгэх…",
   "pr.openBrowser": "Хөтөчид нээх",
   "pr.checkout": "{head}-г checkout хийх",

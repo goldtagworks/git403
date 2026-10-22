@@ -356,6 +356,7 @@ export const ja: Record<Key, string> = {
   "rebase.pickAncestor": "現在のブランチの祖先コミットを選択してください。",
   "rebase.hasMerge": "マージコミットを含む範囲ではインタラクティブ rebase はできません。",
   "pr.refresh": "プルリクエストを更新",
+  "pr.loadFailed": "{remote}: 読み込めませんでした（クリックで再試行）",
   "pr.create": "プルリクエストを作成…",
   "pr.openBrowser": "ブラウザーで開く",
   "pr.checkout": "{head} をチェックアウト",

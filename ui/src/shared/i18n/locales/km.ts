@@ -356,6 +356,7 @@ export const km: Record<Key, string> = {
   "rebase.pickAncestor": "សូមជ្រើសរើស commit ដូនតានៃ branch បច្ចុប្បន្ន។",
   "rebase.hasMerge": "មិនអាចធ្វើ interactive rebase លើជួរដែលមាន merge commit បានទេ។",
   "pr.refresh": "ផ្ទុក Pull Request ឡើងវិញ",
+  "pr.loadFailed": "{remote}: មិនអាចផ្ទុកបានទេ (ចុចដើម្បីព្យាយាមម្ដងទៀត)",
   "pr.create": "បង្កើត Pull Request…",
   "pr.openBrowser": "បើកក្នុងកម្មវិធីរុករក",
   "pr.checkout": "Checkout {head}",

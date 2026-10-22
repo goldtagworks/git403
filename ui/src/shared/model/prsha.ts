@@ -37,7 +37,7 @@ const lookup = (repo: string, sha: string) => {
         const [author = "", at = "", title = ""] = m.trim().split("\x1f");
         return { author, at, title, files: n === null ? null : n.split("\n").filter((l) => l.trim()).length } as ShaInfo;
       },
-      () => null,
+      () => (cache.delete(key), null), // 실패는 캐시하지 않는다: 다음 호버에서 다시 묻는다
     );
     cache.set(key, p);
     if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value!); // 가장 오래 안 쓴 것부터 버린다

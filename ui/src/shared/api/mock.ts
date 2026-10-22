@@ -321,8 +321,27 @@ const settingsPreview = {
 };
 let jobs = 0;
 mockWindows("main"); // getCurrentWindow()(창 숨기기)가 쓰는 창 정보
+/** 실제 백엔드처럼 `git`의 ok(정상 종료 코드)를 따른다: 그 코드로 끝난 mock 오류는 빈 출력 */
+const okCode = (args: any, e: unknown) => {
+  const m = /종료 코드 (\d+)/.exec(String(e));
+  return !!m && Array.isArray(args?.ok) && args.ok.includes(Number(m[1]));
+};
 mockIPC(
   (cmd, args) => {
+    if (cmd !== "git" || !(args as any)?.ok) return handle(cmd, args);
+    try {
+      const r = handle(cmd, args);
+      return r instanceof Promise ? r.catch((e) => (okCode(args, e) ? "" : Promise.reject(e))) : r;
+    } catch (e) {
+      if (okCode(args, e)) return "";
+      throw e;
+    }
+  },
+  { shouldMockEvents: true },
+);
+
+function handle(cmd: string, args: any): any {
+  {
     if (cmd === "initial_repo") return null;
     // 저장소 열기는 데모 저장소, 그 밖의 폴더 선택(복제 위치·스캔)은 /demo
     // E2E: window.__saveCancel = true 면 저장·패치 선택 대화상자를 취소한 것으로 본다. window.__patchFile = 선택될 패치 경로
@@ -389,6 +408,7 @@ mockIPC(
       return new Promise((r) => setTimeout(() => r(statsFor(a.range, a.withLines)), (window as any).__slowStats ?? 0));
     }
     // E2E: window.__changedFiles(ChangedFile[])가 있으면 커밋 변경 파일 목록을 그걸로 바꾼다 (이미지 diff 등)
+    if (cmd === "changed_files" && (window as any).__changedFilesFail) throw (window as any).__changedFilesFail;
     if (cmd === "changed_files") return (window as any).__changedFiles ?? files;
     // 파일 바이트: window.__blobs = {"rev:path": base64} (rev는 null이면 "WORKTREE"). 없으면 null
     if (cmd === "file_blob") {
@@ -715,9 +735,17 @@ mockIPC(
     }
     if (cmd === "git") {
       let a = (args as { args: string[] }).args;
+      // __configFail: git config 읽기 자체가 실패(락·설정 파일 오류). "키 없음"(종료 1)과 다르다
+      if ((window as any).__configFail && a[0] === "config" && a.includes("--get-regexp")) throw (window as any).__configFail;
       while (a[0] === "-c" && a[1] === "core.quotepath=false") (gitCalls.push(["quotepath", a[2]]), (a = a.slice(2))); // AI 입력 조회의 앞 옵션은 무시하고 ["quotepath", 명령]으로 기록
       // PR 변경 파일(26b): window.__missing = true 면 PR head가 로컬에 없다(cat-file 실패, `fetch … refs/pull/` 작업이 성공하면 생김).
       // __prFiles(ChangedFile[], 기본 변경 3파일), __prRangeDiff(전체 변경 범위의 파일 diff, 기본 샘플). 범위 diff는 ["pr_range_diff", 경로], cat-file·merge-base는 그대로 기록
+      if (a[0] === "rev-parse" && a[1] === "--verify" && a[2] === "-q" && a[3]?.endsWith("^{commit}")) {
+        gitCalls.push(a);
+        const sha = a[3].replace("^{commit}", "");
+        if ((window as any).__missing || (window as any).__missingShas?.some((x: string) => sha.startsWith(x))) return ""; // 없음 = 종료 1 (ok로 받음)
+        return sha + "\n";
+      }
       if (a[0] === "cat-file") {
         gitCalls.push(a);
         if ((window as any).__missing || (window as any).__missingShas?.some((x: string) => a[2]?.startsWith(x))) throw "fatal: Not a valid object name"; // __missingShas: 이 sha들만 로컬에 없음(강제 푸시)
@@ -885,13 +913,13 @@ mockIPC(
       }
       if (a[0] === "rev-parse" && a[1] === "--verify") {
         if ((window as any).__noHead && a[3] === "HEAD") throw "exit 1";
-        if ((window as any).__rootCommit && a[3]?.endsWith("^")) throw "exit 1";
+        if ((window as any).__rootCommit && a[3]?.endsWith("^")) throw "git 종료 코드 1"; // 부모 없음 (ok [1]이면 빈 출력)
         return "abc\n";
       }
       if (a[0] === "merge-base") {
         gitCalls.push(a);
-        if ((window as any).__notAncestor) throw "exit 1";
-        return "";
+        // merge-base A B: A가 B의 조상이면 A (= --is-ancestor 대신 쓰는 판정). __notAncestor면 다른 커밋
+        return (window as any).__notAncestor ? "0ther\n" : `${a[1]}\n`;
       }
       // 스냅샷: stash create는 새 커밋 SHA를 돌려준다 (변경이 없으면 빈 출력)
       if (a[0] === "stash" && a[1] === "create") {
@@ -925,6 +953,5 @@ mockIPC(
       return job;
     }
     throw new Error(`mock에 없는 명령: ${cmd}`);
-  },
-  { shouldMockEvents: true },
-);
+  }
+}

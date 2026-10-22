@@ -135,7 +135,10 @@ impl Backend {
     /// 시작 직후 첫 조회가 PATH 없이 돌면 "없음"으로 굳는다(GUI 실행에서만 생기는 문제).
     pub(crate) async fn path_ready(&self) {
         let mut rx = self.path_done.subscribe();
-        let _ = tokio::time::timeout(std::time::Duration::from_secs(3), rx.wait_for(|d| *d)).await;
+        // 기다림은 앱 전체에서 한 번(최대 3초): 셸이 느리면 이후 명령은 기다리지 않는다(확인은 뒤에서 계속, 끝나면 PATH가 채워진다)
+        if tokio::time::timeout(std::time::Duration::from_secs(3), rx.wait_for(|d| *d)).await.is_err() {
+            self.path_done.send_replace(true);
+        }
     }
 }
 

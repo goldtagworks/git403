@@ -63,12 +63,14 @@ type Prep = { phase: "checking" | "fetching" | "ready" | "error"; line: string; 
 
 /** head·base 커밋이 로컬에 있는지 보고(cat-file) 없으면 `git fetch <원격> refs/pull/N/head [base 브랜치]`로 객체만 받는다(FETCH_HEAD, 로컬 ref 없음).
  *  병합 기준 커밋을 돌려주고 `repo+headSha`별로 캐시한다. 변경 파일 탭(usePrepare)과 AI 리뷰(ops.aiReviewPr)가 함께 쓴다. `alive`가 false가 되면 호출자가 결과를 버린다 */
+/** 커밋이 로컬에 있는가. 없으면 false, git 실패(락 등)는 던진다(없음으로 보지 않는다) */
+export const hasCommit = async (repo: string, sha: string) => !!(await api.git(repo, ["rev-parse", "--verify", "-q", `${sha}^{commit}`], [1])).trim();
+
 export async function ensurePrepared(repo: string, remote: string, pr: InboxPr, d: PrDetail, hooks: { /** false가 되면(화면이 사라짐·다시 시작) 받기 전에 그만둔다 */ alive?: () => boolean; onFetch?: () => void; onLine?: (l: string) => void; job?: { id: number | null } } = {}): Promise<string> {
   const key = `${repo}\0${d.headSha}`;
   const cached = prepared.get(key);
   if (cached) return cached;
-  const has = (sha: string) => api.git(repo, ["cat-file", "-e", `${sha}^{commit}`]).then(() => true, () => false);
-  const [h, b] = await Promise.all([has(d.headSha), has(d.baseSha)]);
+  const [h, b] = await Promise.all([hasCommit(repo, d.headSha), hasCommit(repo, d.baseSha)]);
   if (hooks.alive && !hooks.alive()) throw new Error("cancelled");
   if (!h || !b) {
     hooks.onFetch?.();
@@ -76,7 +78,8 @@ export async function ensurePrepared(repo: string, remote: string, pr: InboxPr, 
     const args = ["fetch", "--no-tags", "--progress", "--", remote, `refs/pull/${pr.number}/head`, ...(b || pr.base.includes(":") ? [] : [`refs/heads/${pr.base}`])];
     await runJob(repo, args, hooks.onLine ?? (() => {}), hooks.job ?? { id: null });
   }
-  const mb = (await api.git(repo, ["merge-base", d.baseSha, d.headSha]).catch(() => "")).trim() || d.baseSha;
+  // 공통 조상이 없으면(종료 1) base 끝이 기준. 그 밖의 실패는 던진다 — base로 대신해 캐시하면 앱을 다시 켤 때까지 틀린 diff가 남는다
+  const mb = (await api.git(repo, ["merge-base", d.baseSha, d.headSha], [1])).trim() || d.baseSha;
   prepared.set(key, mb);
   return mb;
 }

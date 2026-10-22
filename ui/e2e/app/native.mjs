@@ -213,12 +213,13 @@ try {
     `);
   });
 
-  await step("⌘W·창 닫기: 앱은 종료되지 않고 창만 숨는다, Dock 아이콘(reopen)으로 다시 보인다", async () => {
+  await step("창 닫기: 닫기 버튼은 앱을 끝내지 않고 창만 숨긴다(탭 유지), Dock 아이콘(reopen)으로 다시 보인다", async () => {
     const wins = () => Number(osa('tell application "System Events" to count windows of process "git403"'));
     front();
     await until(() => wins() === 1, "창 1개");
-    osa('tell application "System Events" to keystroke "w" using command down');
-    await until(() => wins() === 0, "⌘W 뒤 창 숨김");
+    // ⌘W는 저장소 탭부터 닫는다(main.tsx closeKey) → 창 숨기기는 빨간 닫기 버튼으로 본다
+    osa('tell application "System Events" to tell process "git403" to click (first button of window 1 whose subrole is "AXCloseButton")');
+    await until(() => wins() === 0, "닫기 버튼 뒤 창 숨김");
     eq(await js(`return 1 + 1;`), 2, "앱 프로세스는 살아 있어 응답한다");
     osa('tell application "System Events" to tell process "Dock" to click UI element "git403" of list 1'); // Dock 아이콘 클릭 = reopen
     await until(() => wins() === 1, "reopen 뒤 창 다시 보임");
@@ -296,7 +297,7 @@ try {
       press(await waitFor(() => $('[role=tab]#stab-accounts'), "Accounts 탭"));
       const form = await waitFor(() => $('form[aria-label="Accounts"]'), "계정 폼");
       fill(form.querySelector("select"), "5");
-      fill(await waitFor(() => [...form.querySelectorAll("label.field")].find((l) => l.textContent.startsWith("Host"))?.querySelector("input"), "Host 칸"), ${JSON.stringify(HTTP)});
+      fill(await waitFor(() => [...form.querySelectorAll(".sitem")].find((r) => r.querySelector(".sitem-name")?.textContent === "Host")?.querySelector("input"), "Host 칸"), ${JSON.stringify(HTTP)});
       fill(form.querySelector('input[type=password]'), ${JSON.stringify(TOKEN)});
       press(await waitFor(() => [...form.querySelectorAll("button[type=submit]")].find((b) => !b.disabled), "Connect"));
       await waitFor(() => byText('.accounts li', "e2e-user") || form.querySelector("[role=alert]"), "목록에 계정");

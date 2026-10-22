@@ -92,8 +92,9 @@ function App() {
 
   const loadStatus = useCallback(async (path = repoRef.current) => {
     if (!path) return;
-    const s = await api.loadStatus(path).catch(() => null);
+    const s = await api.loadStatus(path).catch((e) => (console.warn("load_status", e), undefined));
     if (path !== repoRef.current) return; // 그사이 다른 탭으로 바뀜
+    if (s === undefined) return; // 일시적 실패(락 등): 지난 상태를 그대로 둔다 — null로 지우면 변경 화면·ahead/behind가 사라진다
     setStatus((prev) => (ctx.status = same(prev, s)));
   }, []);
 

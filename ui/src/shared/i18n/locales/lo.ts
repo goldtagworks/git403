@@ -356,6 +356,7 @@ export const lo: Record<Key, string> = {
   "rebase.pickAncestor": "ເລືອກຄອມມິດບັນພະບຸລຸດຂອງບຣານຊ໌ປັດຈຸບັນ.",
   "rebase.hasMerge": "ເຮັດ interactive rebase ໃນຊ່ວງທີ່ມີຄອມມິດ merge ບໍ່ໄດ້.",
   "pr.refresh": "ໂຫຼດ Pull Request ຄືນໃໝ່",
+  "pr.loadFailed": "{remote}: ໂຫຼດບໍ່ໄດ້ (ກົດເພື່ອລອງໃໝ່)",
   "pr.create": "ສ້າງ Pull Request…",
   "pr.openBrowser": "ເປີດໃນບຣາວເຊີ",
   "pr.checkout": "Checkout {head}",

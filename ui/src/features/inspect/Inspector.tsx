@@ -72,7 +72,7 @@ function History({ path, onSelect }: { path: string; onSelect: (id: string) => v
     api.fileLog(ctx.repo, path).then((c) => (setCommits(c), setSel(c[0]?.id ?? null)), (e) => ctx.error(String(e)));
   }, [path]);
   useEffect(() => {
-    if (sel) api.fileDiff(ctx.repo, sel, path).then(setDiff, () => setDiff(""));
+    if (sel) api.fileDiff(ctx.repo, sel, path).then(setDiff, (e) => (setDiff(""), ctx.error(String(e)))); // 빈 diff("변경 없음")로만 두지 않는다
   }, [sel, path]);
   return (
     <div className="inspector-body hist">

@@ -114,7 +114,14 @@ function PrReviewScreen({ repo }: { repo: string }) {
 
   const load = useCallback(async () => {
     const mine = ++seq.current;
-    const infos = await api.remoteInfo(repo).catch(() => [] as RemoteInfo[]);
+    // 원격 정보를 못 읽으면 "GitHub 원격 없음"이 아니라 오류 + 다시 시도
+    let infos: RemoteInfo[];
+    try {
+      infos = await api.remoteInfo(repo);
+    } catch (e) {
+      if (mine === seq.current) (setTarget(undefined), setInbox({ key: `${repo}:${state}`, data: null, error: String(e) }));
+      return;
+    }
     if (mine !== seq.current) return;
     const gh = infos.find((i) => i.provider === "github") ?? null;
     setTarget(gh);

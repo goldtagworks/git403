@@ -356,6 +356,7 @@ export const tl: Record<Key, string> = {
   "rebase.pickAncestor": "Pumili ng ancestor commit ng kasalukuyang branch.",
   "rebase.hasMerge": "Hindi posible ang interactive rebase sa range na may merge commit.",
   "pr.refresh": "I-refresh ang mga Pull Request",
+  "pr.loadFailed": "{remote}: hindi ma-load (i-click para subukang muli)",
   "pr.create": "Gumawa ng Pull Request…",
   "pr.openBrowser": "Buksan sa browser",
   "pr.checkout": "I-checkout ang {head}",

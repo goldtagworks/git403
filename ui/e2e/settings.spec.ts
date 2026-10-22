@@ -242,6 +242,12 @@ test("자동 fetch: 저장소가 없으면 아무것도 하지 않는다", async
 });
 
 // ---- Git ----
+test("Git: 설정을 읽지 못하면 빈칸(설정 없음) 대신 원인을 보인다", async ({ page }) => {
+  await open(page, "Git", { __configFail: "fatal: unable to read config file '/home/x/.gitconfig'" });
+  await expect(dlg(page).getByRole("alert")).toContainText("unable to read config file");
+  await expect(dlg(page).getByLabel("전역 이메일")).toHaveCount(0);
+});
+
 test("Git: 전역 이름·이메일·기본 브랜치·pull 기본값 저장은 config --global 인자로 간다", async ({ page }) => {
   await open(page, "Git");
   const d = dlg(page);

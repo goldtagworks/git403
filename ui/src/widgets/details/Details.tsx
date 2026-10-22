@@ -11,7 +11,7 @@ import { DiffView } from "../../entities/diff/DiffView";
 import { inspect } from "../../features/inspect/Inspector";
 import { fileMenu } from "../../features/inspect/fileMenu";
 import { contextMenu } from "../../shared/ui/menu";
-import { ops } from "../../shared/model/ops";
+import { ctx, ops } from "../../shared/model/ops";
 import { Avatar, requestAvatars } from "../../shared/ui/avatar";
 import { Icon } from "../../shared/ui/Icon";
 import { FileNav, neighbors, revealSelected } from "../../shared/ui/FileNav";
@@ -55,7 +55,7 @@ export const Details = memo(function Details({ repo, commit, rules }: { repo: st
     setFiles([]);
     setFile(null);
     setDiff("");
-    if (commit) api.changedFiles(repo, commit.id).then(setFiles);
+    if (commit) api.changedFiles(repo, commit.id).then(setFiles, (e) => ctx.error(String(e))); // 실패를 "변경 파일 없음"으로 보이지 않게 알린다
   }, [repo, commit?.id]);
 
   useEffect(() => void (commit && requestAvatars(repo, [commit])), [repo, commit]);
@@ -93,7 +93,7 @@ export const Details = memo(function Details({ repo, commit, rules }: { repo: st
   }, [body]);
   const file = picked ?? (hasMessage ? MSG : files[0]?.path ?? null);
   useEffect(() => {
-    if (commit && file && file !== MSG) api.fileDiff(repo, commit.id, file).then(setDiff);
+    if (commit && file && file !== MSG) api.fileDiff(repo, commit.id, file).then(setDiff, (e) => ctx.error(String(e)));
   }, [repo, commit?.id, file, ignoreEol, ignoreWs]);
   const rows = useMemo(() => (fileView === "tree" ? toTree(files) : files.map(asListRow)), [files, fileView]);
 

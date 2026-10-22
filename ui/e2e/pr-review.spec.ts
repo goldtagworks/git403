@@ -477,7 +477,7 @@ test("변경 파일 탭: 전체 변경 → 파일 선택 → diff, 요약 줄, �
   const c = await calls(page);
   const diffCall = c.find((x) => x[0] === "pr_range_diff")!;
   expect(diffCall).toBeTruthy();
-  expect(c.filter((x) => x[0] === "cat-file").length).toBeGreaterThanOrEqual(1);
+  expect(c.filter((x) => x[0] === "rev-parse" && x[1] === "--verify").length).toBeGreaterThanOrEqual(1);
   expect(c.filter((x) => x[0] === "start_job")).toHaveLength(0); // 로컬에 있으면 fetch 안 함
   await expect(files(page).locator("[role=note]")).toHaveCount(0);
   // 개요로 돌아갔다 와도 범위는 유지

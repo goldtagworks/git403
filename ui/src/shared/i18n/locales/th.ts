@@ -356,6 +356,7 @@ export const th: Record<Key, string> = {
   "rebase.pickAncestor": "เลือก commit บรรพบุรุษของ branch ปัจจุบัน",
   "rebase.hasMerge": "ไม่สามารถทำ interactive rebase กับช่วงที่มี merge commit ได้",
   "pr.refresh": "รีเฟรช Pull Request",
+  "pr.loadFailed": "{remote}: โหลดไม่ได้ (คลิกเพื่อลองอีกครั้ง)",
   "pr.create": "สร้าง Pull Request…",
   "pr.openBrowser": "เปิดในเบราว์เซอร์",
   "pr.checkout": "Checkout {head}",

@@ -41,14 +41,14 @@ export async function run() {
   assert.deepEqual(s.watched, sorted, "저장소마다 watch_add");
 
   // ---- 뷰: 저장소가 둘 이상이면 최상위가 저장소 노드 ----
-  let b = await until(() => tree("branches"), (n) => n.length === 4 && n.every((x) => x.children?.length), "Branches 저장소 노드");
+  let b = await until(() => tree("branches"), (n) => n?.length === 4 && n.every((x) => x.children?.length), "Branches 저장소 노드");
   assert.deepEqual(labels(b), ["a-app", "inner", "b-lib", "c-tool"]);
   assert.ok(b.every((x) => x.context === "git403.repo" && x.icon === "repo"));
   assert.deepEqual(localOf(b[0]), ["main", "a-feature"]);
   assert.deepEqual(localOf(b[2]), ["main", "b-feature"]);
   assert.deepEqual(labels(b[0].children), ["Local", "origin"], "a-app에는 원격이 있다");
   // 원격 뷰: URL이 설명
-  const rm = await until(() => tree("remotes"), (n) => n.length === 4, "Remotes 저장소 노드");
+  const rm = await until(() => tree("remotes"), (n) => n?.length === 4, "Remotes 저장소 노드");
   assert.equal(rm[0].children![0].label, "origin");
   assert.equal(rm[0].children![0].description, git(A, "remote", "get-url", "origin"), "원격 노드 설명 = URL");
   const tags = await tree("tags");

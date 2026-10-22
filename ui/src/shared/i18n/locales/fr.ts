@@ -356,6 +356,7 @@ export const fr: Record<Key, string> = {
   "rebase.pickAncestor": "Choisissez un commit ancêtre de la branche actuelle.",
   "rebase.hasMerge": "Le rebase interactif est impossible sur une plage contenant des commits de fusion.",
   "pr.refresh": "Actualiser les pull requests",
+  "pr.loadFailed": "{remote} : chargement impossible (cliquer pour réessayer)",
   "pr.create": "Créer une pull request…",
   "pr.openBrowser": "Ouvrir dans le navigateur",
   "pr.checkout": "Extraire {head}",

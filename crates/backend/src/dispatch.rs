@@ -164,10 +164,11 @@ impl Backend {
                 json(gc_core::fix_crlf(git, &repo, &paths).await.map_err(err)?)
             }
             // 결과만 필요한 짧은 git 명령 (checkout, branch -d, tag …). 긴 작업은 start_job.
+            // ok: 실패로 보지 않을 종료 코드(예: `config --get` 키 없음 = 1). 생략하면 0만 성공
             "git" => {
-                let (repo, args) = (a.repo()?, a.get::<Vec<String>>("args")?);
+                let (repo, args, ok) = (a.repo()?, a.get::<Vec<String>>("args")?, a.get::<Option<Vec<i32>>>("ok")?.unwrap_or_default());
                 let argv: Vec<&str> = args.iter().map(String::as_str).collect();
-                let out = git.output(&repo, &argv).await.map_err(err)?;
+                let out = git.output_allow(&repo, &argv, &ok).await.map_err(err)?;
                 json(String::from_utf8_lossy(&out))
             }
             // ---- 파일 ----
