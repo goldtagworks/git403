@@ -1,0 +1,30 @@
+{
+  // F5: 첫 번째 구성으로 실행된다. UI 개발자 도구는 앱 창에서 우클릭 → 검사(⌥⌘I).
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // 확장 없이 바로 된다: tauri dev (Rust 디버그 빌드 + Vite 핫 리로드)
+      // node-terminal은 명령이 끝나도 터미널이 남아 세션이 안 끝난다 → pnpm 프로세스에 묶어 앱 종료 = 디버그 종료
+      "name": "git403 디버그 (tauri dev)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev"],
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": false,
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      // Rust 중단점이 필요할 때. CodeLLDB 확장(vadimcn.vscode-lldb) 필요
+      "name": "git403 Rust 중단점 (CodeLLDB)",
+      "type": "lldb",
+      "request": "launch",
+      "cargo": {
+        "args": ["build", "-p", "git403", "--bin", "git403"],
+        "filter": { "kind": "bin" }
+      },
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "ui: dev"
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+name: vscode-extension
+
+# VS Code 확장(vscode/) 크로스플랫폼 VSIX. 서버(git403-server)는 플랫폼마다 그 러너에서 빌드한다(교차 컴파일 없음).
+# 비공개 저장소라 Actions 시간이 든다(macOS 10배). 필요할 때만 수동 실행.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: vscode-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vsix:
+    name: vsix (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-14, target: darwin-arm64 }
+          - { os: macos-15-intel, target: darwin-x64 }
+          - { os: windows-latest, target: win32-x64 }
+          - { os: ubuntu-22.04, target: linux-x64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux 시스템 패키지 (서버 빌드 + VS Code 스모크용 xvfb·Electron 라이브러리)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config xvfb libgbm1 libasound2 libnss3 libgtk-3-0 libxss1 libxkbfile1 libsecret-1-0
+
+      # rust-toolchain.toml의 채널·컴포넌트를 그대로 쓴다
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.92.0
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            ui/pnpm-lock.yaml
+            vscode/pnpm-lock.yaml
+
+      - run: pnpm --dir ui install --frozen-lockfile
+      - run: pnpm --dir vscode install --frozen-lockfile
+
+      # 서버 release 빌드 → ui 빌드 (확장은 이 둘을 담는다)
+      - name: 서버 release 빌드
+        run: cargo build --release -p gc-backend --bin git403-server
+      - name: UI 빌드
+        run: pnpm --dir ui build
+
+      - name: 타입 검사·단위 테스트
+        run: |
+          pnpm --dir vscode typecheck
+          pnpm --dir vscode test:unit
+
+      - name: VSIX 패키징 (${{ matrix.target }})
+        run: pnpm --dir vscode package --target ${{ matrix.target }} --skip-build
+
+      # 진짜 VS Code로 스모크(편집기 통합·뷰·다중 저장소·웹뷰). 디스플레이가 필요해 Linux만 xvfb로 돌린다
+      - name: VS Code 스모크 (xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm --dir vscode test
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: git403-${{ matrix.target }}.vsix
+          path: vscode/git403-${{ matrix.target }}.vsix
+          if-no-files-found: error

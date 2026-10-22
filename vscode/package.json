@@ -1,0 +1,418 @@
+{
+  "name": "git403",
+  "displayName": "git403",
+  "description": "%git403.description%",
+  "version": "1.0.0",
+  "publisher": "goldtagworks",
+  "license": "UNLICENSED",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/goldtagworks/git403-releases"
+  },
+  "sponsor": {
+    "url": "https://github.com/sponsors/goldtagworks"
+  },
+  "icon": "media/icon.png",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "keywords": [
+    "git",
+    "git graph",
+    "commit graph",
+    "graph",
+    "blame",
+    "history",
+    "file history",
+    "line history",
+    "branch",
+    "rebase",
+    "stash",
+    "free"
+  ],
+  "categories": [
+    "SCM Providers"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onCommand:git403.openGraph",
+    "workspaceContains:.git"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "git403.openGraph",
+        "title": "%git403.openGraph.title%",
+        "category": "git403",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "git403.toggleInlineBlame",
+        "title": "%git403.toggleInlineBlame.title%",
+        "category": "git403",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "git403.refreshViews",
+        "title": "%git403.refreshViews.title%",
+        "icon": "$(refresh)",
+        "category": "git403"
+      },
+      {
+        "command": "git403.checkout",
+        "title": "%git403.checkout.title%",
+        "category": "git403",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "git403.copyRefName",
+        "title": "%git403.copyRefName.title%",
+        "category": "git403",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "git403.copyRefSha",
+        "title": "%git403.copyRefSha.title%",
+        "category": "git403",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "git403.stashApply",
+        "title": "%git403.stashApply.title%",
+        "category": "git403",
+        "icon": "$(debug-step-back)"
+      },
+      {
+        "command": "git403.stashPop",
+        "title": "%git403.stashPop.title%",
+        "category": "git403",
+        "icon": "$(export)"
+      },
+      {
+        "command": "git403.stashDrop",
+        "title": "%git403.stashDrop.title%",
+        "category": "git403",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "git403.openCommitDiff",
+        "title": "%git403.openCommitDiff.title%",
+        "category": "git403"
+      },
+      {
+        "command": "git403.showFileHistory",
+        "title": "%git403.showFileHistory.title%",
+        "category": "git403",
+        "icon": "$(history)"
+      },
+      {
+        "command": "git403.openFile",
+        "title": "%git403.openFile.title%",
+        "category": "git403"
+      },
+      {
+        "command": "git403.showLineHistory",
+        "title": "%git403.showLineHistory.title%",
+        "category": "git403"
+      }
+    ],
+    "configuration": {
+      "title": "git403",
+      "properties": {
+        "git403.blame.inline": {
+          "type": "boolean",
+          "default": true,
+          "description": "%git403.blame.inline.description%"
+        },
+        "git403.blame.statusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "%git403.blame.statusBar.description%"
+        },
+        "git403.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "%git403.serverPath.description%",
+          "scope": "machine"
+        },
+        "git403.codeLens.scopes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "file",
+              "symbols"
+            ],
+            "enumDescriptions": [
+              "%git403.codeLens.scopes.file%",
+              "%git403.codeLens.scopes.symbols%"
+            ]
+          },
+          "uniqueItems": true,
+          "default": [
+            "file",
+            "symbols"
+          ],
+          "description": "%git403.codeLens.scopes.description%"
+        },
+        "git403.graph.location": {
+          "type": "string",
+          "enum": [
+            "sidebar",
+            "panel",
+            "editor"
+          ],
+          "default": "sidebar",
+          "enumDescriptions": [
+            "%git403.graph.location.sidebar%",
+            "%git403.graph.location.panel%",
+            "%git403.graph.location.editor%"
+          ],
+          "description": "%git403.graph.location.description%"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "git403",
+          "title": "%git403.container.title%",
+          "icon": "media/git403.svg"
+        }
+      ],
+      "panel": [
+        {
+          "id": "git403Panel",
+          "title": "%git403.container.title%",
+          "icon": "media/git403.svg"
+        }
+      ]
+    },
+    "views": {
+      "git403": [
+        {
+          "type": "webview",
+          "id": "git403.graphSidebar",
+          "name": "%git403.view.graph%",
+          "initialSize": 500
+        },
+        {
+          "id": "git403.branches",
+          "name": "%git403.view.branches%",
+          "initialSize": 150,
+          "when": "git403.active"
+        },
+        {
+          "id": "git403.tags",
+          "name": "%git403.view.tags%",
+          "visibility": "collapsed",
+          "when": "git403.active"
+        },
+        {
+          "id": "git403.stashes",
+          "name": "%git403.view.stashes%",
+          "visibility": "collapsed",
+          "when": "git403.active"
+        },
+        {
+          "id": "git403.remotes",
+          "name": "%git403.view.remotes%",
+          "visibility": "collapsed",
+          "when": "git403.active"
+        },
+        {
+          "id": "git403.fileHistory",
+          "name": "%git403.view.fileHistory%",
+          "initialSize": 150,
+          "when": "git403.active"
+        },
+        {
+          "id": "git403.lineHistory",
+          "name": "%git403.view.lineHistory%",
+          "visibility": "collapsed",
+          "when": "git403.active"
+        }
+      ],
+      "git403Panel": [
+        {
+          "type": "webview",
+          "id": "git403.graphView",
+          "name": "%git403.view.graph%"
+        }
+      ]
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "git403.checkout",
+          "when": "false"
+        },
+        {
+          "command": "git403.copyRefName",
+          "when": "false"
+        },
+        {
+          "command": "git403.copyRefSha",
+          "when": "false"
+        },
+        {
+          "command": "git403.stashApply",
+          "when": "false"
+        },
+        {
+          "command": "git403.stashPop",
+          "when": "false"
+        },
+        {
+          "command": "git403.stashDrop",
+          "when": "false"
+        },
+        {
+          "command": "git403.openCommitDiff",
+          "when": "false"
+        },
+        {
+          "command": "git403.refreshViews",
+          "when": "git403.active"
+        },
+        {
+          "command": "git403.showFileHistory",
+          "when": "git403.active && editorIsOpen"
+        },
+        {
+          "command": "git403.openFile",
+          "when": "false"
+        },
+        {
+          "command": "git403.showLineHistory",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "git403.openGraph",
+          "when": "view == git403.branches",
+          "group": "navigation@1"
+        },
+        {
+          "command": "git403.refreshViews",
+          "when": "view =~ /^git403\\./",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "git403.checkout",
+          "when": "view =~ /^git403\\./ && (viewItem == git403.branch || viewItem == git403.remoteBranch)",
+          "group": "inline@1"
+        },
+        {
+          "command": "git403.checkout",
+          "when": "view =~ /^git403\\./ && (viewItem == git403.branch || viewItem == git403.remoteBranch)",
+          "group": "1_checkout@1"
+        },
+        {
+          "command": "git403.stashApply",
+          "when": "view =~ /^git403\\./ && viewItem == git403.stash",
+          "group": "inline@1"
+        },
+        {
+          "command": "git403.stashApply",
+          "when": "view =~ /^git403\\./ && viewItem == git403.stash",
+          "group": "1_stash@1"
+        },
+        {
+          "command": "git403.stashPop",
+          "when": "view =~ /^git403\\./ && viewItem == git403.stash",
+          "group": "1_stash@2"
+        },
+        {
+          "command": "git403.stashDrop",
+          "when": "view =~ /^git403\\./ && viewItem == git403.stash",
+          "group": "5_danger@1"
+        },
+        {
+          "command": "git403.openGraph",
+          "when": "view =~ /^git403\\./ && viewItem =~ /^git403\\.(branch|remoteBranch|tag|stash|commit)/",
+          "group": "2_view@1"
+        },
+        {
+          "command": "git403.copyRefName",
+          "when": "view =~ /^git403\\./ && viewItem =~ /^git403\\.(branch|remoteBranch|tag|stash)/",
+          "group": "3_copy@1"
+        },
+        {
+          "command": "git403.copyRefSha",
+          "when": "view =~ /^git403\\./ && viewItem =~ /^git403\\.(branch|remoteBranch|tag|stash|commit)/",
+          "group": "3_copy@2"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "git403.openGraph",
+        "key": "ctrl+alt+g",
+        "mac": "alt+cmd+g",
+        "when": "git403.active"
+      }
+    ],
+    "viewsWelcome": [
+      {
+        "view": "git403.branches",
+        "contents": "%git403.welcome.noRepo%",
+        "when": "!git403.active"
+      },
+      {
+        "view": "git403.tags",
+        "contents": "%git403.welcome.noRepo%",
+        "when": "!git403.active"
+      },
+      {
+        "view": "git403.stashes",
+        "contents": "%git403.welcome.noRepo%",
+        "when": "!git403.active"
+      },
+      {
+        "view": "git403.remotes",
+        "contents": "%git403.welcome.noRepo%",
+        "when": "!git403.active"
+      },
+      {
+        "view": "git403.fileHistory",
+        "contents": "%git403.welcome.noRepo%",
+        "when": "!git403.active"
+      },
+      {
+        "view": "git403.lineHistory",
+        "contents": "%git403.welcome.noRepo%",
+        "when": "!git403.active"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node --test --test-timeout=120000 test/relay.test.ts test/blame.test.ts test/tree.test.ts test/lens.test.ts test/tracker.test.ts test/repos.test.ts test/paths.test.ts test/manifest.test.ts",
+    "test": "node scripts/build.mjs && node test/run.mjs",
+    "package": "node scripts/package.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.2.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.3"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "%git403.untrusted%",
+      "restrictedConfigurations": [
+        "git403.serverPath"
+      ]
+    }
+  },
+  "l10n": "./l10n"
+}

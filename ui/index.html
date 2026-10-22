@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>git403</title>
+    <script>
+      // 강제 테마를 첫 페인트 전에 적용 (스플래시가 같은 테마로 뜨게). 실패하면 OS 설정을 따른다.
+      try { var t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+      // macOS 사이드바 반투명: 투명 창이 비공개 API(drawsBackground)를 써서 App Store 심사 때문에 꺼 둔다.
+      // 켜려면 tauri.macos.conf.json에 transparent·windowEffects(["sidebar"])를 두고 아래 줄을 살린다 (CSS·테마 연동은 남아 있음)
+      // if (window.__TAURI_INTERNALS__ && /Mac/.test(navigator.userAgent)) document.documentElement.classList.add("vibrant");
+    </script>
+    <style>
+      /* 스플래시는 첫 페인트부터 보여야 해서 여기 둔다 (style.css는 JS가 실행된 뒤에 붙는다). 색은 style.css의 --bg·--fg와 같게 */
+      html, #splash { background: #f1f2f5; color: #1e2026; }
+      @media (prefers-color-scheme: dark) { html:not([data-theme="light"]), html:not([data-theme="light"]) #splash { background: #131519; color: #e6e8ec; } }
+      html[data-theme="dark"], html[data-theme="dark"] #splash { background: #131519; color: #e6e8ec; }
+      html.vibrant { background: transparent; }
+      #splash { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; pointer-events: none; transition: opacity 0.15s cubic-bezier(0.16, 1, 0.3, 1); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", sans-serif; }
+      #splash.done { opacity: 0; }
+      #splash img { width: 72px; height: 72px; }
+      #splash b { font-size: 18px; font-weight: 600; letter-spacing: 0.01em; }
+    </style>
+  </head>
+  <body>
+    <div id="splash" role="presentation"><img src="/icon.png" alt="" /><b>git403</b></div>
+    <div id="root"></div>
+    <script type="module" src="/src/app/main.tsx"></script>
+  </body>
+</html>

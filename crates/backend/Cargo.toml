@@ -1,0 +1,27 @@
+[package]
+name = "gc-backend"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "git403-server"
+path = "src/bin/server.rs"
+
+[dependencies]
+gc-i18n = { path = "../i18n" }
+gc-core = { path = "../core" }
+gc-graph = { path = "../graph" }
+gc-hosting = { path = "../hosting" }
+gc-ai = { path = "../ai" }
+tokio = { workspace = true, features = ["io-std"] }
+serde.workspace = true
+serde_json.workspace = true
+parking_lot.workspace = true
+notify-debouncer-mini = "0.6"
+ignore = "0.4"
+
+[dev-dependencies]
+tempfile = "3"
+
+[target.'cfg(unix)'.dev-dependencies]
+libc = "0.2"

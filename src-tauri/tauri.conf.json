@@ -1,0 +1,77 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "git403",
+  "version": "1.0.0",
+  "identifier": "com.goldtagworks.git403",
+  "build": {
+    "beforeDevCommand": "pnpm --dir ui dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm --dir ui build",
+    "frontendDist": "../ui/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "git403",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 900,
+        "minHeight": 560,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "createUpdaterArtifacts": true,
+    "category": "DeveloperTool",
+    "publisher": "goldtagworks",
+    "shortDescription": "가볍고 빠른 크로스플랫폼 Git 클라이언트",
+    "longDescription": "커밋 그래프, 스테이징·diff·리베이스·충돌 해결, GitHub·GitLab·Bitbucket·Gitea 연동을 갖춘 가벼운 Git 클라이언트. 시스템에 설치된 git을 사용합니다.",
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      },
+      "wix": {
+        "language": "ko-KR"
+      }
+    },
+    "linux": {
+      "deb": {
+        "depends": [
+          "git"
+        ]
+      },
+      "rpm": {
+        "depends": [
+          "git"
+        ]
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFBMjFGNzE1N0NGMERBQzkKUldUSjJ2QjhGZmNocW1vL0Vzb1dSZ2k5R0ZOS0lhR3hTRDRtdFF2WEFUemhNRElVeWFmL1RqWHEK",
+      "endpoints": [
+        "https://github.com/goldtagworks/git403-releases/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

@@ -1,0 +1,78 @@
+name: ci
+
+# 비공개 저장소라 Actions 시간이 든다(macOS 10배). 검사는 로컬에서 하고, 필요할 때만 수동 실행.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux 시스템 패키지 (Tauri)
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libdbus-1-dev pkg-config
+
+      # rust-toolchain.toml의 채널·컴포넌트를 그대로 쓴다
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.92.0
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            ui/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir ui install --frozen-lockfile
+
+      # src-tauri는 frontendDist(ui/dist)가 있어야 컴파일되므로 UI를 먼저 빌드한다
+      - run: pnpm --dir ui build
+      - run: cargo test --workspace --no-fail-fast
+
+
+  # mock E2E는 Rust가 필요 없어 cargo 잡과 따로, 3조각으로 나눠 병렬로 돈다
+  e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+      - run: pnpm --dir ui install --frozen-lockfile
+      - run: pnpm --dir ui exec playwright install --with-deps chromium
+      - name: E2E (Playwright, mock IPC)
+        run: pnpm --dir ui e2e --shard=${{ matrix.shard }}/3
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results-${{ matrix.shard }}
+          path: ui/e2e/results

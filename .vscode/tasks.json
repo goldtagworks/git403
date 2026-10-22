@@ -1,0 +1,17 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // Vite 개발 서버 (localhost:1420). 이미 떠 있으면 재사용된다.
+      "label": "ui: dev",
+      "type": "shell",
+      "command": "pnpm --dir ui dev",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": { "regexp": "^__never__$" },
+        "background": { "activesBegin": true, "beginsPattern": "VITE", "endsPattern": "Local:|ready in" }
+      }
+    }
+  ]
+}

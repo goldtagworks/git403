@@ -1,0 +1,30 @@
+/target
+/out
+node_modules
+/ui/dist
+.DS_Store
+/src-tauri/gen
+
+# 서명 키는 저장소 밖(~/.tauri)에만 둔다
+*.key
+.tauri/
+*.p12
+*.pfx
+*.pem
+*.cer
+*.mobileprovision
+*.keystore
+.env*
+
+# VS Code 확장 빌드 산출물
+/vscode/out/
+/vscode/ui/
+/vscode/bin/
+/vscode/.vscode-test/
+/vscode/node_modules/
+/vscode/*.vsix
+/vscode/test/results/
+ui/test-results/
+
+# 개인 로컬 설정 (경로·권한)
+.claude/settings.local.json

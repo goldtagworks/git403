@@ -1,0 +1,24 @@
+[package]
+name = "git403"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "git403_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+gc-i18n = { path = "../crates/i18n" }
+gc-backend = { path = "../crates/backend" }
+tauri = { version = "2", features = [] }
+serde.workspace = true
+serde_json.workspace = true
+parking_lot.workspace = true
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+tauri-plugin-window-state = "2"

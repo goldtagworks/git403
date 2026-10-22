@@ -1,0 +1,15 @@
+[package]
+name = "gc-ai"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+gc-i18n = { path = "../i18n" }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
+# 키체인(SecretStore·Keychain)만 재사용한다
+gc-hosting = { path = "../hosting" }
+# CLI 호출마다 쓰는 빈 작업 폴더
+tempfile = "3"

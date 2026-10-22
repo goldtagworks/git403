@@ -1,0 +1,13 @@
+{
+  "name": "git403",
+  "private": true,
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build && node -e \"const fs=require('fs');fs.rmSync('out',{recursive:true,force:true});fs.cpSync('target/release/bundle','out',{recursive:true})\"",
+    "build:nosign": "tauri build --config '{\"bundle\":{\"createUpdaterArtifacts\":false}}' && node -e \"const fs=require('fs');fs.rmSync('out',{recursive:true,force:true});fs.cpSync('target/release/bundle','out',{recursive:true})\""
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}
