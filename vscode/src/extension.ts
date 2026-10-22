@@ -353,11 +353,11 @@ async function start(ctx: vscode.ExtensionContext) {
 
 export function activate(ctx: vscode.ExtensionContext) {
   log = vscode.window.createOutputChannel("git403");
-  // 상태 바 버튼: 한 번 클릭으로 그래프를 연다(단축키 ⌥⌘G·SCM 제목줄 버튼과 같은 명령)
+  // 상태 바 버튼: 위치 설정과 상관없이 편집기 탭에 전체 git403을 연다(사이드바·패널은 활동 바·⌥⌘G로)
   const graphButton = vscode.window.createStatusBarItem("git403.openGraph", vscode.StatusBarAlignment.Left, 1);
   graphButton.text = "$(git-branch) git403";
   graphButton.tooltip = vscode.l10n.t("Open Commit Graph");
-  graphButton.command = "git403.openGraph";
+  graphButton.command = "git403.openGraphEditor";
   graphButton.show();
   ctx.subscriptions.push(
     log,
@@ -365,6 +365,7 @@ export function activate(ctx: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider("git403.graphSidebar", { resolveWebviewView: (v) => resolveGraphView(ctx, v, "sidebar") }, { webviewOptions: { retainContextWhenHidden: true } }),
     vscode.window.registerWebviewViewProvider("git403.graphView", { resolveWebviewView: (v) => resolveGraphView(ctx, v, "panel") }, { webviewOptions: { retainContextWhenHidden: true } }),
     vscode.commands.registerCommand("git403.openGraph", (arg?: unknown) => openGraph(ctx, arg)),
+    vscode.commands.registerCommand("git403.openGraphEditor", () => openGraph(ctx, undefined, { kind: "editor" })),
     vscode.commands.registerCommand("git403.openFile", (a: { repo?: unknown; path?: unknown; sha?: unknown; line?: unknown }) => openFile(ctx, a ?? {})),
     vscode.workspace.onDidGrantWorkspaceTrust(() => void start(ctx)),
     // 폴더가 추가·제거되면 저장소를 다시 찾는다(Workspace가 디바운스해 처리: 빠진 폴더의 저장소는 watch_remove). 아직 시작 전(폴더가 없던 경우)이면 시작

@@ -2,7 +2,7 @@
 
 앱(git403)의 버전별 변경 내역. 배포 스크립트가 해당 버전 절을 GitHub 릴리스 노트로 쓴다. VS Code 확장은 `vscode/CHANGELOG.md`.
 
-## 1.0.1
+## 1.0.2
 
 - macOS 메뉴 막대의 "저장소 열기"가 폴더 선택 없이 "git 실행 실패"를 내던 문제 수정
 - Finder·Dock으로 실행했을 때 상태바의 GitHub 계정과 AI(Claude 등 CLI)가 꺼진 것으로 보이던 문제 수정

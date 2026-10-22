@@ -385,6 +385,12 @@ async function graphViewTests(folder: string) {
   assert.ok(s.panel && s.graphKinds.includes("editor"), "전체 화면: 편집기 탭에 전체 앱이 열린다");
   assert.equal(s.selected, first, "전체 화면: 선택한 커밋이 유지된다");
   await simulateOn("editor", ".toolbar", "", []); // 전체 앱에는 툴바가 있다
+  // 상태 바 버튼(git403.openGraphEditor)은 위치 설정이 panel이어도 편집기 탭에 전체 앱을 연다
+  await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+  await waitFor(async (x) => !x.graphKinds.includes("editor"));
+  await vscode.commands.executeCommand("git403.openGraphEditor");
+  await waitFor(async (x) => x.panel && x.graphKinds.includes("editor"));
+  await simulateOn("editor", ".toolbar", "", []);
 }
 
 const gitIn = (folder: string, ...a: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd: folder }).toString();
