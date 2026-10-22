@@ -347,7 +347,11 @@ mockIPC(
       ((window as any).__avatarCalls ??= []).push(items.map((i) => i.email));
       // __avatarDelay(ms)로 응답을 늦추고, __avatarUrls({email: url})로 응답을 덮어쓴다 (깨진 이미지 테스트)
       const w = window as any;
-      const res = items.map(({ email }) => ({ email, url: w.__avatarUrls?.[email] ?? (email === "merge@demo.dev" ? null : avatarSvg(email === "dev@demo.dev" ? "#c2577f" : "#3c9c78")) }));
+      // __avatarRetry: 이 이메일들은 일시적 실패(retry)로 답하고 목록에서 뺀다 → 다음 요청엔 사진
+      const retry: string[] = w.__avatarRetry ?? [];
+      const res = items.map(({ email }) => retry.includes(email)
+        ? (w.__avatarRetry = retry.filter((e) => e !== email), { email, url: null, retry: true })
+        : { email, url: w.__avatarUrls?.[email] ?? (email === "merge@demo.dev" ? null : avatarSvg(email === "dev@demo.dev" ? "#c2577f" : "#3c9c78")) });
       return w.__avatarDelay ? new Promise((r) => setTimeout(() => r(res), w.__avatarDelay)) : res;
     }
     if (cmd === "load_graph" && (window as any).__broken?.includes((args as { repo: string }).repo)) throw "not a git repository";

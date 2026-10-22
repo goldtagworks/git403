@@ -28,6 +28,17 @@ test("작성자 사진: 보이는 고유 이메일을 한 번에 요청하고, �
   expect(await page.evaluate(() => (window as any).__avatarCalls.length)).toBe(1);
 });
 
+test("일시적 실패(한도·네트워크)는 이니셜로 두었다가 잠시 뒤 다시 요청해 사진을 띄운다", async ({ page }) => {
+  await page.clock.install();
+  await page.addInitScript(() => ((window as any).__avatarRetry = ["dev@demo.dev"]));
+  await open(page);
+  await expect(page.locator(".graph-scroll img.avatar")).toHaveCount(4); // review@만 사진, dev@는 실패로 이니셜
+  await page.clock.fastForward(61_000);
+  await expect(page.locator(".graph-scroll img.avatar")).toHaveCount(8);
+  const calls = await page.evaluate(() => (window as any).__avatarCalls as string[][]);
+  expect(calls.slice(1).flat()).toEqual(["dev@demo.dev"]); // 실패한 이메일만 다시 묻는다
+});
+
 test("사진이 늦게 도착해도 CommitGraph를 다시 렌더링하지 않는다", async ({ page }) => {
   await page.addInitScript(() => ((window as any).__avatarDelay = 600));
   await open(page);

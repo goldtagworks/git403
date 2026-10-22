@@ -31,7 +31,7 @@ export const api = {
   /** commit-graph 파일이 없거나 오래됐으면 백그라운드로 만든다 (바로 반환, 실패는 Rust가 로그만) */
   ensureCommitGraph: (repo: string) => invoke<void>("ensure_commit_graph", { repo }),
   /** 작성자 프로필 사진 url (이메일당 한 건, 없으면 null). 캐시는 백엔드 */
-  authorAvatars: (repo: string, items: { sha: string; email: string }[]) => invoke<{ email: string; url: string | null }[]>("author_avatars", { repo, items }),
+  authorAvatars: (repo: string, items: { sha: string; email: string }[]) => invoke<{ email: string; url: string | null; retry?: boolean }[]>("author_avatars", { repo, items }),
   loadRefs: (repo: string) => invoke<Ref[]>("load_refs", { repo }),
   changedFiles: (repo: string, commit: string) => invoke<ChangedFile[]>("changed_files", { repo, commit }),
   fileBlob: (repo: string, rev: string | null, path: string) => invoke<string | null>("file_blob", { repo, rev, path }),

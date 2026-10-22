@@ -22,6 +22,9 @@ pub struct AvatarQuery {
 pub struct AvatarResult {
     pub email: String,
     pub url: Option<String>,
+    /// 가져오기에 실패해 캐시하지 않았다(한도·네트워크·푸시 전) → UI가 나중에 다시 묻는다
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub retry: bool,
 }
 
 /// 소문자 이메일 → URL. "계정 없음"(None)도 저장해 다시 요청하지 않는다. 같은 이메일의 동시 요청은 하나로 합친다.
@@ -125,7 +128,7 @@ fn none_all(items: &[AvatarQuery]) -> Vec<AvatarResult> {
     items
         .iter()
         .filter(|q| seen.insert(q.email.to_lowercase()))
-        .map(|q| AvatarResult { email: q.email.clone(), url: None })
+        .map(|q| AvatarResult { email: q.email.clone(), url: None, retry: false })
         .collect()
 }
 
@@ -158,7 +161,13 @@ where
         });
     }
     while jobs.join_next().await.is_some() {}
-    order.into_iter().map(|(email, key)| AvatarResult { url: cache.get(&key).flatten(), email }).collect()
+    order
+        .into_iter()
+        .map(|(email, key)| {
+            let hit = cache.get(&key);
+            AvatarResult { retry: hit.is_none(), url: hit.flatten(), email }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -197,7 +206,7 @@ mod tests {
         assert_eq!(r.len(), 3); // 대소문자 다른 같은 이메일은 하나
         assert_eq!(r[0].url.as_deref(), Some("https://avatars.githubusercontent.com/octo"));
         assert_eq!(r[1].url.as_deref(), Some("https://x/avatar"));
-        assert_eq!(r[2].url, None); // 실패
+        assert_eq!((r[2].url.as_deref(), r[2].retry), (None, false)); // 사진 없음(캐시됨) → 다시 묻지 않는다
         assert_eq!(calls.load(Ordering::SeqCst), 2);
         run(cache, calls.clone(), items.to_vec()).await; // 실패(None)까지 캐시 적중
         assert_eq!(calls.load(Ordering::SeqCst), 2);
@@ -218,7 +227,8 @@ mod tests {
                 .await
             }
         };
-        assert_eq!(run(false).await[0].url, None);
+        let failed = run(false).await;
+        assert_eq!((failed[0].url.as_deref(), failed[0].retry), (None, true));
         assert!(cache.get("x@e.com").is_none(), "오류가 캐시됨");
         assert_eq!(run(true).await[0].url.as_deref(), Some("https://x/a")); // 재시도됨
         run(true).await; // 이제 캐시 적중

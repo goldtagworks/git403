@@ -31,21 +31,34 @@ export function requestAvatars(repo: string, commits: Commit[]) {
     seen.add(e);
     items.push({ sha: c.id, email: c.email });
   }
+  ask(repo, items);
+}
+
+function ask(repo: string, items: { sha: string; email: string }[]) {
   if (!items.length) return;
+  const seen = new Set(items.map((i) => key(i.email)));
   for (const e of seen) asked.add(e);
   api.authorAvatars(repo, items).then(
     (res) => {
       if (owner !== repo) return;
-      const got = new Map(res.map((r) => [key(r.email), r.url]));
-      for (const e of seen) urls.set(e, got.get(e) ?? null);
+      const got = new Map(res.map((r) => [key(r.email), r]));
+      for (const e of seen) urls.set(e, got.get(e)?.url ?? null);
       emit([...seen]);
+      retryLater(repo, items.filter((i) => got.get(key(i.email))?.retry));
     },
     () => {
       if (owner !== repo) return;
       for (const e of seen) urls.set(e, null);
       emit([...seen]);
+      retryLater(repo, items);
     },
   );
+}
+
+/** 일시적 실패(한도·네트워크·푸시 전)는 잠시 뒤 그 이메일만 다시 묻는다. 그동안은 이니셜 */
+const RETRY_MS = 60_000;
+function retryLater(repo: string, items: { sha: string; email: string }[]) {
+  if (items.length) setTimeout(() => owner === repo && ask(repo, items.filter((i) => !urls.get(key(i.email)))), RETRY_MS);
 }
 
 export const avatarUrl = (email: string) => urls.get(key(email)) ?? null;
