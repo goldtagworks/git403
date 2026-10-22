@@ -6,6 +6,7 @@
 
 - macOS 메뉴 막대의 "저장소 열기"가 폴더 선택 없이 "git 실행 실패"를 내던 문제 수정
 - Finder·Dock으로 실행했을 때 상태바의 GitHub 계정과 AI(Claude 등 CLI)가 꺼진 것으로 보이던 문제 수정
+- Finder·Dock으로 실행한 직후 Git LFS 저장소를 열거나 전환하면 git-lfs를 못 찾아 실패하던 문제 수정
 
 ## 1.0.0
 

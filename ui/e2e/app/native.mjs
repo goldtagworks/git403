@@ -171,7 +171,6 @@ try {
   });
 
   await step("로그인 셸 PATH: 최소 PATH로 띄워도 ~/.zprofile의 도구를 pre-commit 훅이 찾는다", async () => {
-    await sleep(2500); // 로그인 셸 PATH는 시작 뒤 백그라운드로 채워진다 (최대 2초)
     writeFileSync(join(repo, "hooked.txt"), "x\n");
     await js(`
       press(await waitFor(() => byText(".commits .subject", "Local changes"), "Local changes 행"));

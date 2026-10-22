@@ -57,7 +57,7 @@ pub struct Inner {
     hosting: hosting::Hosting,
     /// gh 계정 임시 전환 구간의 직렬화 (docs/reuse.md gh 절)
     gh_gate: gh::Gate,
-    /// 로그인 셸 PATH 확인이 끝났는지(성공·실패 무관). `start`가 true로 바꾼다
+    /// 로그인 셸 PATH 확인이 끝났는지(성공·실패 무관). `new`가 false로 두고 `start`가 true로 바꾼다 (`with_parts`만 쓰는 테스트는 기다리지 않는다)
     path_done: tokio::sync::watch::Sender<bool>,
 }
 
@@ -87,7 +87,9 @@ impl Backend {
                 .with_env(askpass::PORT_ENV, port.to_string());
             ask = a;
         }
-        Self::with_parts(runner, ask, emit, config_dir, initial_repo)
+        let b = Self::with_parts(runner, ask, emit, config_dir, initial_repo);
+        b.path_done.send_replace(false); // 실제 앱만 PATH 확인을 기다린다 (`start`가 true로)
+        b
     }
 
     pub fn with_parts(git: GitRunner, askpass: askpass::Askpass, emit: Arc<dyn Emit>, config_dir: PathBuf, initial_repo: Option<String>) -> Self {
@@ -103,7 +105,7 @@ impl Backend {
             config_dir: config_dir.clone(),
             hosting: hosting::Hosting::new(&config_dir),
             gh_gate: Default::default(),
-            path_done: tokio::sync::watch::channel(false).0,
+            path_done: tokio::sync::watch::channel(true).0,
         }))
     }
 
@@ -127,7 +129,7 @@ impl Backend {
         self.path_done.send_replace(true);
     }
 
-    /// 로그인 셸 PATH 확인이 끝나길 기다린다(최대 3초). `gh`·`claude` 같은 CLI를 찾기 전에 부른다 —
+    /// 로그인 셸 PATH 확인이 끝나길 기다린다(최대 3초). `gh`·`claude`·`git-lfs` 같은 도구를 찾기 전에 부른다 —
     /// 시작 직후 첫 조회가 PATH 없이 돌면 "없음"으로 굳는다(GUI 실행에서만 생기는 문제).
     pub(crate) async fn path_ready(&self) {
         let mut rx = self.path_done.subscribe();
