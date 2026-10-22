@@ -823,6 +823,7 @@ export const ru: Record<Key, string> = {
   "settings.ghRestore": "Возвращать исходный аккаунт gh после задачи",
   "gh.retry": "Повторить от имени {user}",
   "status.cancel": "Отменить {name}",
+  "status.releaseNotes": "Открыть примечания к выпуску",
   "toast.less": "Свернуть",
   "toast.more": "Подробнее",
   "toast.label": "Уведомления",

@@ -823,6 +823,7 @@ export const km: Record<Key, string> = {
   "settings.ghRestore": "ប្តូរត្រឡប់ទៅគណនី gh ដើមវិញក្រោយកិច្ចការ",
   "gh.retry": "ព្យាយាមម្តងទៀតជាមួយ {user}",
   "status.cancel": "បោះបង់ {name}",
+  "status.releaseNotes": "មើលកំណត់ចំណាំការចេញផ្សាយ",
   "toast.less": "បង្រួម",
   "toast.more": "ព័ត៌មានលម្អិត",
   "toast.label": "ការជូនដំណឹង",

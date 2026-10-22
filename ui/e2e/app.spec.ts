@@ -157,6 +157,14 @@ test("⌘W는 열린 팝업 → 저장소 탭 → 창 숨기기 순으로 하나
   await expect.poll(hidden).toBe(true);
 });
 
+test("상태바 버전을 누르면 그 버전의 릴리스 노트를 연다", async ({ page }) => {
+  await openRepo(page);
+  const v = page.locator(".statusbar .status-version");
+  await expect(v).toHaveAttribute("title", "릴리스 노트 보기");
+  await v.click();
+  await expect.poll(async () => ((await page.evaluate(() => (window as any).__git)) as string[][]).filter((c) => c[0] === "open_url").at(-1)?.[1]).toBe(`https://github.com/goldtagworks/git403/releases/tag/v${await v.textContent()}`);
+});
+
 test("Pull 중에도 UI가 반응하고 상태바에 진행률과 완료가 표시된다", async ({ page }) => {
   await openRepo(page);
   await page.locator(".toolbar").getByRole("button", { name: "Pull", exact: true }).click();

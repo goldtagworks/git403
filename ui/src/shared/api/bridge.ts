@@ -99,6 +99,8 @@ export const onOpenRepo = (h: (repo: string) => void) => {
   }
   return () => void (repoHandler === h && (repoHandler = null));
 };
+/** VS Code 확장 버전(확장이 html에 넣는다). Tauri 앱에서는 undefined */
+export const EXT_VERSION = IS_VSCODE ? (window as unknown as { __git403?: { version?: string } }).__git403?.version : undefined;
 /** 웹뷰 → 확장: 선택을 끝냈다고 알린다(확장이 상태·테스트에 쓴다) */
 export const reportSelected = (sha: string) => vscode?.postMessage({ type: "selected", sha });
 /** 웹뷰 → 확장: 파일을 VS Code 편집기로 연다(sha 있으면 그 커밋의 diff, 없으면 작업 파일 diff; line은 새 파일 기준 줄 번호(1부터)로 diff 에디터가 그 줄로 이동). Tauri 앱에서는 아무 일도 안 한다 */

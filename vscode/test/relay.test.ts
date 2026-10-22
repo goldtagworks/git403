@@ -66,6 +66,7 @@ test("웹뷰 HTML: compact는 모드 스크립트를 CSP 뒤에 nonce와 함께 
   assert.doesNotMatch(webviewHtml(html, base), /__git403/);
   assert.match(webviewHtml(html, { ...base, compact: true, lang: "ko" }), /window\.__git403 = \{ compact: true, lang: "ko" \};/);
   assert.match(webviewHtml(html, { ...base, detail: true }), /window\.__git403 = \{ detail: true \};/);
+  assert.match(webviewHtml(html, { ...base, version: "1.2.3" }), /window\.__git403 = \{ version: "1\.2\.3" \};/);
 });
 
 // 진짜 서버가 빌드돼 있으면 프로토콜 왕복까지 (cargo build -p gc-backend --bin git403-server)

@@ -823,6 +823,7 @@ export const zhCN: Record<Key, string> = {
   "settings.ghRestore": "任务完成后切回原来的 gh 账户",
   "gh.retry": "使用 {user} 重试",
   "status.cancel": "取消 {name}",
+  "status.releaseNotes": "查看发行说明",
   "toast.less": "收起",
   "toast.more": "详细信息",
   "toast.label": "通知",

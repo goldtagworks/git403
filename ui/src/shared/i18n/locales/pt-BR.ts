@@ -823,6 +823,7 @@ export const ptBR: Record<Key, string> = {
   "settings.ghRestore": "Voltar para a conta original do gh após uma tarefa",
   "gh.retry": "Tentar novamente com {user}",
   "status.cancel": "Cancelar {name}",
+  "status.releaseNotes": "Ver notas da versão",
   "toast.less": "Recolher",
   "toast.more": "Detalhes",
   "toast.label": "Notificações",

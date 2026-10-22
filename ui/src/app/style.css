@@ -140,7 +140,8 @@ button:disabled { opacity: 0.45; }
 .statusbar .status-item .si-name { color: var(--muted); }
 .statusbar .status-item .si-val { overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
 .statusbar { container-type: inline-size; }
-.status-version { padding: 0 5px; border: 1px solid var(--border); border-radius: 4px; font-family: var(--mono, ui-monospace, monospace); font-size: 11px; line-height: 16px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.statusbar .status-version { padding: 0 5px; border: 1px solid var(--border); border-radius: 4px; background: transparent; font-weight: 400; font-family: var(--mono, ui-monospace, monospace); font-size: 11px; line-height: 16px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.statusbar .status-version:hover { background: var(--hover); color: var(--fg); }
 @container (max-width: 640px) { .statusbar .status-item .si-name { display: none; } }
 .ai-sources { position: relative; font-size: 12px; color: var(--muted); word-break: keep-all; }
 .ai-sources summary { cursor: default; list-style: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -590,13 +591,13 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 .accounts li:last-child { border-bottom: 0; }
 .accounts .label { flex: 1; }
 .accounts.providers li { padding: 0; }
-.accounts.providers label { flex: 1; display: flex; gap: 8px; align-items: center; padding: 4px 8px; cursor: pointer; }
+.accounts.providers label { flex: 1; display: flex; gap: 8px; align-items: center; padding: 4px 8px; }
 .accounts.providers label:hover { background: var(--hover); }
 .accounts.providers label:has(input:checked) { background: var(--selected); }
 .accounts.providers .label { flex: none; min-width: 96px; }
 .accounts.providers .hint { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .accounts .hint { color: var(--muted); font-size: 12px; }
-.issue-link { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.issue-link { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 .sidebar .item .label.hint { color: var(--muted); font-size: 12px; }
 
 /* 저장소 통계: 강조색 하나 + 무채색 */
@@ -1154,7 +1155,7 @@ html[data-big] .prr-list, html[data-big] .prr > .splitter, html[data-big] .prr-h
 /* 설정 가져오기 시트 */
 .imp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow: auto; }
 .imp-section { border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; gap: 4px; }
-.imp-section summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.imp-section summary { font-size: 12px; color: var(--muted); }
 .imp-changes { margin: 4px 0 0; padding-left: 16px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
 .imp-result { display: flex; flex-direction: column; gap: 8px; }
 

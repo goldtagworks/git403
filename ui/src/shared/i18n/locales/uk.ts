@@ -823,6 +823,7 @@ export const uk: Record<Key, string> = {
   "settings.ghRestore": "Повертатися до початкового облікового запису gh після завдання",
   "gh.retry": "Повторити як {user}",
   "status.cancel": "Скасувати {name}",
+  "status.releaseNotes": "Переглянути примітки до випуску",
   "toast.less": "Згорнути",
   "toast.more": "Докладніше",
   "toast.label": "Сповіщення",

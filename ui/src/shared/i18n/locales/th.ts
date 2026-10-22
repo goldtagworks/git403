@@ -823,6 +823,7 @@ export const th: Record<Key, string> = {
   "settings.ghRestore": "สลับกลับไปยังบัญชี gh เดิมหลังเสร็จงาน",
   "gh.retry": "ลองใหม่ด้วย {user}",
   "status.cancel": "ยกเลิก {name}",
+  "status.releaseNotes": "ดูบันทึกประจำรุ่น",
   "toast.less": "ย่อ",
   "toast.more": "รายละเอียด",
   "toast.label": "การแจ้งเตือน",

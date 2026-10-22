@@ -823,6 +823,7 @@ export const uz: Record<Key, string> = {
   "settings.ghRestore": "Vazifadan keyin asl gh hisobiga qaytish",
   "gh.retry": "{user} bilan qayta urinish",
   "status.cancel": "{name} ni bekor qilish",
+  "status.releaseNotes": "Reliz qaydlarini ko‘rish",
   "toast.less": "Yig'ish",
   "toast.more": "Batafsil",
   "toast.label": "Bildirishnomalar",

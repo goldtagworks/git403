@@ -823,6 +823,7 @@ export const de: Record<Key, string> = {
   "settings.ghRestore": "Nach einem Vorgang zum ursprünglichen gh-Konto zurückwechseln",
   "gh.retry": "Mit {user} erneut versuchen",
   "status.cancel": "{name} abbrechen",
+  "status.releaseNotes": "Versionshinweise anzeigen",
   "toast.less": "Einklappen",
   "toast.more": "Details",
   "toast.label": "Benachrichtigungen",

@@ -823,6 +823,7 @@ export const vi: Record<Key, string> = {
   "settings.ghRestore": "Chuyển lại tài khoản gh ban đầu sau khi xong tác vụ",
   "gh.retry": "Thử lại với {user}",
   "status.cancel": "Hủy {name}",
+  "status.releaseNotes": "Xem ghi chú phát hành",
   "toast.less": "Thu gọn",
   "toast.more": "Chi tiết",
   "toast.label": "Thông báo",

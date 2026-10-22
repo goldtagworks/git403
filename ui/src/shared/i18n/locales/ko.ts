@@ -823,6 +823,7 @@ export const ko: Record<Key, string> = {
   "settings.ghRestore": "작업 후 원래 gh 계정으로 되돌리기",
   "gh.retry": "{user}로 다시 시도",
   "status.cancel": "{name} 취소",
+  "status.releaseNotes": "릴리스 노트 보기",
   "toast.less": "접기",
   "toast.more": "자세히",
   "toast.label": "알림",

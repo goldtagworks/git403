@@ -823,6 +823,7 @@ export const tr: Record<Key, string> = {
   "settings.ghRestore": "İşlemden sonra özgün gh hesabına geri dön",
   "gh.retry": "{user} ile yeniden dene",
   "status.cancel": "{name} iptal et",
+  "status.releaseNotes": "Sürüm notlarını görüntüle",
   "toast.less": "Daralt",
   "toast.more": "Ayrıntılar",
   "toast.label": "Bildirimler",

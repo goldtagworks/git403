@@ -823,6 +823,7 @@ export const lo: Record<Key, string> = {
   "settings.ghRestore": "ສະຫຼັບກັບໄປບັນຊີ gh ເດີມຫຼັງວຽກສຳເລັດ",
   "gh.retry": "ລອງໃໝ່ດ້ວຍ {user}",
   "status.cancel": "ຍົກເລີກ {name}",
+  "status.releaseNotes": "ເບິ່ງບັນທຶກການເຜີຍແຜ່",
   "toast.less": "ຫຍໍ້",
   "toast.more": "ລາຍລະອຽດ",
   "toast.label": "ການແຈ້ງເຕືອນ",

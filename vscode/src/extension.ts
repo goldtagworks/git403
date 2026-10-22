@@ -300,6 +300,7 @@ function attachGraph(ctx: vscode.ExtensionContext, w: vscode.Webview, dir: strin
     compact: kind === "sidebar" || kind === "panel",
     detail: kind === "detail",
     lang: vscode.env.language,
+    version: ctx.extension.packageJSON.version,
   });
   w.onDidReceiveMessage(async (m: FromWebview) => {
     if (notification(ctx, m, g)) return;

@@ -823,6 +823,7 @@ export const ne: Record<Key, string> = {
   "settings.ghRestore": "कार्य सकिएपछि मूल gh खातामा फर्कनुहोस्",
   "gh.retry": "{user} बाट फेरि प्रयास गर्नुहोस्",
   "status.cancel": "{name} रद्द गर्नुहोस्",
+  "status.releaseNotes": "रिलिज नोटहरू हेर्नुहोस्",
   "toast.less": "खुम्च्याउनुहोस्",
   "toast.more": "विवरण",
   "toast.label": "सूचनाहरू",

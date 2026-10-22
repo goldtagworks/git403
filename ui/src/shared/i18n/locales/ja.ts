@@ -823,6 +823,7 @@ export const ja: Record<Key, string> = {
   "settings.ghRestore": "作業後に元の gh アカウントに戻す",
   "gh.retry": "{user} で再試行",
   "status.cancel": "{name} をキャンセル",
+  "status.releaseNotes": "リリースノートを表示",
   "toast.less": "折りたたむ",
   "toast.more": "詳細",
   "toast.label": "通知",

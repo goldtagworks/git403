@@ -823,6 +823,7 @@ export const zhTW: Record<Key, string> = {
   "settings.ghRestore": "作業完成後切回原本的 gh 帳號",
   "gh.retry": "以 {user} 重試",
   "status.cancel": "取消 {name}",
+  "status.releaseNotes": "檢視版本資訊",
   "toast.less": "收合",
   "toast.more": "詳細資料",
   "toast.label": "通知",

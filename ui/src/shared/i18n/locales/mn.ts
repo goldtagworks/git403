@@ -823,6 +823,7 @@ export const mn: Record<Key, string> = {
   "settings.ghRestore": "Ажил дууссаны дараа анхны gh бүртгэл рүү буцах",
   "gh.retry": "{user}-ээр дахин оролдох",
   "status.cancel": "{name}-г цуцлах",
+  "status.releaseNotes": "Хувилбарын тэмдэглэл харах",
   "toast.less": "Хураах",
   "toast.more": "Дэлгэрэнгүй",
   "toast.label": "Мэдэгдлүүд",

@@ -823,6 +823,7 @@ export const nl: Record<Key, string> = {
   "settings.ghRestore": "Na een taak terugwisselen naar het oorspronkelijke gh-account",
   "gh.retry": "Opnieuw proberen met {user}",
   "status.cancel": "{name} annuleren",
+  "status.releaseNotes": "Release notes bekijken",
   "toast.less": "Inklappen",
   "toast.more": "Details",
   "toast.label": "Meldingen",

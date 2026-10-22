@@ -822,6 +822,7 @@ export const en = {
   "settings.ghRestore": "Switch back to the original gh account after a task",
   "gh.retry": "Retry with {user}",
   "status.cancel": "Cancel {name}",
+  "status.releaseNotes": "View release notes",
   "toast.less": "Collapse",
   "toast.more": "Details",
   "toast.label": "Notifications",

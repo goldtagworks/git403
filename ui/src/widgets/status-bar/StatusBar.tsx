@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from "react";
-import { listen } from "../../shared/api/bridge";
+import { EXT_VERSION, listen } from "../../shared/api/bridge";
 import { api } from "../../shared/api/api";
 import { AiStatusItem } from "./AiStatusItem";
 import { GhStatusItem } from "./GhStatusItem";
@@ -9,9 +9,12 @@ import { t, useLocale } from "../../shared/i18n/i18n";
 import type { JobEvent, Status } from "../../shared/api/types";
 
 declare const __APP_VERSION__: string;
+// 버전을 누르면 릴리스 노트: 앱은 GitHub 릴리스, VS Code 확장은 마켓플레이스 변경 내역
+const VERSION = EXT_VERSION ?? __APP_VERSION__;
+const RELEASE_URL = EXT_VERSION ? "https://marketplace.visualstudio.com/items/goldtagworks.git403/changelog" : `https://github.com/goldtagworks/git403/releases/tag/v${__APP_VERSION__}`;
 
 /**
- * 하단 상태바: 현재 브랜치·ahead/behind + 작업 진행률·취소 + 오른쪽 AI 항목(`AiStatusItem`, 자기 구독)·앱 버전.
+ * 하단 상태바: 현재 브랜치·ahead/behind + 작업 진행률·취소 + 오른쪽 AI 항목(`AiStatusItem`, 자기 구독)·버전(누르면 릴리스 노트).
  * 진행률 이벤트는 초당 수십 번 올 수 있어서 여기서만 구독한다 (docs/performance.md).
  */
 export const StatusBar = memo(function StatusBar({
@@ -53,7 +56,7 @@ export const StatusBar = memo(function StatusBar({
       <span className="status-progress" aria-live="polite">{progress || message}</span>
       {job && <button onClick={() => api.cancelJob(job.id)}>{t("status.cancel", { name: job.name })}</button>}
       <AiStatusItem />
-      <span className="status-version">{__APP_VERSION__}</span>
+      <button className="status-version" title={t("status.releaseNotes")} onClick={() => api.openUrl(RELEASE_URL)}>{VERSION}</button>
     </footer>
   );
 });

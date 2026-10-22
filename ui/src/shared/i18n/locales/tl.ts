@@ -823,6 +823,7 @@ export const tl: Record<Key, string> = {
   "settings.ghRestore": "Bumalik sa orihinal na gh account pagkatapos ng gawain",
   "gh.retry": "Subukan ulit gamit ang {user}",
   "status.cancel": "Kanselahin ang {name}",
+  "status.releaseNotes": "Tingnan ang release notes",
   "toast.less": "Itago",
   "toast.more": "Mga detalye",
   "toast.label": "Mga abiso",
