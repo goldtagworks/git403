@@ -58,7 +58,7 @@ export const ctx = {
   /** 오류 토스트(닫을 때까지 유지). detail이 없으면 여러 줄 메시지의 첫 줄이 제목, 나머지는 "자세히" */
   error: (msg: string, detail?: string) => toastError(msg, detail),
   /** 긴 작업(네트워크). 이름은 상태바·완료 문구에 쓴다. opts.shell을 주면 args 대신 그 셸 명령을 실행한다. opts.remote는 원격 ref가 바뀌는 작업(성공하면 PR 목록 갱신 신호). */
-  job: (_name: string, _args: string[], _opts?: { repo?: string; onDone?: () => void; shell?: string; remote?: boolean; quiet?: boolean; track?: JobTrack }) => {},
+  job: (_name: string, _args: string[], _opts?: { repo?: string; onDone?: () => void; shell?: string; remote?: boolean; quiet?: boolean; track?: JobTrack; ghUser?: string }) => {},
   /** 저장소를 여는 중(탭 전환·로딩)인지 (App이 등록) */
   loading: () => false,
   /** LFS 상태 시트 열기 (Inspector가 등록 — ops가 Inspector를 import하면 순환이 된다) */
@@ -837,12 +837,17 @@ export const ops = {
 
   // ---- 저장소 관리 ----
   clone: async () => {
+    // gh에 로그인된 계정이 여럿이면 어느 계정으로 받을지 고른다(https만). 고르면 복제한 저장소에 그 계정을 연결한다
+    const gh = await api.ghAccounts().catch(() => null);
+    const users = gh?.installed ? gh.hosts.flatMap((h) => h.accounts.map((a) => ({ host: h.host, user: a.user }))) : [];
+    const label = (a: { host: string; user: string }) => (gh!.hosts.length > 1 ? `${a.user} (${a.host})` : a.user);
     const r = await prompt({
       title: t("ops.clone.title"),
       fields: [
         { kind: "text", name: "url", label: "URL", placeholder: t("ops.f.urlPh") },
         { kind: "folder", name: "dir", label: t("ops.f.location"), value: stored("cloneDir", "") },
         { kind: "text", name: "name", label: t("ops.f.name") },
+        ...(users.length > 1 ? [{ kind: "select" as const, name: "account", label: t("ops.clone.account"), options: [t("ops.clone.accountActive"), ...users.map(label)] }] : []),
       ],
       // 이름을 직접 고치기 전까지는 URL에서 추정
       change: (v, prev) => (v.url !== prev.url && prev.name === repoName(String(prev.url)) ? { ...v, name: repoName(String(v.url)) } : v),
@@ -852,7 +857,9 @@ export const ops = {
     const dir = String(r.dir), name = String(r.name).trim(), url = String(r.url).trim();
     if (dashed(url, name)) return;
     store("cloneDir", dir);
-    ctx.job(t("ops.clone"), ["clone", "--progress", "--", url, name], { repo: dir, onDone: () => ctx.open(join(dir, name)) });
+    const user = users.find((a) => label(a) === r.account)?.user;
+    const open = () => ctx.open(join(dir, name));
+    ctx.job(t("ops.clone"), ["clone", "--progress", "--", url, name], { repo: dir, ghUser: user, onDone: user ? () => void api.ghBind(join(dir, name), user).catch((e) => ctx.error(String(e))).finally(open) : open });
   },
   init: async () => {
     const r = await prompt({

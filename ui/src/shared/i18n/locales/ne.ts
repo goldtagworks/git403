@@ -195,6 +195,8 @@ export const ne: Record<Key, string> = {
   "ops.ignore.done": "{pattern} ignore गरियो",
   "ops.clone": "Clone",
   "ops.clone.title": "रिपोजिटरी clone गर्नुहोस्",
+  "ops.clone.account": "खाता",
+  "ops.clone.accountActive": "सक्रिय gh खाता",
   "ops.f.location": "स्थान",
   "ops.init.title": "नयाँ रिपोजिटरी",
   "ops.scan.folder": "रिपोजिटरी खोज्ने फोल्डर",

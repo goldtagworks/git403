@@ -195,6 +195,8 @@ export const km: Record<Key, string> = {
   "ops.ignore.done": "បានមិនអើពើ {pattern}",
   "ops.clone": "Clone",
   "ops.clone.title": "Clone repository áá¸ááááá¶á",
+  "ops.clone.account": "គណនី",
+  "ops.clone.accountActive": "គណនី gh សកម្ម",
   "ops.f.location": "ទីតាំង",
   "ops.init.title": "Repository ថ្មី",
   "ops.scan.folder": "ថតសម្រាប់ស្វែងរក repository",

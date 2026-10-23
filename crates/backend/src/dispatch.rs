@@ -372,7 +372,9 @@ impl Backend {
                 let (repo, args, interactive) = (a.repo()?, a.get::<Vec<String>>("args")?, a.get::<Option<bool>>("interactive")?);
                 // ghRestore: 연결된 gh 계정으로 임시 전환했다면 끝난 뒤 원래 계정으로 되돌릴지(생략 = true)
                 let restore = a.get::<Option<bool>>("ghRestore")?.unwrap_or(true);
-                json(self.start_job(repo, args, interactive, restore).await?)
+                // ghUser: clone에 쓸 gh 계정(URL host에 로그인된 계정, https만)
+                let gh_user = a.get::<Option<String>>("ghUser")?;
+                json(self.start_job(repo, args, interactive, gh_user, restore).await?)
             }
             "start_shell" => {
                 let (repo, command) = (a.repo()?, a.get::<String>("command")?);

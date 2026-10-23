@@ -195,6 +195,8 @@ export const zhCN: Record<Key, string> = {
   "ops.ignore.done": "已忽略 {pattern}",
   "ops.clone": "克隆",
   "ops.clone.title": "克隆仓库",
+  "ops.clone.account": "账户",
+  "ops.clone.accountActive": "当前 gh 账户",
   "ops.f.location": "位置",
   "ops.init.title": "新建仓库",
   "ops.scan.folder": "要搜索仓库的文件夹",

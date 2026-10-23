@@ -71,10 +71,10 @@ impl Backend {
     ///
     /// `interactive: false`면 백그라운드 작업(자동 fetch): 인증 입력 창(askpass)을 쓰지 않고 ssh는 BatchMode.
     /// 사용자가 `core.sshCommand`·`GIT_SSH_COMMAND`를 설정해 뒀으면 그대로 둔다.
-    pub(crate) async fn start_job(&self, repo: PathBuf, mut args: Vec<String>, interactive: Option<bool>, gh_restore: bool) -> Res<u64> {
+    pub(crate) async fn start_job(&self, repo: PathBuf, mut args: Vec<String>, interactive: Option<bool>, gh_user: Option<String>, gh_restore: bool) -> Res<u64> {
         let (tx, rx) = mpsc::unbounded_channel();
-        // 저장소에 연결된 gh 계정이 있으면(push/fetch/pull) 필요할 때 전환하고 gh 자격 도우미를 쓴다. 끝나면 아래에서 복원.
-        let lease = self.gh_lease_for_job(&repo, &args, &tx).await?;
+        // 저장소에 연결된 gh 계정이 있으면(push/fetch/pull, clone은 고른 계정 ghUser) 필요할 때 전환하고 gh 자격 도우미를 쓴다. 끝나면 아래에서 복원.
+        let lease = self.gh_lease_for_job(&repo, &args, gh_user.as_deref(), &tx).await?;
         // fetch·pull은 이번 실행에만 `-c fetch.writeCommitGraph=true`를 붙이고(저장소 설정은 안 바꾼다),
         // 성공하면 commit-graph가 없거나 오래됐을 때 백그라운드로 보강한다.
         let network = matches!(args.first().map(String::as_str), Some("fetch" | "pull"));

@@ -195,6 +195,8 @@ export const uz: Record<Key, string> = {
   "ops.ignore.done": "{pattern} e'tiborsiz qoldirildi",
   "ops.clone": "Klonlash",
   "ops.clone.title": "Repozitoriyni klonlash",
+  "ops.clone.account": "Hisob",
+  "ops.clone.accountActive": "Faol gh hisobi",
   "ops.f.location": "Joylashuv",
   "ops.init.title": "Yangi repozitoriy",
   "ops.scan.folder": "Repozitoriylar qidiriladigan papka",

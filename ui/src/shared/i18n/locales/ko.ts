@@ -195,6 +195,8 @@ export const ko: Record<Key, string> = {
   "ops.ignore.done": "{pattern} 무시",
   "ops.clone": "복제",
   "ops.clone.title": "저장소 복제",
+  "ops.clone.account": "계정",
+  "ops.clone.accountActive": "활성 gh 계정",
   "ops.f.location": "위치",
   "ops.init.title": "새 저장소",
   "ops.scan.folder": "저장소를 찾을 폴더",

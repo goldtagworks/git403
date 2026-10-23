@@ -195,6 +195,8 @@ export const tr: Record<Key, string> = {
   "ops.ignore.done": "{pattern} yoksayıldı",
   "ops.clone": "Klonla",
   "ops.clone.title": "Depoyu klonla",
+  "ops.clone.account": "Hesap",
+  "ops.clone.accountActive": "Etkin gh hesabı",
   "ops.f.location": "Konum",
   "ops.init.title": "Yeni depo",
   "ops.scan.folder": "Depoların aranacağı klasör",

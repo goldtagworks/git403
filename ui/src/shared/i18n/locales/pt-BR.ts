@@ -195,6 +195,8 @@ export const ptBR: Record<Key, string> = {
   "ops.ignore.done": "{pattern} ignorado",
   "ops.clone": "Clonar",
   "ops.clone.title": "Clonar repositório",
+  "ops.clone.account": "Conta",
+  "ops.clone.accountActive": "Conta gh ativa",
   "ops.f.location": "Local",
   "ops.init.title": "Novo repositório",
   "ops.scan.folder": "Pasta para procurar repositórios",

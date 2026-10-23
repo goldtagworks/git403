@@ -279,6 +279,25 @@ test("복제: URL에서 이름을 추정하고, 끝나면 새 저장소를 탭�
   await expect(page.locator(".toolbar .picker").first()).toContainText("hello-world");
 });
 
+test("복제: gh 계정이 여럿이면 고른 계정으로 받고 새 저장소에 연결한다 (하나면 선택 없음)", async ({ page }) => {
+  await page.evaluate(() => ((window as any).__gh = { installed: true, accounts: [{ user: "alice", active: true }] }));
+  await page.getByRole("button", { name: "복제…" }).click();
+  const sheet = page.getByRole("dialog", { name: "저장소 복제" });
+  await expect(sheet.getByLabel("계정")).toHaveCount(0);
+  await sheet.getByRole("button", { name: "취소" }).click();
+  await page.evaluate(() => ((window as any).__gh = { installed: true, accounts: [{ user: "alice", active: true }, { user: "gold", active: false }] }));
+  await page.getByRole("button", { name: "복제…" }).click();
+  await expect(sheet.getByLabel("계정")).toHaveValue("활성 gh 계정");
+  await sheet.getByLabel("URL").fill("https://github.com/me/hello-world.git");
+  await sheet.getByRole("button", { name: "선택…" }).click();
+  await sheet.getByLabel("계정").selectOption("gold");
+  await sheet.getByRole("button", { name: "복제" }).click();
+  await expect(tabs(page).getByRole("tab", { name: "hello-world" })).toHaveAttribute("aria-selected", "true");
+  const calls = await gitCalls(page);
+  expect(JSON.parse(calls.find(([c]) => c === "start_job")![1])).toEqual({ repo: "/demo", args: ["clone", "--progress", "--", "https://github.com/me/hello-world.git", "hello-world"], ghUser: "gold" });
+  expect(calls.some(([c, u]) => c === "gh_bind" && u === "gold")).toBe(true);
+});
+
 test("새 저장소: git init 후 연다", async ({ page }) => {
   await page.getByRole("button", { name: "새 저장소…" }).click();
   const sheet = page.getByRole("dialog", { name: "새 저장소" });

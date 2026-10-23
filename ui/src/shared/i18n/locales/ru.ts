@@ -195,6 +195,8 @@ export const ru: Record<Key, string> = {
   "ops.ignore.done": "{pattern} игнорируется",
   "ops.clone": "Клонировать",
   "ops.clone.title": "Клонировать репозиторий",
+  "ops.clone.account": "Аккаунт",
+  "ops.clone.accountActive": "Активный аккаунт gh",
   "ops.f.location": "Расположение",
   "ops.init.title": "Новый репозиторий",
   "ops.scan.folder": "Папка для поиска репозиториев",

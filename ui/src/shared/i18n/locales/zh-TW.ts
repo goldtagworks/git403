@@ -195,6 +195,8 @@ export const zhTW: Record<Key, string> = {
   "ops.ignore.done": "{pattern} 已忽略",
   "ops.clone": "複製",
   "ops.clone.title": "複製儲存庫",
+  "ops.clone.account": "帳號",
+  "ops.clone.accountActive": "目前的 gh 帳號",
   "ops.f.location": "位置",
   "ops.init.title": "新增儲存庫",
   "ops.scan.folder": "要搜尋儲存庫的資料夾",

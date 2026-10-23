@@ -194,6 +194,8 @@ export const en = {
   "ops.ignore.done": "{pattern} ignored",
   "ops.clone": "Clone",
   "ops.clone.title": "Clone repository",
+  "ops.clone.account": "Account",
+  "ops.clone.accountActive": "Active gh account",
   "ops.f.location": "Location",
   "ops.init.title": "New repository",
   "ops.scan.folder": "Folder to search for repositories",

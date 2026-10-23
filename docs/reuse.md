@@ -300,7 +300,7 @@ git 작업용 AI. git을 모른다 — 입력 텍스트는 호출 측(UI `ops.ts
 | `eol_rule_exists` / `staged_crlf` / `fix_crlf` | `repo` / `repo` / `repo, paths` | 루트 .gitattributes에 줄바꿈 규칙 유무(`bool`) / 스테이지된 CRLF 파일 경로 목록 / 그 파일을 LF로 바꿔 다시 스테이지 |
 | `remove_git_dir` | `repo, path` | 서브모듈 제거 뒤 `.git/modules/<이름>` 삭제 (그 아래 경로만 허용) |
 | `rebase_interactive` | `repo, base, steps` | 편집기 없이 interactive rebase. reword 메시지·todo는 `.git/gc-rebase-*`에 두어 충돌로 멈췄다 `--continue`해도 `exec`가 읽는다(끝나면 삭제, 멈춘 채 남은 건 다음 시작 때 정리) |
-| `start_job` | `repo, args, interactive?, ghRestore?` | 작업 번호(`push`·`fetch`·`pull`이고 저장소에 gh 계정이 연결돼 있으면 gh 절 규칙으로 전환·복원, `ghRestore` 생략 = true. `fetch`·`pull`이면 이번 실행에만 `-c fetch.writeCommitGraph=true`를 붙이고 성공 뒤 commit-graph를 보장한다). 이벤트 `job {job, event}`, 완료 시 `job-done [job, err?]` |
+| `start_job` | `repo, args, interactive?, ghRestore?, ghUser?` | 작업 번호(`ghUser`는 `clone`용: `--` 다음 https URL의 host에서 그 gh 계정으로 전환·자격 도우미·복원, ssh URL이면 오류. UI는 gh 로그인 계정이 둘 이상이면(host가 여럿이면 `user (host)`로 표시) 복제 대화상자에 "계정" 선택을 보이고, 고르면 끝난 뒤 새 저장소에 `gh_bind`. `push`·`fetch`·`pull`이고 저장소에 gh 계정이 연결돼 있으면 gh 절 규칙으로 전환·복원, `ghRestore` 생략 = true. `fetch`·`pull`이면 이번 실행에만 `-c fetch.writeCommitGraph=true`를 붙이고 성공 뒤 commit-graph를 보장한다). 이벤트 `job {job, event}`, 완료 시 `job-done [job, err?]` |
 | `start_shell` | `repo, command` | `start_job`과 같은 작업 번호·이벤트·`cancel_job`. 사용자 정의 셸 명령(`sh -c` / `cmd /C`) |
 | `cancel_job` | `job` | 없음 |
 

@@ -195,6 +195,8 @@ export const th: Record<Key, string> = {
   "ops.ignore.done": "ละเว้น {pattern} แล้ว",
   "ops.clone": "Clone",
   "ops.clone.title": "Clone repository ลงเครื่อง",
+  "ops.clone.account": "บัญชี",
+  "ops.clone.accountActive": "บัญชี gh ที่ใช้งานอยู่",
   "ops.f.location": "ตำแหน่ง",
   "ops.init.title": "Repository ใหม่",
   "ops.scan.folder": "โฟลเดอร์ที่จะค้นหา repository",

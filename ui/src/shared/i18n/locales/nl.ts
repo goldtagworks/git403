@@ -195,6 +195,8 @@ export const nl: Record<Key, string> = {
   "ops.ignore.done": "{pattern} genegeerd",
   "ops.clone": "Klonen",
   "ops.clone.title": "Repository klonen",
+  "ops.clone.account": "Account",
+  "ops.clone.accountActive": "Actief gh-account",
   "ops.f.location": "Locatie",
   "ops.init.title": "Nieuwe repository",
   "ops.scan.folder": "Map om repository's in te zoeken",

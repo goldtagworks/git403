@@ -195,6 +195,8 @@ export const mn: Record<Key, string> = {
   "ops.ignore.done": "{pattern}-г үл хэрэгсэх болголоо",
   "ops.clone": "Clone",
   "ops.clone.title": "Репозитор clone хийх",
+  "ops.clone.account": "Бүртгэл",
+  "ops.clone.accountActive": "Идэвхтэй gh бүртгэл",
   "ops.f.location": "Байршил",
   "ops.init.title": "Шинэ репозитор",
   "ops.scan.folder": "Репозитор хайх хавтас",

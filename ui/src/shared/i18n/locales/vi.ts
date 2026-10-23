@@ -195,6 +195,8 @@ export const vi: Record<Key, string> = {
   "ops.ignore.done": "Đã bỏ qua {pattern}",
   "ops.clone": "Clone",
   "ops.clone.title": "Clone kho lưu trữ",
+  "ops.clone.account": "Tài khoản",
+  "ops.clone.accountActive": "Tài khoản gh đang dùng",
   "ops.f.location": "Vị trí",
   "ops.init.title": "Kho lưu trữ mới",
   "ops.scan.folder": "Thư mục để tìm kho lưu trữ",

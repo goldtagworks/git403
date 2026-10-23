@@ -195,6 +195,8 @@ export const ja: Record<Key, string> = {
   "ops.ignore.done": "{pattern} を無視するようにしました",
   "ops.clone": "クローン",
   "ops.clone.title": "リポジトリをクローン",
+  "ops.clone.account": "アカウント",
+  "ops.clone.accountActive": "アクティブな gh アカウント",
   "ops.f.location": "場所",
   "ops.init.title": "新しいリポジトリ",
   "ops.scan.folder": "リポジトリを検索するフォルダー",

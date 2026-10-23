@@ -492,7 +492,14 @@ impl Backend {
     }
 
     /// push/fetch/pull이고 연결된 계정이 있으면 자리를 얻는다(필요하면 전환). 로그 줄은 `tx`로 보낸다.
-    pub(crate) async fn gh_lease_for_job(&self, repo: &Path, args: &[String], tx: &mpsc::UnboundedSender<JobEvent>) -> Res<Option<Lease>> {
+    /// clone은 저장소가 아직 없으니 `clone_as`(고른 계정)로만: URL(`--` 다음 인자)이 https여야 한다.
+    pub(crate) async fn gh_lease_for_job(&self, repo: &Path, args: &[String], clone_as: Option<&str>, tx: &mpsc::UnboundedSender<JobEvent>) -> Res<Option<Lease>> {
+        if let Some(user) = clone_as.filter(|u| !u.is_empty()) {
+            let url = clone_url(args).ok_or("ghUser: clone URL을 찾을 수 없습니다")?;
+            let host = url.strip_prefix("https://").and(gc_hosting::parse_remote(url)).map(|r| r.host).ok_or("ghUser: https URL만 계정을 고를 수 있습니다")?;
+            let log = progress_logger(tx);
+            return self.gh_gate.acquire(&self.gh(), &host, user, log).await.map(Some);
+        }
         if !matches!(args.first().map(String::as_str), Some("push" | "fetch" | "pull")) {
             return Ok(None);
         }
@@ -507,6 +514,14 @@ impl Backend {
     pub(crate) async fn gh_release(&self, lease: Lease, restore: bool, tx: &mpsc::UnboundedSender<JobEvent>) {
         lease.release(restore, progress_logger(tx)).await;
     }
+}
+
+/// `clone ... -- <url> [dir]`의 URL
+fn clone_url(args: &[String]) -> Option<&str> {
+    if args.first().map(String::as_str) != Some("clone") {
+        return None;
+    }
+    args.iter().skip_while(|a| *a != "--").nth(1).map(String::as_str)
 }
 
 fn progress_logger(tx: &mpsc::UnboundedSender<JobEvent>) -> impl Fn(String) + Send + 'static {
@@ -835,7 +850,11 @@ esac
     }
 
     async fn run_job(be: &Backend, repo: &Path, log: &Arc<parking_lot::Mutex<Vec<(String, serde_json::Value)>>>, args: &[&str], restore: bool) -> (Vec<String>, Option<String>) {
-        let job = be.start_job(repo.to_path_buf(), args.iter().map(|s| s.to_string()).collect(), None, restore).await.unwrap();
+        run_job_as(be, repo, log, args, None, restore).await
+    }
+
+    async fn run_job_as(be: &Backend, repo: &Path, log: &Arc<parking_lot::Mutex<Vec<(String, serde_json::Value)>>>, args: &[&str], gh_user: Option<&str>, restore: bool) -> (Vec<String>, Option<String>) {
+        let job = be.start_job(repo.to_path_buf(), args.iter().map(|s| s.to_string()).collect(), None, gh_user.map(String::from), restore).await.unwrap();
         for _ in 0..200 {
             let events = log.lock().clone();
             if let Some(done) = events.iter().find(|(e, p)| e == "job-done" && p[0] == job) {
@@ -859,6 +878,25 @@ esac
     }
 
     #[tokio::test]
+    async fn clone은_고른_계정으로_전환하고_복원한다() {
+        let missing = std::env::temp_dir().join("git403-no-such-remote-dir");
+        let (d, repo, be, log) = job_setup(&missing, None).await;
+        // 연결 거부로 바로 실패하는 https URL (네트워크 없음)
+        let (lines, e) = run_job_as(&be, repo.path(), &log, &["clone", "--progress", "--", "https://127.0.0.1:1/o/r.git", "r"], Some("gold"), true).await;
+        assert!(e.is_some(), "clone은 실패해야 한다");
+        // 가짜 gh는 github.com만 알아서 이 host의 원래 활성 계정이 없음(?) → 되돌릴 계정 없음
+        assert_eq!(switches(d.path()), ["switch gold"]);
+        assert!(lines.iter().any(|l| l.contains("→ gold")), "{lines:?}");
+        // ssh URL은 자격 도우미가 쓰이지 않으니 전환하지 않고 거부
+        let args = ["clone", "--", "git@github.com:o/r.git", "r"].map(String::from).to_vec();
+        assert!(be.start_job(repo.path().to_path_buf(), args, None, Some("gold".into()), true).await.is_err());
+        assert_eq!(switches(d.path()).len(), 1);
+        let args: Vec<String> = ["clone", "--progress", "--", "https://h/o/r", "x"].map(String::from).to_vec();
+        assert_eq!(clone_url(&args), Some("https://h/o/r"));
+        assert_eq!(clone_url(&args[1..]), None);
+    }
+
+    #[tokio::test]
     async fn 실패한_작업도_복원하고_gh_restore_false면_복원_안_한다() {
         let missing = std::env::temp_dir().join("git403-no-such-remote-dir");
         let (d, repo, be, log) = job_setup(&missing, Some("gold")).await;
@@ -877,7 +915,7 @@ esac
         std::fs::write(d.path().join("fail_status"), "").unwrap();
         // 연결 계정을 못 확인하면 현재 계정으로 진행하지 않는다
         let _ = &log;
-        let e = be.start_job(repo.path().to_path_buf(), vec!["fetch".into()], None, true).await.unwrap_err();
+        let e = be.start_job(repo.path().to_path_buf(), vec!["fetch".into()], None, None, true).await.unwrap_err();
         assert!(e.contains("error connecting"), "{e}");
         assert!(switches(d.path()).is_empty(), "전환하지 않는다");
         // PR 토큰도 다른 계정으로 대신하지 않는다

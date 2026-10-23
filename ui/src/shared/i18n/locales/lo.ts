@@ -195,6 +195,8 @@ export const lo: Record<Key, string> = {
   "ops.ignore.done": "ລະເວັ້ນ {pattern} ແລ້ວ",
   "ops.clone": "Clone",
   "ops.clone.title": "Clone ຣີໂພຊິທໍຣີ",
+  "ops.clone.account": "ບັນຊີ",
+  "ops.clone.accountActive": "ບັນຊີ gh ທີ່ໃຊ້ຢູ່",
   "ops.f.location": "ບ່ອນເກັບ",
   "ops.init.title": "ຣີໂພຊິທໍຣີໃໝ່",
   "ops.scan.folder": "ໂຟນເດີທີ່ຈະຊອກຫາຣີໂພຊິທໍຣີ",

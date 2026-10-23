@@ -311,7 +311,7 @@ function App() {
       if (!opts?.quiet) setMessage(t("app.jobRunning", { name }));
       try {
         const repo = opts?.repo ?? repoRef.current;
-        const id = opts?.shell ? await api.startShell(repo, opts.shell) : await api.startJob(repo, args, opts?.quiet);
+        const id = opts?.shell ? await api.startShell(repo, opts.shell) : await api.startJob(repo, args, opts?.quiet, opts?.ghUser);
         jobs.current.set(id, { name, repo, onDone: opts?.onDone, remote: opts?.remote, quiet: opts?.quiet, args, shell: opts?.shell, note: opts?.track ? jobNote(name, repo, opts.track) : undefined });
         if (early.current.has(id)) {
           const err = early.current.get(id)!;

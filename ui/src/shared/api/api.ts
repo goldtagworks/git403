@@ -143,8 +143,8 @@ export const api = {
   /** 저장소 안의 이미 있는 파일 덮어쓰기 (충돌 도우미 적용). expected(지문)를 주면 그사이 파일이 바뀌었을 때 거부 */
   writeInRepo: (repo: string, path: string, text: string, expected: string | null = null) => invoke<void>("write_in_repo", { repo, path, text, expected }),
   /** quiet = 백그라운드 작업(자동 fetch): 인증 입력 창을 띄우지 않고 ssh는 BatchMode */
-  /** pref ghRestore가 꺼져 있을 때만 ghRestore:false를 보낸다(생략 = Rust 기본 true) */
-  startJob: (repo: string, args: string[], quiet = false) => invoke<number>("start_job", { repo, args, ...(quiet ? { interactive: false } : {}), ...(pref("ghRestore") ? {} : { ghRestore: false }) }),
+  /** ghUser: clone에 쓸 gh 계정(https URL만). pref ghRestore가 꺼져 있을 때만 ghRestore:false를 보낸다(생략 = Rust 기본 true) */
+  startJob: (repo: string, args: string[], quiet = false, ghUser?: string) => invoke<number>("start_job", { repo, args, ...(quiet ? { interactive: false } : {}), ...(ghUser ? { ghUser } : {}), ...(pref("ghRestore") ? {} : { ghRestore: false }) }),
   /** gh(GitHub CLI) 계정: 목록·전환, 저장소 연결(bind, user 생략 = 해제), 연결 계정 접근 확인(probe) */
   ghAccounts: (host?: string) => invoke<GhAccounts>("gh_accounts", { host: host ?? null }),
   ghSwitch: (host: string, user: string) => invoke<void>("gh_switch", { host, user }),

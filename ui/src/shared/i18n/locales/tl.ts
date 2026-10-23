@@ -195,6 +195,8 @@ export const tl: Record<Key, string> = {
   "ops.ignore.done": "Ini-ignore na ang {pattern}",
   "ops.clone": "I-clone",
   "ops.clone.title": "I-clone ang repository",
+  "ops.clone.account": "Account",
+  "ops.clone.accountActive": "Aktibong gh account",
   "ops.f.location": "Lokasyon",
   "ops.init.title": "Bagong repository",
   "ops.scan.folder": "Folder na hahanapan ng mga repository",

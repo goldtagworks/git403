@@ -195,6 +195,8 @@ export const uk: Record<Key, string> = {
   "ops.ignore.done": "{pattern} проігноровано",
   "ops.clone": "Клонувати",
   "ops.clone.title": "Клонувати репозиторій",
+  "ops.clone.account": "Обліковий запис",
+  "ops.clone.accountActive": "Активний обліковий запис gh",
   "ops.f.location": "Розташування",
   "ops.init.title": "Новий репозиторій",
   "ops.scan.folder": "Тека для пошуку репозиторіїв",

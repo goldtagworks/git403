@@ -195,6 +195,8 @@ export const de: Record<Key, string> = {
   "ops.ignore.done": "{pattern} wird ignoriert",
   "ops.clone": "Klonen",
   "ops.clone.title": "Repository klonen",
+  "ops.clone.account": "Konto",
+  "ops.clone.accountActive": "Aktives gh-Konto",
   "ops.f.location": "Speicherort",
   "ops.init.title": "Neues Repository",
   "ops.scan.folder": "Ordner, in dem nach Repositorys gesucht wird",
