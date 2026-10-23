@@ -71,10 +71,14 @@ pub fn run() {
                 window::restore(&w);
                 window::keep_on_screen(&w);
                 let _ = w.restore_state(StateFlags::all() - StateFlags::POSITION - StateFlags::SIZE);
+                // 창은 숨긴 채(conf visible: false) UI 첫 로드가 끝나면 UI가 보여 주고 스플래시 창을 닫는다(ui/src/shared/lib/splash.ts)
             }
             Ok(())
         })
         .on_window_event(|w, e| {
+            if w.label() != "main" {
+                return;
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = e {
                 window::save(w);
                 // macOS 관례: 창을 닫아도(⌘W·빨간 버튼) 앱은 Dock에 남는다. 종료는 ⌘Q. Dock 아이콘을 누르면 다시 보인다(Reopen)

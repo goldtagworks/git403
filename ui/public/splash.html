@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <!-- 시작 스플래시 창(tauri.conf.json의 splash). 메인 창은 숨긴 채 로드하고, 끝나면 UI가 이 창을 닫는다(src/shared/lib/splash.ts) -->
+    <style>
+      :root { --bg: #f1f2f5; --fg: #1e2026; --dim: #6b7080; --track: #dcdfe5; --accent: #3b82f6; }
+      @media (prefers-color-scheme: dark) { :root { --bg: #131519; --fg: #e6e8ec; --dim: #8b90a0; --track: #2a2d34; } }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); cursor: default; user-select: none; -webkit-user-select: none; }
+      body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", sans-serif; }
+      img { width: 64px; height: 64px; }
+      b { font-size: 17px; font-weight: 600; }
+      .bar { width: 140px; height: 3px; border-radius: 2px; background: var(--track); overflow: hidden; margin-top: 6px; }
+      .bar i { display: block; width: 40%; height: 100%; border-radius: 2px; background: var(--accent); animation: slide 1.1s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+      @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+      @media (prefers-reduced-motion: reduce) { .bar i { animation: none; width: 100%; opacity: 0.5; } }
+    </style>
+  </head>
+  <body data-tauri-drag-region>
+    <img src="/icon.png" alt="" draggable="false" />
+    <b>git403</b>
+    <div class="bar"><i></i></div>
+  </body>
+</html>
