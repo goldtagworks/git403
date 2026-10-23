@@ -1,11 +1,22 @@
 //! 메인 창 위치·크기: 종료 때 논리 좌표(macOS의 전역 포인트)로 저장하고 시작 때 되살린다.
 //! 위치·크기는 창 상태 플러그인이 물리 픽셀로 저장해 배율이 다른 모니터가 섞이면 엉뚱한 곳에 되살아나므로 여기서 직접 맡는다.
 //! 최대화 상태면 저장하지 않는다(이전 값 유지).
+//! 저장 때의 모니터 배치(개수·위치·해상도)도 함께 적어 두고, 시작 때 배치가 바뀌었으면 위치는 버리고 가운데에 띄운다.
 
-use tauri::{LogicalPosition, LogicalSize, Manager, Runtime, WebviewWindow, Window};
+use tauri::{LogicalPosition, LogicalSize, Manager, Monitor, Runtime, WebviewWindow, Window};
 
 #[derive(serde::Serialize, serde::Deserialize)]
-struct Geom { x: f64, y: f64, w: f64, h: f64 }
+struct Geom { x: f64, y: f64, w: f64, h: f64, #[serde(default)] screens: Vec<[i64; 4]> }
+
+/// 모니터 배치: 각 모니터의 논리 좌표 사각형을 정렬한 목록. 모니터를 빼거나 해상도를 바꾸면 달라진다.
+fn screens(monitors: &[Monitor]) -> Vec<[i64; 4]> {
+    let mut v: Vec<[i64; 4]> = monitors.iter().map(|m| {
+        let (p, s) = (m.position().to_logical::<f64>(m.scale_factor()), m.size().to_logical::<f64>(m.scale_factor()));
+        [p.x, p.y, s.width, s.height].map(|n| n.round() as i64)
+    }).collect();
+    v.sort();
+    v
+}
 
 fn file<R: Runtime>(app: &impl Manager<R>) -> Option<std::path::PathBuf> {
     let name = if cfg!(debug_assertions) { ".window-geom-dev.json" } else { ".window-geom.json" };
@@ -18,7 +29,7 @@ pub fn save<R: Runtime>(w: &Window<R>) {
     }
     let (Ok(pos), Ok(size), Ok(k), Some(path)) = (w.outer_position(), w.inner_size(), w.scale_factor(), file(w)) else { return };
     let (p, s) = (pos.to_logical::<f64>(k), size.to_logical::<f64>(k));
-    let g = Geom { x: p.x, y: p.y, w: s.width, h: s.height };
+    let g = Geom { x: p.x, y: p.y, w: s.width, h: s.height, screens: screens(&w.available_monitors().unwrap_or_default()) };
     let _ = std::fs::create_dir_all(path.parent().unwrap());
     let _ = std::fs::write(path, serde_json::to_vec(&g).unwrap_or_default());
 }
@@ -26,6 +37,15 @@ pub fn save<R: Runtime>(w: &Window<R>) {
 pub fn restore<R: Runtime>(w: &WebviewWindow<R>) {
     let Some(g) = file(w).and_then(|p| std::fs::read(p).ok()).and_then(|b| serde_json::from_slice::<Geom>(&b).ok()) else { return };
     let _ = w.set_size(LogicalSize::new(g.w, g.h));
+    if g.screens != screens(&w.available_monitors().unwrap_or_default()) {
+        // 모니터 배치가 바뀌었다: 예전 좌표는 믿을 수 없으니 주 모니터 크기 안으로 줄여 가운데에 둔다
+        if let Ok(Some(m)) = w.primary_monitor() {
+            let ms = m.size().to_logical::<f64>(m.scale_factor());
+            let _ = w.set_size(LogicalSize::new(g.w.min(ms.width * 0.9), g.h.min(ms.height * 0.9)));
+        }
+        let _ = w.center();
+        return;
+    }
     let _ = w.set_position(LogicalPosition::new(g.x, g.y));
 }
 
