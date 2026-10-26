@@ -14,7 +14,7 @@ cask "git403" do
   desc "가볍고 빠른 Git 클라이언트 (코드 서명 없음)"
   homepage "https://github.com/goldtagworks/git403"
 
-  depends_on macos: ">= :big_sur"
+  depends_on :macos
 
   auto_updates true # 앱이 스스로 업데이트한다(brew upgrade도 된다)
 
