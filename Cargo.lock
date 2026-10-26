@@ -1435,7 +1435,7 @@ dependencies = [
 
 [[package]]
 name = "gc-ai"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "gc-hosting",
  "gc-i18n",
@@ -1448,7 +1448,7 @@ dependencies = [
 
 [[package]]
 name = "gc-backend"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "gc-ai",
  "gc-core",
@@ -1467,7 +1467,7 @@ dependencies = [
 
 [[package]]
 name = "gc-core"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "gc-i18n",
  "libc",
@@ -1480,14 +1480,14 @@ dependencies = [
 
 [[package]]
 name = "gc-graph"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "gc-hosting"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "gc-i18n",
  "keyring",
@@ -1502,7 +1502,7 @@ dependencies = [
 
 [[package]]
 name = "gc-i18n"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "serde_json",
 ]
@@ -1699,7 +1699,7 @@ dependencies = [
 
 [[package]]
 name = "git403"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "gc-backend",
  "gc-i18n",

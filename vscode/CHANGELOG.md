@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.3
+
+- Redesigned commit details: the subject wraps up to three lines, the first body line is previewed under it (click to show the full message), and author, co-authors (by name), committer (when different), commit and parent hashes are shown compactly.
+- Clicking a commit hash copies the full SHA.
+- Pane splitters are thicker with a grip, like VS Code.
+- Deleting a branch checked out in another worktree offers to remove that worktree too; unmerged branches offer a force delete.
+- Popping, applying or dropping a stash that no longer exists shows a notice and refreshes the list instead of an error.
+
 ## 1.0.2
 
 - The git403 status bar item now always opens the full git403 view in an editor tab, regardless of the graph location setting.
