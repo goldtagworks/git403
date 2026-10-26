@@ -807,6 +807,8 @@ export const mn: Record<Key, string> = {
   "tabs.wsDeleteOne": "Устгах: {name}",
   "tabs.open": "Нээлттэй репозиторууд",
   "tabs.close": "{name} табыг хаах",
+  "tabs.add": "Таб нэмэх ({keys})",
+  "tabs.addLabel": "Таб нэмэх",
   "tabs.wsLabel": "Ажлын орчнууд",
   "tabs.list": "{n} таб",
   "tabs.listTip": "Нээлттэй бүх {n} табыг харуулах (өмнөх/дараагийн таб: {keys})",

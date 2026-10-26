@@ -807,6 +807,8 @@ export const ru: Record<Key, string> = {
   "tabs.wsDeleteOne": "Удалить: {name}",
   "tabs.open": "Открытые репозитории",
   "tabs.close": "Закрыть вкладку {name}",
+  "tabs.add": "Добавить вкладку ({keys})",
+  "tabs.addLabel": "Добавить вкладку",
   "tabs.wsLabel": "Рабочие пространства",
   "tabs.list": "Вкладок: {n}",
   "tabs.listTip": "Показать все открытые вкладки ({n}) ({keys} — предыдущая/следующая вкладка)",

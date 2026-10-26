@@ -807,6 +807,8 @@ export const ko: Record<Key, string> = {
   "tabs.wsDeleteOne": "삭제: {name}",
   "tabs.open": "열린 저장소",
   "tabs.close": "{name} 탭 닫기",
+  "tabs.add": "탭 추가 ({keys})",
+  "tabs.addLabel": "탭 추가",
   "tabs.wsLabel": "작업공간",
   "tabs.list": "탭 {n}개",
   "tabs.listTip": "열린 탭 {n}개 모두 보기 ({keys}로 이전·다음 탭)",

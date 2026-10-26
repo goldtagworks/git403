@@ -807,6 +807,8 @@ export const tl: Record<Key, string> = {
   "tabs.wsDeleteOne": "Burahin: {name}",
   "tabs.open": "Mga bukas na repository",
   "tabs.close": "Isara ang tab na {name}",
+  "tabs.add": "Magdagdag ng tab ({keys})",
+  "tabs.addLabel": "Magdagdag ng tab",
   "tabs.wsLabel": "Mga workspace",
   "tabs.list": "{n} tab",
   "tabs.listTip": "Ipakita ang lahat ng {n} bukas na tab ({keys} para sa nakaraan/susunod na tab)",

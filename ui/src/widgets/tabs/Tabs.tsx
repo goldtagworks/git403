@@ -11,11 +11,13 @@ const dir = (p: string) => p.slice(0, Math.max(0, p.length - base(p).length)).re
 const KEYS = isMac ? "⌘⌥←/→" : "Ctrl+Alt+←/→";
 
 /** 열린 저장소 탭. 끝의 메뉴로 작업공간(탭 묶음) 저장·전환. */
-export const Tabs = memo(function Tabs({ tabs, active, onOpen, onClose }: {
+export const Tabs = memo(function Tabs({ tabs, active, onOpen, onClose, onAdd }: {
   tabs: string[];
   active: string;
   onOpen: (path: string) => void;
   onClose: (path: string) => void;
+  /** 끝의 + 버튼: 저장소 열기(⌘O와 같음) */
+  onAdd: () => void;
 }) {
   countRender("Tabs");
   useLocale();
@@ -106,6 +108,9 @@ export const Tabs = memo(function Tabs({ tabs, active, onOpen, onClose }: {
           ))}
         </div>
       </div>
+      <button className="tab-add" title={tr("tabs.add", { keys: isMac ? "⌘O" : "Ctrl+O" })} onClick={() => onAdd()}>
+        <Icon name="add" size={14} />{tr("tabs.addLabel")}
+      </button>
       {over && (
         <button ref={allBtn} className="tab-menu" title={tr("tabs.listTip", { n: tabs.length, keys: KEYS })} aria-label={tr("tabs.list", { n: tabs.length })} onClick={allMenu}>
           {tr("tabs.list", { n: tabs.length })}<Icon name="dropdown" size={11} />

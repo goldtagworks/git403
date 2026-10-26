@@ -807,6 +807,8 @@ export const pl: Record<Key, string> = {
   "tabs.wsDeleteOne": "Usuń: {name}",
   "tabs.open": "Otwarte repozytoria",
   "tabs.close": "Zamknij kartę {name}",
+  "tabs.add": "Dodaj kartę ({keys})",
+  "tabs.addLabel": "Dodaj kartę",
   "tabs.wsLabel": "Obszary robocze",
   "tabs.list": "Karty: {n}",
   "tabs.listTip": "Pokaż wszystkie otwarte karty ({n}) ({keys} – poprzednia/następna karta)",

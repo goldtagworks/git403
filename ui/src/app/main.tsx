@@ -448,7 +448,7 @@ function App() {
         onForget={forget}
         onQuickLaunch={showPalette}
       />}
-      {!COMPACT && !DETAIL && tabs.length > 0 && <Tabs tabs={tabs} active={pending ?? repo} onOpen={loadAll} onClose={closeTab} />}
+      {!COMPACT && !DETAIL && tabs.length > 0 && <Tabs tabs={tabs} active={pending ?? repo} onOpen={loadAll} onClose={closeTab} onAdd={open} />}
       <Notices />
       {status?.operation && (
         <div className="banner op">

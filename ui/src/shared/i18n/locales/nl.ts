@@ -807,6 +807,8 @@ export const nl: Record<Key, string> = {
   "tabs.wsDeleteOne": "Verwijderen: {name}",
   "tabs.open": "Geopende repository's",
   "tabs.close": "Tabblad {name} sluiten",
+  "tabs.add": "Tabblad toevoegen ({keys})",
+  "tabs.addLabel": "Tabblad toevoegen",
   "tabs.wsLabel": "Werkruimtes",
   "tabs.list": "{n} tabbladen",
   "tabs.listTip": "Alle {n} geopende tabbladen tonen ({keys} voor vorig/volgend tabblad)",

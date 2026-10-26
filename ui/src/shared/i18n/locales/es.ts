@@ -807,6 +807,8 @@ export const es: Record<Key, string> = {
   "tabs.wsDeleteOne": "Eliminar: {name}",
   "tabs.open": "Repositorios abiertos",
   "tabs.close": "Cerrar la pestaña {name}",
+  "tabs.add": "Añadir pestaña ({keys})",
+  "tabs.addLabel": "Añadir pestaña",
   "tabs.wsLabel": "Espacios de trabajo",
   "tabs.list": "{n} pestañas",
   "tabs.listTip": "Mostrar las {n} pestañas abiertas ({keys} para la pestaña anterior/siguiente)",

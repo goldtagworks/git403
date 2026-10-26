@@ -807,6 +807,8 @@ export const uk: Record<Key, string> = {
   "tabs.wsDeleteOne": "Видалити: {name}",
   "tabs.open": "Відкриті репозиторії",
   "tabs.close": "Закрити вкладку {name}",
+  "tabs.add": "Додати вкладку ({keys})",
+  "tabs.addLabel": "Додати вкладку",
   "tabs.wsLabel": "Робочі простори",
   "tabs.list": "Вкладок: {n}",
   "tabs.listTip": "Показати всі відкриті вкладки ({n}) ({keys} — попередня/наступна вкладка)",

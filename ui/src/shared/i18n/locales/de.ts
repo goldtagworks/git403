@@ -807,6 +807,8 @@ export const de: Record<Key, string> = {
   "tabs.wsDeleteOne": "Löschen: {name}",
   "tabs.open": "Geöffnete Repositorys",
   "tabs.close": "Tab {name} schließen",
+  "tabs.add": "Tab hinzufügen ({keys})",
+  "tabs.addLabel": "Tab hinzufügen",
   "tabs.wsLabel": "Arbeitsbereiche",
   "tabs.list": "{n} Tabs",
   "tabs.listTip": "Alle {n} geöffneten Tabs anzeigen ({keys} für vorherigen/nächsten Tab)",

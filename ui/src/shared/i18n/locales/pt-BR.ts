@@ -807,6 +807,8 @@ export const ptBR: Record<Key, string> = {
   "tabs.wsDeleteOne": "Excluir: {name}",
   "tabs.open": "Repositórios abertos",
   "tabs.close": "Fechar aba {name}",
+  "tabs.add": "Adicionar aba ({keys})",
+  "tabs.addLabel": "Adicionar aba",
   "tabs.wsLabel": "Espaços de trabalho",
   "tabs.list": "{n} abas",
   "tabs.listTip": "Mostrar todas as {n} abas abertas ({keys} para aba anterior/próxima)",

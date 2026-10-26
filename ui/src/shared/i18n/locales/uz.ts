@@ -807,6 +807,8 @@ export const uz: Record<Key, string> = {
   "tabs.wsDeleteOne": "O'chirish: {name}",
   "tabs.open": "Ochiq repozitoriylar",
   "tabs.close": "{name} varag'ini yopish",
+  "tabs.add": "Yorliq qo'shish ({keys})",
+  "tabs.addLabel": "Yorliq qo'shish",
   "tabs.wsLabel": "Ish maydonlari",
   "tabs.list": "{n} ta varaq",
   "tabs.listTip": "Barcha {n} ta ochiq varaqni ko'rsatish (oldingi/keyingi varaq uchun {keys})",

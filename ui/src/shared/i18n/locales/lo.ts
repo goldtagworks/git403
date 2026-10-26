@@ -807,6 +807,8 @@ export const lo: Record<Key, string> = {
   "tabs.wsDeleteOne": "ລຶບ: {name}",
   "tabs.open": "ຣີໂພຊິທໍຣີທີ່ເປີດ",
   "tabs.close": "ປິດແທັບ {name}",
+  "tabs.add": "ເພີ່ມແຖບ ({keys})",
+  "tabs.addLabel": "ເພີ່ມແຖບ",
   "tabs.wsLabel": "Workspace",
   "tabs.list": "{n} ແທັບ",
   "tabs.listTip": "ສະແດງທັງໝົດ {n} ແທັບທີ່ເປີດ ({keys} ສຳລັບແທັບກ່ອນ/ຕໍ່ໄປ)",

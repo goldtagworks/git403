@@ -807,6 +807,8 @@ export const ne: Record<Key, string> = {
   "tabs.wsDeleteOne": "मेटाउनुहोस्: {name}",
   "tabs.open": "खुला रिपोजिटरीहरू",
   "tabs.close": "ट्याब {name} बन्द गर्नुहोस्",
+  "tabs.add": "ट्याब थप्नुहोस् ({keys})",
+  "tabs.addLabel": "ट्याब थप्नुहोस्",
   "tabs.wsLabel": "वर्कस्पेसहरू",
   "tabs.list": "{n} ट्याब",
   "tabs.listTip": "खुला सबै {n} ट्याब देखाउनुहोस् (अघिल्लो/अर्को ट्याबका लागि {keys})",

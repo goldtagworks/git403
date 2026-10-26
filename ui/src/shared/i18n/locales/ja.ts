@@ -807,6 +807,8 @@ export const ja: Record<Key, string> = {
   "tabs.wsDeleteOne": "削除: {name}",
   "tabs.open": "開いているリポジトリ",
   "tabs.close": "タブ {name} を閉じる",
+  "tabs.add": "タブを追加 ({keys})",
+  "tabs.addLabel": "タブを追加",
   "tabs.wsLabel": "ワークスペース",
   "tabs.list": "{n} 個のタブ",
   "tabs.listTip": "開いている {n} 個のタブをすべて表示 ({keys} で前/次のタブ)",

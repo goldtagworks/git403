@@ -807,6 +807,8 @@ export const it: Record<Key, string> = {
   "tabs.wsDeleteOne": "Elimina: {name}",
   "tabs.open": "Repository aperti",
   "tabs.close": "Chiudi scheda {name}",
+  "tabs.add": "Aggiungi scheda ({keys})",
+  "tabs.addLabel": "Aggiungi scheda",
   "tabs.wsLabel": "Workspace",
   "tabs.list": "{n} schede",
   "tabs.listTip": "Mostra tutte le {n} schede aperte ({keys} per scheda precedente/successiva)",

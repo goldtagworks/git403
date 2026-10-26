@@ -588,7 +588,7 @@ test("탭 전환·넘침 메뉴·⌘⌥←/→는 CommitGraph·Sidebar·Details�
   const menu = await renders(page);
   for (const id of ["CommitGraph", "Sidebar", "Details", "Toolbar", "StatusBar", "Tabs"]) expect(menu[id], id).toBe(before[id]);
   // 창 폭이 바뀌어 넘침이 켜지고 꺼져도 탭 줄만 다시 그린다
-  await page.setViewportSize({ width: 1500, height: 720 });
+  await page.setViewportSize({ width: 1600, height: 720 });
   await expect(bar.getByRole("button", { name: "탭 15개" })).toHaveCount(0);
   await page.setViewportSize({ width: 1100, height: 720 });
   await expect(bar.getByRole("button", { name: "탭 15개" })).toBeVisible();

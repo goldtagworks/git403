@@ -807,6 +807,8 @@ export const fr: Record<Key, string> = {
   "tabs.wsDeleteOne": "Supprimer : {name}",
   "tabs.open": "Dépôts ouverts",
   "tabs.close": "Fermer l’onglet {name}",
+  "tabs.add": "Ajouter un onglet ({keys})",
+  "tabs.addLabel": "Ajouter un onglet",
   "tabs.wsLabel": "Espaces de travail",
   "tabs.list": "{n} onglets",
   "tabs.listTip": "Afficher les {n} onglets ouverts ({keys} pour l’onglet précédent/suivant)",

@@ -807,6 +807,8 @@ export const th: Record<Key, string> = {
   "tabs.wsDeleteOne": "ลบ: {name}",
   "tabs.open": "Repository ที่เปิดอยู่",
   "tabs.close": "ปิดแท็บ {name}",
+  "tabs.add": "เพิ่มแท็บ ({keys})",
+  "tabs.addLabel": "เพิ่มแท็บ",
   "tabs.wsLabel": "Workspace",
   "tabs.list": "{n} แท็บ",
   "tabs.listTip": "แสดงแท็บที่เปิดทั้งหมด {n} แท็บ ({keys} สำหรับแท็บก่อนหน้า/ถัดไป)",

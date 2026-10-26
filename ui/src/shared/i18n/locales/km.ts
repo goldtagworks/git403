@@ -807,6 +807,8 @@ export const km: Record<Key, string> = {
   "tabs.wsDeleteOne": "លុប៖ {name}",
   "tabs.open": "Repository ដែលបើក",
   "tabs.close": "បិទផ្ទាំង {name}",
+  "tabs.add": "បន្ថែមផ្ទាំង ({keys})",
+  "tabs.addLabel": "បន្ថែមផ្ទាំង",
   "tabs.wsLabel": "Workspace",
   "tabs.list": "ផ្ទាំង {n}",
   "tabs.listTip": "បង្ហាញផ្ទាំងដែលបើកទាំង {n} ({keys} សម្រាប់ផ្ទាំងមុន/បន្ទាប់)",

@@ -807,6 +807,8 @@ export const zhTW: Record<Key, string> = {
   "tabs.wsDeleteOne": "刪除：{name}",
   "tabs.open": "已開啟的儲存庫",
   "tabs.close": "關閉分頁 {name}",
+  "tabs.add": "新增分頁 ({keys})",
+  "tabs.addLabel": "新增分頁",
   "tabs.wsLabel": "工作區",
   "tabs.list": "{n} 個分頁",
   "tabs.listTip": "顯示全部 {n} 個已開啟的分頁（{keys} 切換上一個/下一個分頁）",

@@ -806,6 +806,8 @@ export const en = {
   "tabs.wsDeleteOne": "Delete: {name}",
   "tabs.open": "Open repositories",
   "tabs.close": "Close tab {name}",
+  "tabs.add": "Add tab ({keys})",
+  "tabs.addLabel": "Add tab",
   "tabs.wsLabel": "Workspaces",
   "tabs.list": "{n} tabs",
   "tabs.listTip": "Show all {n} open tabs ({keys} for previous/next tab)",

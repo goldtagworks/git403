@@ -807,6 +807,8 @@ export const vi: Record<Key, string> = {
   "tabs.wsDeleteOne": "Xóa: {name}",
   "tabs.open": "Kho lưu trữ đang mở",
   "tabs.close": "Đóng tab {name}",
+  "tabs.add": "Thêm tab ({keys})",
+  "tabs.addLabel": "Thêm tab",
   "tabs.wsLabel": "Không gian làm việc",
   "tabs.list": "{n} tab",
   "tabs.listTip": "Hiện tất cả {n} tab đang mở ({keys} để chuyển tab trước/sau)",

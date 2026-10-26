@@ -807,6 +807,8 @@ export const zhCN: Record<Key, string> = {
   "tabs.wsDeleteOne": "删除：{name}",
   "tabs.open": "打开仓库",
   "tabs.close": "关闭标签页 {name}",
+  "tabs.add": "添加标签页 ({keys})",
+  "tabs.addLabel": "添加标签页",
   "tabs.wsLabel": "工作区",
   "tabs.list": "{n} 个标签页",
   "tabs.listTip": "显示全部 {n} 个打开的标签页（{keys} 切换上一个/下一个标签页）",

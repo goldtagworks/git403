@@ -807,6 +807,8 @@ export const tr: Record<Key, string> = {
   "tabs.wsDeleteOne": "Sil: {name}",
   "tabs.open": "Açık depolar",
   "tabs.close": "{name} sekmesini kapat",
+  "tabs.add": "Sekme ekle ({keys})",
+  "tabs.addLabel": "Sekme ekle",
   "tabs.wsLabel": "Çalışma alanları",
   "tabs.list": "{n} sekme",
   "tabs.listTip": "Açık {n} sekmenin tümünü göster (önceki/sonraki sekme için {keys})",
