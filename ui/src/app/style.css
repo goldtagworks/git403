@@ -546,10 +546,9 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
   background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-float); }
 .search-list li { display: flex; flex-direction: column; gap: 1px; padding: 4px 8px; border-radius: 5px; cursor: default; }
 .search-list li:hover { background: var(--hover); }
-.search-list li.selected { background: var(--accent); color: var(--on-accent, #fff); }
+.search-list li.selected { background: var(--selected); }
 .search-list .subject { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .search-list .meta { font-size: 11px; color: var(--muted); }
-.search-list li.selected .meta { color: inherit; opacity: .8; }
 .search-bar .icon-btn:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
 .row.dim { opacity: 0.28; }
 .subject .body { color: var(--muted); font-weight: 400; }
@@ -1200,7 +1199,7 @@ html[data-big] .wide-bar { display: none; }
 .compact .search-bar { position: static; margin: 6px; padding: 3px 4px 3px 8px; border-color: var(--border); box-shadow: none; flex: none; }
 .compact .search-bar:focus-within { border-color: var(--accent); }
 .compact .search-bar input:not([type]) { flex: 1; min-width: 0; width: auto; color: var(--fg); }
-.compact .search-bar label, .compact .search-count, .compact .search-bar .icon-btn[aria-label]:not([title]) { display: none; }
+.compact .search-bar label, .compact .search-count, .compact .search-list-btn, .compact .search-bar .icon-btn[aria-label]:not([title]) { display: none; }
 .compact .row { gap: 0; padding-right: 8px; }
 .compact .main > .pane { max-height: none; min-height: 0; } /* 위아래 분할용 상한 해제: 목록이 뷰 높이를 다 쓴다 */
 .compact .row::before { display: none; } /* 레인 색 띠·틴트는 두지 않는다: 호버·선택만 배경으로 */
