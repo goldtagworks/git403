@@ -178,9 +178,9 @@ button.danger { background: var(--danger); color: var(--surface); border-color: 
 .splitter.y::after { top: -3px; bottom: -3px; }
 .splitter:hover { background: var(--accent); }
 /* 가운데 손잡이 점 3개 (VS Code식). 끌 수 있다는 표시만 — 잡는 영역은 ::after */
-.splitter::before { content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: radial-gradient(circle, var(--muted) 1px, transparent 1.5px); opacity: .7; pointer-events: none; }
-.splitter.x::before { width: 4px; height: 16px; background-size: 4px 6px; }
-.splitter.y::before { width: 16px; height: 4px; background-size: 6px 4px; }
+.splitter::before { content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: radial-gradient(circle, var(--muted) 1.5px, transparent 2px); pointer-events: none; }
+.splitter.x::before { width: 5px; height: 21px; background-size: 5px 7px; }
+.splitter.y::before { width: 21px; height: 5px; background-size: 7px 5px; }
 .splitter:hover::before { opacity: 0; }
 body.resizing-x, body.resizing-x * { cursor: col-resize !important; }
 body.resizing-y, body.resizing-y * { cursor: row-resize !important; }
