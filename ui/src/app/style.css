@@ -170,18 +170,22 @@ button.danger { background: var(--danger); color: var(--surface); border-color: 
 .details > .info.changes { min-width: 220px; }
 
 /* 스플리터: 보이는 선은 1px, 잡는 영역은 7px */
+/* 패널 경계는 VS Code처럼 4px 띠 + 가운데 점 3개 손잡이. 잡는 영역은 ::after로 양쪽 2px 더 */
 .splitter { flex: none; position: relative; background: var(--border); z-index: 1; }
-.splitter.x { width: 1px; cursor: col-resize; }
-.splitter.y { height: 1px; cursor: row-resize; }
+.splitter.x { width: 4px; cursor: col-resize; }
+.splitter.y { height: 4px; cursor: row-resize; z-index: 3; } /* 아래 패널의 sticky diff 머리줄(z 2)이 손잡이를 덮지 않게 */
 .splitter::after { content: ""; position: absolute; inset: 0; }
-.splitter.x::after { left: -3px; right: -3px; }
-.splitter.y::after { top: -3px; bottom: -3px; }
+.splitter.x::after { left: -2px; right: -2px; }
+.splitter.y::after { top: -2px; bottom: -2px; }
 .splitter:hover { background: var(--accent); }
-/* 가운데 손잡이 점 3개 (VS Code식). 끌 수 있다는 표시만 — 잡는 영역은 ::after */
 .splitter::before { content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: radial-gradient(circle, var(--muted) 1.5px, transparent 2px); pointer-events: none; }
-.splitter.x::before { width: 5px; height: 21px; background-size: 5px 7px; }
-.splitter.y::before { width: 21px; height: 5px; background-size: 7px 5px; }
-.splitter:hover::before { opacity: 0; }
+.splitter.x::before { width: 4px; height: 21px; background-size: 4px 7px; }
+.splitter.y::before { width: 21px; height: 4px; background-size: 7px 4px; }
+.splitter:hover::before, body.resizing-x .splitter::before, body.resizing-y .splitter::before { opacity: 0; } /* 끄는 중엔 커서가 벗어나도 숨긴다 */
+/* 그래프 열 머리의 열 경계는 1px 선, 손잡이 없음 */
+.head-left .splitter.x, .commits-head > .splitter.x { width: 1px; }
+.head-left .splitter.x::before, .commits-head > .splitter.x::before { content: none; }
+.head-left .splitter.x::after, .commits-head > .splitter.x::after { left: -3px; right: -3px; }
 body.resizing-x, body.resizing-x * { cursor: col-resize !important; }
 body.resizing-y, body.resizing-y * { cursor: row-resize !important; }
 
