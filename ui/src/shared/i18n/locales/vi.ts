@@ -887,6 +887,7 @@ export const vi: Record<Key, string> = {
   "graph.searchPlaceholder": "Thông điệp · nội dung · tác giả · SHA",
   "graph.searchLabel": "Tìm commit",
   "graph.searchContent": "Nội dung",
+  "graph.searchList": "Danh sách",
   "graph.prevResult": "Kết quả trước",
   "graph.nextResult": "Kết quả tiếp",
   "graph.closeSearch": "Đóng tìm kiếm",

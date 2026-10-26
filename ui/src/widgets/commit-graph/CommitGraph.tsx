@@ -193,6 +193,7 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
   // 검색 (⌘/Ctrl+F): 메시지·작성자·SHA는 바로, 내용은 Enter로 git log -S
   const [search, setSearch] = useState<{ q: string; content: boolean; hits: Set<string> | null } | null>(COMPACT ? { q: "", content: false, hits: null } : null); // compact: 검색칸은 항상 보인다
   const searchRef = useRef<HTMLInputElement>(null);
+  const [listOn, setListOn] = useState(false); // 일치한 커밋만 목록으로 모아 보기
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "f") {
@@ -481,6 +482,7 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
           <label>
             <input type="checkbox" checked={search.content} onChange={(e) => setSearch({ ...search, content: e.target.checked, hits: null })} /> {t("graph.searchContent")}
           </label>
+          <button className={"search-list-btn" + (listOn ? " on" : "")} aria-pressed={listOn} onClick={() => setListOn(!listOn)}>{t("graph.searchList")}</button>
           <span className="search-count">{search.q.trim() ? `${cur || "-"} / ${matches.length}` : ""}</span>
           <button className="icon-btn" onClick={() => jump(-1)} disabled={!matches.length} aria-label={t("graph.prevResult")}><Icon name="arrowUp" size={14} /></button>
           <button className="icon-btn" onClick={() => jump(1)} disabled={!matches.length} aria-label={t("graph.nextResult")}><Icon name="arrowDown" size={14} /></button>
@@ -488,6 +490,19 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
             <button className="icon-btn" onClick={() => openFull(selected && selected !== WORKTREE ? selected : undefined)} title={t("graph.openFull")} aria-label={t("graph.openFull")}><Icon name="openOut" size={14} /></button>
           ) : (
             <button className="icon-btn" onClick={() => setSearch(null)} aria-label={t("graph.closeSearch")}><Icon name="dismiss" size={14} /></button>
+          )}
+          {listOn && matches.length > 0 && (
+            <ul className="search-list" role="listbox" aria-label={t("graph.searchList")}>
+              {matches.slice(0, 500).map((id) => {
+                const c = commits.find((x) => x.id === id)!;
+                return (
+                  <li key={id} role="option" aria-selected={id === selected} className={id === selected ? "selected" : ""} onMouseDown={() => onSelect(id)} onDoubleClick={onOpen && (() => onOpen(id))}>
+                    <span className="subject">{c.subject}</span>
+                    <span className="meta">{c.author} · {relTime(c.time)} · {id.slice(0, 7)}</span>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
       )}

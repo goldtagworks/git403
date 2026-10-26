@@ -887,6 +887,7 @@ export const ko: Record<Key, string> = {
   "graph.searchPlaceholder": "메시지 · 본문 · 작성자 · SHA",
   "graph.searchLabel": "커밋 검색",
   "graph.searchContent": "내용",
+  "graph.searchList": "목록",
   "graph.prevResult": "이전 결과",
   "graph.nextResult": "다음 결과",
   "graph.closeSearch": "검색 닫기",

@@ -887,6 +887,7 @@ export const tr: Record<Key, string> = {
   "graph.searchPlaceholder": "Mesaj · gövde · yazar · SHA",
   "graph.searchLabel": "Commit'lerde ara",
   "graph.searchContent": "İçerik",
+  "graph.searchList": "Liste",
   "graph.prevResult": "Önceki sonuç",
   "graph.nextResult": "Sonraki sonuç",
   "graph.closeSearch": "Aramayı kapat",

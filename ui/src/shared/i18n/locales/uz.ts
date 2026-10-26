@@ -887,6 +887,7 @@ export const uz: Record<Key, string> = {
   "graph.searchPlaceholder": "Xabar · matn · muallif · SHA",
   "graph.searchLabel": "Kommitlarni qidirish",
   "graph.searchContent": "Tarkib",
+  "graph.searchList": "Ro'yxat",
   "graph.prevResult": "Oldingi natija",
   "graph.nextResult": "Keyingi natija",
   "graph.closeSearch": "Qidiruvni yopish",

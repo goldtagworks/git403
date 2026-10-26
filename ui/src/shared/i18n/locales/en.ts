@@ -886,6 +886,7 @@ export const en = {
   "graph.searchPlaceholder": "Message · body · author · SHA",
   "graph.searchLabel": "Search commits",
   "graph.searchContent": "Content",
+  "graph.searchList": "List",
   "graph.prevResult": "Previous result",
   "graph.nextResult": "Next result",
   "graph.closeSearch": "Close search",

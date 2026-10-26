@@ -887,6 +887,7 @@ export const lo: Record<Key, string> = {
   "graph.searchPlaceholder": "ຂໍ້ຄວາມ · ເນື້ອໃນ · ຜູ້ຂຽນ · SHA",
   "graph.searchLabel": "ຄົ້ນຫາຄອມມິດ",
   "graph.searchContent": "ເນື້ອຫາ",
+  "graph.searchList": "ລາຍການ",
   "graph.prevResult": "ຜົນກ່ອນ",
   "graph.nextResult": "ຜົນຕໍ່ໄປ",
   "graph.closeSearch": "ປິດການຄົ້ນຫາ",

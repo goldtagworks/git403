@@ -887,6 +887,7 @@ export const km: Record<Key, string> = {
   "graph.searchPlaceholder": "សារ · តួសារ · អ្នកនិពន្ធ · SHA",
   "graph.searchLabel": "ស្វែងរក commit",
   "graph.searchContent": "មាតិកា",
+  "graph.searchList": "បញ្ជី",
   "graph.prevResult": "លទ្ធផលមុន",
   "graph.nextResult": "លទ្ធផលបន្ទាប់",
   "graph.closeSearch": "បិទការស្វែងរក",

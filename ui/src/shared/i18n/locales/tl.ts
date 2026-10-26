@@ -887,6 +887,7 @@ export const tl: Record<Key, string> = {
   "graph.searchPlaceholder": "Mensahe · body · may-akda · SHA",
   "graph.searchLabel": "Maghanap ng commit",
   "graph.searchContent": "Nilalaman",
+  "graph.searchList": "Listahan",
   "graph.prevResult": "Nakaraang resulta",
   "graph.nextResult": "Susunod na resulta",
   "graph.closeSearch": "Isara ang paghahanap",

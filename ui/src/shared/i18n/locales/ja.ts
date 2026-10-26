@@ -887,6 +887,7 @@ export const ja: Record<Key, string> = {
   "graph.searchPlaceholder": "メッセージ · 本文 · 作成者 · SHA",
   "graph.searchLabel": "コミットを検索",
   "graph.searchContent": "内容",
+  "graph.searchList": "一覧",
   "graph.prevResult": "前の結果",
   "graph.nextResult": "次の結果",
   "graph.closeSearch": "検索を閉じる",

@@ -887,6 +887,7 @@ export const mn: Record<Key, string> = {
   "graph.searchPlaceholder": "Мессеж · агуулга · зохиогч · SHA",
   "graph.searchLabel": "Коммит хайх",
   "graph.searchContent": "Агуулга",
+  "graph.searchList": "Жагсаалт",
   "graph.prevResult": "Өмнөх үр дүн",
   "graph.nextResult": "Дараагийн үр дүн",
   "graph.closeSearch": "Хайлтыг хаах",

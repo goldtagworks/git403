@@ -540,6 +540,16 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 .search-bar label { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); }
 .search-count { min-width: 56px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .search-bar .icon-btn { padding: 2px; line-height: 0; border: 0; background: none; color: var(--muted); border-radius: 4px; }
+.search-list-btn { padding: 1px 6px; font-size: 11px; border: 1px solid var(--border); border-radius: 4px; background: none; color: var(--muted); }
+.search-list-btn.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent, #fff); }
+.search-list { position: absolute; top: calc(100% + 4px); left: -1px; right: -1px; max-height: 50vh; overflow: auto; margin: 0; padding: 4px; list-style: none;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-float); }
+.search-list li { display: flex; flex-direction: column; gap: 1px; padding: 4px 8px; border-radius: 5px; cursor: default; }
+.search-list li:hover { background: var(--hover); }
+.search-list li.selected { background: var(--accent); color: var(--on-accent, #fff); }
+.search-list .subject { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-list .meta { font-size: 11px; color: var(--muted); }
+.search-list li.selected .meta { color: inherit; opacity: .8; }
 .search-bar .icon-btn:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
 .row.dim { opacity: 0.28; }
 .subject .body { color: var(--muted); font-weight: 400; }

@@ -887,6 +887,7 @@ export const nl: Record<Key, string> = {
   "graph.searchPlaceholder": "Bericht · body · auteur · SHA",
   "graph.searchLabel": "Commits zoeken",
   "graph.searchContent": "Inhoud",
+  "graph.searchList": "Lijst",
   "graph.prevResult": "Vorig resultaat",
   "graph.nextResult": "Volgend resultaat",
   "graph.closeSearch": "Zoeken sluiten",

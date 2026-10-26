@@ -887,6 +887,7 @@ export const th: Record<Key, string> = {
   "graph.searchPlaceholder": "ข้อความ · เนื้อหา · ผู้เขียน · SHA",
   "graph.searchLabel": "ค้นหา commit",
   "graph.searchContent": "เนื้อหา",
+  "graph.searchList": "รายการ",
   "graph.prevResult": "ผลลัพธ์ก่อนหน้า",
   "graph.nextResult": "ผลลัพธ์ถัดไป",
   "graph.closeSearch": "ปิดการค้นหา",

@@ -887,6 +887,7 @@ export const zhTW: Record<Key, string> = {
   "graph.searchPlaceholder": "訊息 · 內文 · 作者 · SHA",
   "graph.searchLabel": "搜尋提交",
   "graph.searchContent": "內容",
+  "graph.searchList": "清單",
   "graph.prevResult": "上一個結果",
   "graph.nextResult": "下一個結果",
   "graph.closeSearch": "關閉搜尋",

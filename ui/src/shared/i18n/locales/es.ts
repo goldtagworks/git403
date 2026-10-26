@@ -887,6 +887,7 @@ export const es: Record<Key, string> = {
   "graph.searchPlaceholder": "Mensaje · cuerpo · autor · SHA",
   "graph.searchLabel": "Buscar commits",
   "graph.searchContent": "Contenido",
+  "graph.searchList": "Lista",
   "graph.prevResult": "Resultado anterior",
   "graph.nextResult": "Resultado siguiente",
   "graph.closeSearch": "Cerrar búsqueda",

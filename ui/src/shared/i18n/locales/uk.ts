@@ -887,6 +887,7 @@ export const uk: Record<Key, string> = {
   "graph.searchPlaceholder": "Повідомлення · текст · автор · SHA",
   "graph.searchLabel": "Пошук комітів",
   "graph.searchContent": "Вміст",
+  "graph.searchList": "Список",
   "graph.prevResult": "Попередній результат",
   "graph.nextResult": "Наступний результат",
   "graph.closeSearch": "Закрити пошук",

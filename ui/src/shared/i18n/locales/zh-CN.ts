@@ -887,6 +887,7 @@ export const zhCN: Record<Key, string> = {
   "graph.searchPlaceholder": "信息 · 正文 · 作者 · SHA",
   "graph.searchLabel": "搜索提交",
   "graph.searchContent": "内容",
+  "graph.searchList": "列表",
   "graph.prevResult": "上一个结果",
   "graph.nextResult": "下一个结果",
   "graph.closeSearch": "关闭搜索",

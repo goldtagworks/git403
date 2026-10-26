@@ -420,7 +420,7 @@ export const ops = {
   // pull.rebase를 안 정해 뒀으면 갈라졌을 때 조용히 머지 커밋을 만들지 않고 멈춘다(`--ff-only`). 정해 뒀으면 그 설정을 따른다.
   pullQuick: async () => {
     const set = (await api.git(ctx.repo, ["config", "--get", "pull.rebase"]).catch(() => "")).trim();
-    ctx.job("Pull", ["pull", "--progress", ...(set ? [] : ["--ff-only"])], { remote: true, track: "pull" });
+    ctx.job("Pull", ["pull", "--progress", ...(set ? ["--autostash"] : ["--ff-only"])], { remote: true, track: "pull" });
   },
   pull: async () => {
     const r = await prompt({

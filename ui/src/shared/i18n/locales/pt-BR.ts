@@ -887,6 +887,7 @@ export const ptBR: Record<Key, string> = {
   "graph.searchPlaceholder": "Mensagem · corpo · autor · SHA",
   "graph.searchLabel": "Pesquisar commits",
   "graph.searchContent": "Conteúdo",
+  "graph.searchList": "Lista",
   "graph.prevResult": "Resultado anterior",
   "graph.nextResult": "Próximo resultado",
   "graph.closeSearch": "Fechar pesquisa",

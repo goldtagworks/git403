@@ -887,6 +887,7 @@ export const ru: Record<Key, string> = {
   "graph.searchPlaceholder": "Сообщение · текст · автор · SHA",
   "graph.searchLabel": "Поиск коммитов",
   "graph.searchContent": "Содержимое",
+  "graph.searchList": "Список",
   "graph.prevResult": "Предыдущий результат",
   "graph.nextResult": "Следующий результат",
   "graph.closeSearch": "Закрыть поиск",

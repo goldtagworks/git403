@@ -887,6 +887,7 @@ export const ne: Record<Key, string> = {
   "graph.searchPlaceholder": "सन्देश · मुख्य भाग · लेखक · SHA",
   "graph.searchLabel": "कमिट खोज्नुहोस्",
   "graph.searchContent": "सामग्री",
+  "graph.searchList": "सूची",
   "graph.prevResult": "अघिल्लो नतिजा",
   "graph.nextResult": "अर्को नतिजा",
   "graph.closeSearch": "खोज बन्द गर्नुहोस्",
