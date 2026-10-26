@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Sha } from "../../shared/ui/Sha";
 import { Sheet, SheetBody, SheetActions, SheetHead } from "../../shared/ui/Sheet";
 import { api } from "../../shared/api/api";
 import { DiffView } from "../../entities/diff/DiffView";
@@ -80,7 +81,7 @@ function History({ path, onSelect }: { path: string; onSelect: (id: string) => v
         {commits.map((c) => (
           <li key={c.id} role="option" aria-selected={c.id === sel} className={c.id === sel ? "selected" : ""} onMouseDown={() => setSel(c.id)} onDoubleClick={() => onSelect(c.id)} onContextMenu={contextMenu(() => [{ label: t("details.restoreVersion"), action: () => ops.restoreFile(path, c.id) }])}>
             <span className="h-subject" title={c.subject}>{c.subject}</span>
-            <span className="h-meta muted"><span className="sha">{c.id.slice(0, 7)}</span> · {c.author} · {dateFmt.format(c.time * 1000)}</span>
+            <span className="h-meta muted"><Sha id={c.id} /> · {c.author} · {dateFmt.format(c.time * 1000)}</span>
           </li>
         ))}
       </ul>

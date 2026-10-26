@@ -1,4 +1,5 @@
 import { t, dateFmt, useLocale } from "../../shared/i18n/i18n";
+import { Sha } from "../../shared/ui/Sha";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { contextMenu, type MenuEntry } from "../../shared/ui/menu";
 import { api } from "../../shared/api/api";
@@ -603,7 +604,7 @@ const Row = memo(function Row({ c, top, lane, color, chip, selected, match, dim,
           <span className="subject">{c.subject}{c.body && <span className="body"> {c.body}</span>}</span>
           <span className="author"><Avatar name={c.author} email={c.email} /><span>{c.author}</span></span>
           <span className="date">{dateFmt(DATE_OPTS).format(c.time * 1000)}</span>
-          <span className="sha">{c.id.slice(0, 7)}</span>
+          <Sha id={c.id} />
         </>
       )}
     </div>

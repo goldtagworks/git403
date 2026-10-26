@@ -291,6 +291,8 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 .profile-who .name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .co-authors { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 12px; }
 .info-sha { font-size: 12px; margin-bottom: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.copyable { cursor: pointer; }
+.copyable:hover { color: var(--accent); }
 .av-0 { background: var(--av-0); }
 .av-1 { background: var(--av-1); }
 .av-2 { background: var(--av-2); }

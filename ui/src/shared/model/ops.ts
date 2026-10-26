@@ -251,6 +251,18 @@ async function git(args: string[], done?: string, detail?: string) {
   }
 }
 
+/** 스태시 명령. 다른 곳에서 이미 꺼냈거나 지운 스태시면 오류 대신 안내하고 목록을 새로 읽는다. */
+async function stashGit(args: string[], done: string) {
+  try {
+    await api.git(ctx.repo, args);
+    ctx.notify(done);
+  } catch (e) {
+    if (/is not a valid reference|No stash entries found/.test(String(e))) ctx.notify(t("ops.stash.gone"), { kind: "info" });
+    else ctx.error(String(e));
+  }
+  ctx.reload();
+}
+
 /** git 실행 뒤 저장소를 다시 읽는다 (서브모듈·worktree 변경은 refs 감시에 안 잡힌다) */
 async function gitReload(args: string[], done?: string) {
   const ok = await git(args, done);
@@ -520,14 +532,30 @@ export const ops = {
     if (r && r.name !== name && !dashed(r.name)) git(["branch", "-m", name, String(r.name)], `${name} → ${r.name}`);
   },
   deleteBranch: async (name: string) => {
+    // 다른 worktree가 체크아웃한 브랜치는 git이 지우지 않는다 → worktree부터 제거
+    const wt = (await api.loadWorktrees(ctx.repo).catch(() => [])).find((w) => !w.main && w.branch === name);
     const r = await prompt({
       title: t("ops.branch.delete"),
       message: t("ops.branch.deleting", { name }),
-      fields: [{ kind: "check", name: "force", label: t("ops.branch.forceDel") }],
+      fields: [
+        { kind: "check", name: "force", label: t("ops.branch.forceDel") },
+        ...(wt ? [{ kind: "check", name: "wt", label: t("ops.branch.delWorktree", { path: wt.path }), value: true } as Field] : []),
+      ],
       submit: t("ops.deleteBtn"),
       danger: true,
     });
-    if (r) git(["branch", r.force ? "-D" : "-d", name], t("ops.deleted", { name }));
+    if (!r) return;
+    if (wt && r.wt && !(await git(["worktree", "remove", "--", wt.path], t("ops.wt.removed")))) return;
+    if (r.force) return gitReload(["branch", "-D", name], t("ops.deleted", { name }));
+    try {
+      await api.git(ctx.repo, ["branch", "-d", name]);
+      ctx.notify(t("ops.deleted", { name }));
+    } catch (e) {
+      // 머지 안 된 브랜치면 강제 삭제할지 다시 묻는다
+      if (!/not fully merged/.test(String(e))) ctx.error(String(e));
+      else if (await confirm(t("ops.branch.unmergedMsg", { name }), t("ops.branch.delete"))) await git(["branch", "-D", name], t("ops.deleted", { name }));
+    }
+    ctx.reload();
   },
   deleteRemoteBranch: async (remoteBranch: string) => {
     const [remote, ...rest] = remoteBranch.split("/");
@@ -732,8 +760,8 @@ export const ops = {
     const r = await prompt({ title: t("ops.stashFiles.title"), message: t("ops.files.n", { n: paths.length }), fields: [{ kind: "text", name: "message", label: t("ops.f.message"), value: t("ops.stashFiles.default") }], submit: t("ops.stash.title") });
     if (r) git(["stash", "push", "--include-untracked", "-m", String(r.message), "--", ...paths], t("ops.stash.done"));
   },
-  pop: (name = "stash@{0}") => git(["stash", "pop", name], t("ops.stash.popped")),
-  applyStash: (name: string) => git(["stash", "apply", name], t("ops.stash.applied")),
+  pop: (name = "stash@{0}") => stashGit(["stash", "pop", name], t("ops.stash.popped")),
+  applyStash: (name: string) => stashGit(["stash", "apply", name], t("ops.stash.applied")),
   renameStash: async (name: string, message: string | null) => {
     const r = await prompt({ title: t("ops.stash.rename"), fields: [{ kind: "text", name: "message", label: t("ops.f.message"), value: message ?? "" }], submit: t("ops.rename") });
     if (!r) return;
@@ -744,7 +772,7 @@ export const ops = {
     if (sha && n && (await git(["stash", "store", "-m", String(r.message), sha]))) git(["stash", "drop", `stash@{${Number(n) + 1}}`], t("ops.stash.renamed"));
   },
   dropStash: async (name: string) => {
-    if (await confirm(t("ops.stash.dropConfirm", { name }), t("ops.stash.dropTitle"))) git(["stash", "drop", name], t("ops.stash.dropped"));
+    if (await confirm(t("ops.stash.dropConfirm", { name }), t("ops.stash.dropTitle"))) stashGit(["stash", "drop", name], t("ops.stash.dropped"));
   },
 
   /** 스냅샷: 작업 디렉터리는 그대로 두고 현재 변경을 스태시 목록에 남긴다 (`stash create` → `stash store`). 추적 중인 파일의 변경만 담긴다. */

@@ -1,4 +1,5 @@
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Sha } from "../../shared/ui/Sha";
 import { t, dateFmt, useLocale } from "../../shared/i18n/i18n";
 import { onPrefs, pref } from "../../shared/lib/settings";
 import { countRender } from "../../shared/lib/profile";
@@ -124,7 +125,7 @@ export const Details = memo(function Details({ repo, commit, rules }: { repo: st
         {gv.open && (
           <div className="info-brief" title={commit.subject}>
             <span className="brief-subject">{commit.subject}</span>
-            <span className="sha muted">{commit.id.slice(0, 7)}</span>
+            <Sha id={commit.id} className="sha muted" />
             <span className="brief-who">{commit.author}</span>
           </div>
         )}
@@ -143,7 +144,7 @@ export const Details = memo(function Details({ repo, commit, rules }: { repo: st
               <span className="name">{commit.author}</span>
               <span className="muted">{t("details.authored", { date: dateFmt(DATE_OPTS).format(commit.time * 1000) })}</span>
             </div>
-            <span className="profile-parent muted">{t("details.parents")} <span className="sha selectable">{commit.parents.map((p) => p.slice(0, 7)).join(", ") || t("common.none")}</span></span>
+            <span className="profile-parent muted">{t("details.parents")} <span className="sha">{commit.parents.length ? commit.parents.map((p, i) => <Fragment key={p}>{i > 0 && ", "}<Sha id={p} className="" /></Fragment>) : t("common.none")}</span></span>
           </div>
           {coAuthors.length > 0 && (
             <div className="co-authors">
@@ -153,7 +154,7 @@ export const Details = memo(function Details({ repo, commit, rules }: { repo: st
               ))}
             </div>
           )}
-          <div className="info-sha muted">{t("details.commit")} <span className="sha selectable">{commit.id}</span></div>
+          <div className="info-sha muted">{t("details.commit")} <Sha id={commit.id} len={40} /></div>
           </>
         )}
         <GuideTabs />

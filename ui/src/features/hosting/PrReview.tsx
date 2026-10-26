@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Sha } from "../../shared/ui/Sha";
 import { api } from "../../shared/api/api";
 import { errCode } from "../../shared/api/bridge";
 import { Icon } from "../../shared/ui/Icon";
@@ -462,7 +463,7 @@ function Detail({ pr, target, repo, me }: { pr: InboxPr; target: Target | null; 
         <div className="prr-head-meta">
           <span className={`prr-badge ${st.cls}`}>{st.label}</span>
           <span className="prr-branch">{pr.head} → {pr.base}</span>
-          <code className="prr-sha">{pr.headSha.slice(0, 7)}</code>
+          <Sha id={pr.headSha} className="prr-sha" tag="code" />
           {pr.labels.map((l) => <span key={l} className="prr-label">{l}</span>)}
         </div>
         <div className="prr-tabs sub" role="tablist">
@@ -620,7 +621,7 @@ function Entry({ it, idx, pop, list, head, pr, onCommit }: { it: PrTimelineItem;
           <span className="prr-line-end">
             {head && <span className="prr-badge info">head</span>}
             <span className="prr-go" aria-hidden>{t("prr.openCommit.go")}</span>
-            <code className="prr-sha">{(it.sha ?? "").slice(0, 7)}</code>
+            <Sha id={it.sha ?? ""} className="prr-sha" tag="code" />
           </span>
         </div>
       </li>

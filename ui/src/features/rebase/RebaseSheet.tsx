@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Sha } from "../../shared/ui/Sha";
 import { Sheet, SheetActions, SheetBody, SheetHead } from "../../shared/ui/Sheet";
 import { ctx } from "../../shared/model/ops";
 import { api } from "../../shared/api/api";
@@ -65,7 +66,7 @@ export function RebaseSheet({ base, commits, onClose }: { base: Commit; commits:
                   <option key={k} value={k}>{t(v)}</option>
                 ))}
               </select>
-              <span className="sha">{s.commit.id.slice(0, 7)}</span>
+              <Sha id={s.commit.id} />
               {s.action === "reword" ? (
                 <input aria-label={t("rebase.newMsg")} value={s.message} onChange={(e) => set(i, { message: e.target.value })} />
               ) : (
