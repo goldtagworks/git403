@@ -529,7 +529,7 @@ function App() {
       <RebaseHost />
       <HostingHost />
       <AiHost />
-      <AutoFetch />
+      <AutoFetch repo={repo} />
       <InspectorHost onSelectCommit={setSelected} />
       <DomMenuHost />
     </div>

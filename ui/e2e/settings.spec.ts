@@ -154,6 +154,7 @@ test("시작할 때 마지막 탭 복원을 끄면 빈 화면으로 시작한다
 });
 
 test("자동 fetch: 간격마다 활성 탭을 fetch하고, 원격 작업 중이면 건너뛰고, 끄면 멈춘다", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("autoFetch", "0")); // 열 때 fetch 없이 간격만 본다
   await page.clock.install();
   await open(page, "일반", { __job: { ms: 8 * 60_000 } });
   const fetches = async () => (await callsOf(page, "start_job")).filter((c) => JSON.parse(c[1]).args[0] === "fetch");
@@ -164,7 +165,7 @@ test("자동 fetch: 간격마다 활성 탭을 fetch하고, 원격 작업 중이
   await page.clock.runFor(61_000);
   const first = await fetches();
   expect(first).toHaveLength(1);
-  expect(JSON.parse(first[0][1])).toEqual({ repo: "/demo/git403", args: ["fetch", "--all", "--prune", "--progress"], interactive: false }); // 인증 창 없는 비대화 실행
+  expect(JSON.parse(first[0][1])).toEqual({ repo: "/demo/git403", args: ["fetch", "--all", "--prune", "--tags", "--progress"], interactive: false }); // 인증 창 없는 비대화 실행
   // 10분 시점: 첫 작업(5분 시작, 8분 소요 = 13분 종료)이 아직 돌고 있어 건너뜀
   await page.clock.runFor(5 * 60_000);
   expect(await fetches()).toHaveLength(1);
@@ -182,6 +183,7 @@ test("자동 fetch: 간격마다 활성 탭을 fetch하고, 원격 작업 중이
 });
 
 test("자동 fetch: 시트가 열려 있으면 건너뛴다", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("autoFetch", "0")); // 열 때 fetch 없이 간격만 본다
   await page.clock.install();
   await open(page, "일반");
   await dlg(page).getByLabel("자동 Fetch 간격").selectOption("5");
@@ -193,6 +195,7 @@ test("자동 fetch: 시트가 열려 있으면 건너뛴다", async ({ page }) =
 });
 
 test("자동 fetch: 실패는 배너 없이 상태바에만, 연속 실패는 한 번만 알리고 재조회하지 않는다", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("autoFetch", "0")); // 열 때 fetch 없이 간격만 본다
   await page.clock.install();
   await open(page, "일반", { __job: { early: true, err: "fatal: Authentication failed" } });
   await dlg(page).getByLabel("자동 Fetch 간격").selectOption("5");
@@ -210,6 +213,11 @@ test("자동 fetch: 실패는 배너 없이 상태바에만, 연속 실패는 �
   await expect(page.locator(".status-progress")).toHaveText("other"); // 새 알림이 없어 진행률 줄이 그대로
   await expect(page.getByRole("alert")).toHaveCount(0);
   expect(await graphCalls()).toBe(before); // 전체 재조회 없음
+});
+
+test("자동 fetch: 기본으로 켜져 있어 저장소를 열면 한 번 fetch한다", async ({ page }) => {
+  await open(page);
+  await expect.poll(async () => (await callsOf(page, "start_job")).filter((c) => JSON.parse(c[1]).args[0] === "fetch").length).toBe(1);
 });
 
 test("자동 fetch가 도는 중 사용자가 Fetch를 누르면 자동 작업은 취소되고 사용자 작업이 실행된다", async ({ page }) => {

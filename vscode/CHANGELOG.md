@@ -5,6 +5,8 @@
 - Redesigned commit details: the subject wraps up to three lines, the first body line is previewed under it (click to show the full message), and author, co-authors (by name), committer (when different), commit and parent hashes are shown compactly.
 - Clicking a commit hash copies the full SHA.
 - Pane splitters are thicker with a grip, like VS Code.
+- Auto-fetch is on by default (every 5 minutes) and also runs when a repository is opened, so changes pushed elsewhere show up in the Pull badge.
+- Fetch also gets tags that are not on any branch (local-only tags are kept).
 - Deleting a branch checked out in another worktree offers to remove that worktree too; unmerged branches offer a force delete.
 - Popping, applying or dropping a stash that no longer exists shows a notice and refreshes the list instead of an error.
 

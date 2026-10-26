@@ -31,7 +31,7 @@ export interface Prefs {
 /** 지원 언어 목록의 원본 (i18n.ts의 DICTS·LANGS, Rust `gc_i18n::SUPPORTED_LOCALES`와 같아야 한다) */
 export const LOCALES = ["en", "ko", "zh-CN", "zh-TW", "vi", "ja", "tl", "km", "uz", "lo", "ru", "th", "mn", "ne", "de", "fr", "es", "pt-BR", "it", "pl", "tr", "uk", "nl"] as const;
 export type Locale = (typeof LOCALES)[number];
-export const DEFAULT_PREFS: Prefs = { restoreTabs: true, graphLimit: 20000, autoFetch: 0, autoUpdate: true, ignoreEol: false, ignoreWs: false, diffWrap: false, diffFull: false, diffWs: false, ghRestore: true, language: "system" };
+export const DEFAULT_PREFS: Prefs = { restoreTabs: true, graphLimit: 20000, autoFetch: 5, autoUpdate: true, ignoreEol: false, ignoreWs: false, diffWrap: false, diffFull: false, diffWs: false, ghRestore: true, language: "system" };
 /** 그래프를 처음 읽는 커밋 수(한 페이지). 아래로 스크롤하면 두 배씩 더 읽는다(상한 `graphLimit`까지). */
 export const GRAPH_PAGE = 5000;
 export const GRAPH_LIMIT_RANGE = [100, 200000] as const;
@@ -48,7 +48,7 @@ const norm: { [K in keyof Prefs]: (v: unknown) => Prefs[K] } = {
   diffWrap: (v) => (typeof v === "boolean" ? v : DEFAULT_PREFS.diffWrap),
   diffFull: (v) => (typeof v === "boolean" ? v : DEFAULT_PREFS.diffFull),
   diffWs: (v) => (typeof v === "boolean" ? v : DEFAULT_PREFS.diffWs),
-  autoFetch: (v) => ((AUTO_FETCH_MINUTES as readonly unknown[]).includes(v) ? (v as number) : 0),
+  autoFetch: (v) => ((AUTO_FETCH_MINUTES as readonly unknown[]).includes(v) ? (v as number) : DEFAULT_PREFS.autoFetch),
 };
 /** 정수로 바꿔 허용 범위로 맞춘다. 숫자가 아니면 기본값 */
 export const clampLimit = (v: unknown) => {

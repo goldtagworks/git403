@@ -416,7 +416,7 @@ const customList = () => stored<CustomCommand[]>("customCommands", []);
 
 export const ops = {
   // ---- 원격 ----
-  fetch: () => ctx.job("Fetch", ["fetch", "--all", "--prune", "--progress"], { remote: true }),
+  fetch: () => ctx.job("Fetch", ["fetch", "--all", "--prune", "--tags", "--progress"], { remote: true }),
   // pull.rebase를 안 정해 뒀으면 갈라졌을 때 조용히 머지 커밋을 만들지 않고 멈춘다(`--ff-only`). 정해 뒀으면 그 설정을 따른다.
   pullQuick: async () => {
     const set = (await api.git(ctx.repo, ["config", "--get", "pull.rebase"]).catch(() => "")).trim();
@@ -1615,7 +1615,7 @@ export const ops = {
   /** 자동 fetch 한 번: 활성 탭만. 다른 작업·저장소 로딩 중이거나 시트가 열려 있으면 건너뜀. 인증 창 없이(quiet) 돌고 실패는 상태바에만 */
   autoFetch: () => {
     if (!ctx.repo || ctx.busy() || ctx.loading() || document.querySelector(".sheet-backdrop")) return;
-    ctx.job(t("ops.autoFetch"), ["fetch", "--all", "--prune", "--progress"], { quiet: true });
+    ctx.job(t("ops.autoFetch"), ["fetch", "--all", "--prune", "--tags", "--progress"], { quiet: true });
   },
 
   // ---- 그래프 표시 ----

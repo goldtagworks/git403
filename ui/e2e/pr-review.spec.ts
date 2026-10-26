@@ -586,6 +586,7 @@ test("커밋 우클릭: 그래프에서 보기(PR 화면을 닫고 그 커밋 �
 });
 
 test("로컬에 PR 커밋이 없으면 refs/pull/N/head를 받아 오고, 실패하면 오류와 다시 시도", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("autoFetch", "0")); // 열 때 자동 fetch가 작업 목록에 섞이지 않게
   await open(page, { __missing: true, __job: { err: "fatal: couldn't find remote ref refs/pull/131/head", ms: 300 } });
   await palette(page);
   await filesTab(page).click();
