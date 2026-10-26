@@ -46,7 +46,7 @@ pub use ssh::{generate_key, list_keys, SshKey};
 pub use show::{changed_files, file_diff, ChangedFile};
 pub use restore::restore_file;
 pub use trash_files::trash_files;
-pub use stage::{apply_partial, co_authors, commit, commit_message, discard, last_message, stage, unstage, PatchTarget};
+pub use stage::{apply_partial, co_authors, commit, committer, commit_message, discard, last_message, stage, unstage, PatchTarget};
 pub use stats::{repo_stats, AuthorStat, ExtCount, Stats, StatsRange, Summary, WeekCount};
 pub use status::{read_status, worktree_diff, Status, StatusFile};
 pub use scan::find_repos;

@@ -516,6 +516,10 @@ function handle(cmd: string, args: any): any {
       if (c.subject === "로그 파서") return `${c.subject}\n\nWhat:\n${Array.from({ length: 8 }, (_, i) => `- ${i + 1}번째 변경 ABC-${i}`).join("\n")}\n\nResolves: ABC-34\n\nAI-Use: yes\nCo-authored-by: 옥토 <1+octo@users.noreply.github.com>`;
       return c.body ? `${c.subject}\n\n${c.body}` : c.subject;
     }
+    if (cmd === "committer") {
+      const c = view.commits.find((x) => x.id === (args as any).sha) ?? view.commits[0];
+      return c === view.commits[1] ? ["GitHub", "noreply@github.com", c.time + 60] : [c.author, c.email, c.time];
+    }
     if (cmd === "co_authors") return (args as any).sha === view.commits[1].id ? ["Claude <noreply@anthropic.com>", "옥토 <1+octo@users.noreply.github.com>"] : [];
     if (cmd === "last_message") return "그래프 곡선 렌더링\n\n본문";
     if (cmd === "commit") {

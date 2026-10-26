@@ -88,10 +88,22 @@ export const Details = memo(function Details({ repo, commit, rules }: { repo: st
     const gh = coAuthors.filter((a) => a.email.endsWith("@users.noreply.github.com"));
     if (commit && gh.length) requestAvatars(repo, gh.map((a) => ({ ...commit, author: a.name, email: a.email })));
   }, [coAuthors]);
-  const hasMessage = useMemo(() => {
+  // 커밋한 사람: 작성자와 다를 때만 보인다 (리베이스·웹 머지 등)
+  const [committer, setCommitter] = useState<[string, string, number] | null>(null);
+  useEffect(() => {
+    setCommitter(null);
+    if (!commit) return;
+    let live = true;
+    api.committer(repo, commit.id).then((c) => live && setCommitter(c), () => {});
+    return () => void (live = false);
+  }, [repo, commit?.id]);
+  const otherCommitter = committer && (committer[0] !== commit?.author || committer[1] !== commit?.email) ? committer : null;
+  // 본문 첫 줄 미리보기 (트레일러뿐이면 트레일러 첫 줄). 누르면 diff 자리에 메시지 전체
+  const preview = useMemo(() => {
     const m = splitMessage(body);
-    return !!(m.body || m.trailers.length);
+    return m.body.split("\n")[0] || (m.trailers[0] ? `${m.trailers[0][0]}: ${m.trailers[0][1]}` : "");
   }, [body]);
+  const hasMessage = !!preview;
   const file = picked ?? (hasMessage ? MSG : files[0]?.path ?? null);
   useEffect(() => {
     if (commit && file && file !== MSG) api.fileDiff(repo, commit.id, file).then(setDiff, (e) => ctx.error(String(e)));
@@ -131,30 +143,47 @@ export const Details = memo(function Details({ repo, commit, rules }: { repo: st
         )}
         {!gv.open && (
           <>
-          <div className="info-subject selectable" title={commit.subject}>
-            {subject.map((p, i) =>
-              typeof p === "string" ? p : (
-                <a key={i} className="issue-link" href={p.url} title={p.url} onClick={(e) => (e.preventDefault(), ops.openUrl(p.url))}>{p.text}</a>
-              ),
+          <div className={"info-msg" + (file === MSG ? " selected" : "")}>
+            <div className="info-subject selectable" title={commit.subject}>
+              {subject.map((p, i) =>
+                typeof p === "string" ? p : (
+                  <a key={i} className="issue-link" href={p.url} title={p.url} onClick={(e) => (e.preventDefault(), ops.openUrl(p.url))}>{p.text}</a>
+                ),
+              )}
+            </div>
+            {hasMessage && (
+              <button className="info-preview" title={t("details.showMessage")} onClick={() => setFile(MSG)}>
+                <span>{preview}</span>
+                <Icon name="openOut" size={12} />
+              </button>
             )}
           </div>
-          <div className="profile">
-            <Avatar name={commit.author} email={commit.email} size={40} />
-            <div className="profile-who">
-              <span className="name">{commit.author}</span>
-              <span className="muted">{t("details.authored", { date: dateFmt(DATE_OPTS).format(commit.time * 1000) })}</span>
+          <div className="people">
+            <div className="person">
+              <Avatar name={commit.author} email={commit.email} size={20} />
+              <span className="name" title={`${commit.author} <${commit.email}>`}>{commit.author}</span>
+              <span className="muted when">{dateFmt(DATE_OPTS).format(commit.time * 1000)}</span>
             </div>
-            <span className="profile-parent muted">{t("details.parents")} <span className="sha">{commit.parents.length ? commit.parents.map((p, i) => <Fragment key={p}>{i > 0 && ", "}<Sha id={p} className="" /></Fragment>) : t("common.none")}</span></span>
+            {coAuthors.map((a) => (
+              <div key={a.email} className="person sub" title={`${a.name} <${a.email}>`}>
+                <Avatar name={a.name} email={a.email} size={16} />
+                <span className="muted">{t("details.coAuthor")}</span>
+                <span className="name">{a.name}</span>
+              </div>
+            ))}
+            {otherCommitter && (
+              <div className="person sub" title={`${otherCommitter[0]} <${otherCommitter[1]}>`}>
+                <Avatar name={otherCommitter[0]} email={otherCommitter[1]} size={16} />
+                <span className="muted">{t("details.committedBy")}</span>
+                <span className="name">{otherCommitter[0]}</span>
+                <span className="muted when">{dateFmt(DATE_OPTS).format(otherCommitter[2] * 1000)}</span>
+              </div>
+            )}
           </div>
-          {coAuthors.length > 0 && (
-            <div className="co-authors">
-              <span className="muted">{t("details.coAuthors")}</span>
-              {coAuthors.map((a) => (
-                <span key={a.email} title={`${a.name} <${a.email}>`}><Avatar name={a.name} email={a.email} size={20} /></span>
-              ))}
-            </div>
-          )}
-          <div className="info-sha muted">{t("details.commit")} <Sha id={commit.id} len={40} /></div>
+          <div className="info-sha muted">
+            <span>{t("details.commit")} <Sha id={commit.id} /></span>
+            <span>{t("details.parents")} {commit.parents.length ? commit.parents.map((p, i) => <Fragment key={p}>{i > 0 && ", "}<Sha id={p} className="" /></Fragment>) : t("common.none")}</span>
+          </div>
           </>
         )}
         <GuideTabs />
@@ -173,12 +202,6 @@ export const Details = memo(function Details({ repo, commit, rules }: { repo: st
           </div>
         </div>
         <ul ref={listRef} className="files" role="listbox" aria-label={t("details.changedFilesLabel")}>
-          {hasMessage && (
-            <li role="option" aria-selected={file === MSG} className={"msg-item" + (file === MSG ? " selected" : "")} onMouseDown={() => setFile(MSG)}>
-              <Icon name="edit" size={14} />
-              {t("details.message")}
-            </li>
-          )}
           {rows.map((r, i) =>
             r.kind === "dir" ? (
               <li key={"d" + i} className="dir" style={{ paddingLeft: 4 + r.depth * 14 }}>

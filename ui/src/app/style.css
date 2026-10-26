@@ -177,6 +177,11 @@ button.danger { background: var(--danger); color: var(--surface); border-color: 
 .splitter.x::after { left: -3px; right: -3px; }
 .splitter.y::after { top: -3px; bottom: -3px; }
 .splitter:hover { background: var(--accent); }
+/* 가운데 손잡이 점 3개 (VS Code식). 끌 수 있다는 표시만 — 잡는 영역은 ::after */
+.splitter::before { content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: radial-gradient(circle, var(--muted) 1px, transparent 1.5px); opacity: .7; pointer-events: none; }
+.splitter.x::before { width: 4px; height: 16px; background-size: 4px 6px; }
+.splitter.y::before { width: 16px; height: 4px; background-size: 6px 4px; }
+.splitter:hover::before { opacity: 0; }
 body.resizing-x, body.resizing-x * { cursor: col-resize !important; }
 body.resizing-y, body.resizing-y * { cursor: row-resize !important; }
 
@@ -284,13 +289,14 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 .author { display: flex; align-items: center; gap: 6px; }
 .author > span:last-child, .info dd .name { overflow: hidden; text-overflow: ellipsis; }
 .info dd.who { display: flex; align-items: center; gap: 6px; }
-.profile { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.profile .avatar { border-radius: 6px; flex: none; }
-.profile-parent { margin-left: auto; align-self: flex-start; font-size: 12px; white-space: nowrap; }
-.profile-who { display: flex; flex-direction: column; min-width: 0; gap: 2px; font-size: 12px; }
-.profile-who .name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.co-authors { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 12px; }
-.info-sha { font-size: 12px; margin-bottom: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.people { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; font-size: 12px; }
+.person { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
+.person .avatar { flex: none; border-radius: 4px; }
+.person .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.person.sub { padding-left: 2px; }
+.person.sub .name { font-weight: 400; }
+.person .when { margin-left: auto; flex: none; }
+.info-sha { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 12px; margin-bottom: 10px; }
 .copyable { cursor: pointer; }
 .copyable:hover { color: var(--accent); }
 .av-0 { background: var(--av-0); }
@@ -320,7 +326,13 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 .info { --info-pad-y: 10px; --info-pad-x: 12px; flex: none; overflow: auto; padding: var(--info-pad-y) var(--info-pad-x); }
 /* 제목은 한 줄(넘치면 …). 전체는 오른쪽 커밋 메시지·툴팁에서 본다 */
 /* 오른쪽 .diff-file 머리줄과 같은 배경·아래선·높이(4px + 18px + 4px + 1px) — .info 여백만큼 끝까지 편다 */
-.info-subject { font-weight: 600; margin: calc(-1 * var(--info-pad-y)) calc(-1 * var(--info-pad-x)) 10px; padding: 4px var(--info-pad-x); line-height: 18px; background: var(--surface); border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 제목·본문 미리보기: 오른쪽 .diff-file 머리줄과 같은 배경. .info 여백만큼 끝까지 편다. 제목은 3줄까지 */
+.info-msg { margin: calc(-1 * var(--info-pad-y)) calc(-1 * var(--info-pad-x)) 10px; padding: 6px var(--info-pad-x); background: var(--surface); border-bottom: 1px solid var(--border); }
+.info-msg.selected { box-shadow: inset 2px 0 0 var(--accent); }
+.info-subject { font-weight: 600; line-height: 18px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
+.info-preview { display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 4px; padding: 2px 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.info-preview span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.info-preview:hover { color: var(--fg); }
 .msg-view { flex: 1; min-width: 0; overflow: auto; }
 .msg-doc { max-width: 760px; padding: 14px 20px 24px; font-size: 14px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
 .msg-doc h3 { margin: 0 0 12px; font-size: 16px; line-height: 1.4; }
@@ -330,7 +342,6 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 .msg-trailers { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; margin: 16px 0 0; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12px; white-space: normal; }
 .msg-trailers dt { color: var(--muted); }
 .msg-trailers dd { margin: 0; }
-.files .msg-item { display: flex; align-items: center; gap: 6px; padding-left: 4px; }
 .info dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0 0 10px; font-size: 12px; }
 .info dt { color: var(--muted); }
 .info dd { margin: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -547,7 +558,7 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 /* 열린 저장소 탭 */
 .tabs { display: flex; align-items: stretch; gap: 2px; height: 28px; padding: 0 8px; border-bottom: 1px solid var(--border); background: var(--bg); flex: none; }
 /* 탭이 넘치면 .tabs-scroll만 가로로 스크롤(스크롤바 숨김). 양끝 페이드는 숨은 탭이 있을 때만(data-l·data-r, Tabs가 DOM에 직접 켠다) */
-.tabs-view { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
+.tabs-view { position: relative; flex: 0 1 auto; min-width: 0; display: flex; }
 .tabs-view::before, .tabs-view::after { content: ""; position: absolute; top: 0; bottom: 0; width: 28px; z-index: 1; pointer-events: none; opacity: 0; }
 .tabs-view::before { left: 0; background: linear-gradient(to right, var(--bg), transparent); }
 .tabs-view::after { right: 0; background: linear-gradient(to left, var(--bg), transparent); }
@@ -567,7 +578,7 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 .tab:not(.active):not(:hover):not(:focus-within) [role="tab"] { padding-right: 10px; }
 .tab-menu { flex: none; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; padding: 0 6px; border-radius: 6px; }
 .tab-menu:hover { background: var(--hover); }
-.tab-add { flex: none; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font: inherit; font-size: 12px; padding: 0 8px 0 6px; height: 26px; align-self: center; border: 0; background: none; color: var(--muted); border-radius: 6px; }
+.tab-add { flex: none; margin-right: auto; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font: inherit; padding: 0 10px; border: 0; border-radius: 6px 6px 0 0; background: none; color: var(--muted); }
 .tab-add:hover { background: var(--hover); color: var(--fg); }
 
 /* 빈 화면 저장소 목록 */

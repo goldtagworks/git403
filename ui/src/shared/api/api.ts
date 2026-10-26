@@ -66,6 +66,8 @@ export const api = {
   lastMessage: (repo: string) => invoke<string>("last_message", { repo }),
   commitMessage: (repo: string, sha: string) => invoke<string>("commit_message", { repo, sha }),
   coAuthors: (repo: string, sha: string) => invoke<string[]>("co_authors", { repo, sha }),
+  /** 커밋한 사람 [이름, 이메일, 시각(초)] */
+  committer: (repo: string, sha: string) => invoke<[string, string, number]>("committer", { repo, sha }),
   /** 결과만 필요한 짧은 git 명령. 긴 작업(네트워크)은 startJob. */
   /** ok: 실패로 보지 않을 종료 코드(예: config --get 키 없음 = [1]) */
   git: (repo: string, args: string[], ok?: number[]) => invoke<string>("git", ok ? { repo, args, ok } : { repo, args }),

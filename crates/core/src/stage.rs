@@ -79,6 +79,15 @@ pub async fn co_authors(git: &GitRunner, repo: &Path, sha: &str) -> Result<Vec<S
     Ok(String::from_utf8_lossy(&out).lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_owned).collect())
 }
 
+/// 커밋한 사람 (이름, 이메일, 시각). 상세 창에서 작성자와 다를 때만 보여 준다
+pub async fn committer(git: &GitRunner, repo: &Path, sha: &str) -> Result<(String, String, i64)> {
+    let out = git.query(repo, &["log", "--no-show-signature", "-1", "--format=%cn%x1f%ce%x1f%ct", sha, "--"]).await?;
+    let s = String::from_utf8_lossy(&out);
+    let mut f = s.trim_end().split('\x1f');
+    let (n, e, t) = (f.next().unwrap_or(""), f.next().unwrap_or(""), f.next().unwrap_or(""));
+    Ok((n.to_owned(), e.to_owned(), t.parse().unwrap_or(0)))
+}
+
 fn args<'a>(base: &[&'a str], paths: &'a [String]) -> Vec<&'a str> {
     base.iter().copied().chain(paths.iter().map(String::as_str)).collect()
 }

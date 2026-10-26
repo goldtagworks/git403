@@ -211,6 +211,17 @@ async fn co_authors_reads_trailers() {
 }
 
 #[tokio::test]
+async fn committer_differs_from_author() {
+    let tmp = tempfile::tempdir().unwrap();
+    git(tmp.path(), &["init", "-q", "r"]);
+    let repo = tmp.path().join("r");
+    git(&repo, &["-c", "user.name=커미터", "-c", "user.email=c@x.dev", "commit", "-q", "--allow-empty", "--author=작성자 <a@x.dev>", "--date=@1700000000", "-m", "m"]);
+    let (n, e, t) = gc_core::committer(&GitRunner::default(), &repo, "HEAD").await.unwrap();
+    assert_eq!((n.as_str(), e.as_str()), ("커미터", "c@x.dev"));
+    assert!(t > 1700000000);
+}
+
+#[tokio::test]
 async fn restore_file_resets_worktree_and_index_from_rev() {
     let tmp = tempfile::tempdir().unwrap();
     let repo = tmp.path();

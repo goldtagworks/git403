@@ -63,6 +63,10 @@ impl Backend {
                 let (repo, sha) = (a.repo()?, a.get::<String>("sha")?);
                 json(gc_core::co_authors(git, &repo, &sha).await.map_err(err)?)
             }
+            "committer" => {
+                let (repo, sha) = (a.repo()?, a.get::<String>("sha")?);
+                json(gc_core::committer(git, &repo, &sha).await.map_err(err)?)
+            }
             "file_log" => {
                 let (repo, path) = (a.repo()?, a.get::<String>("path")?);
                 json(gc_core::file_log(git, &repo, &path, 5000).await.map_err(err)?)

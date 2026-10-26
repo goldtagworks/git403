@@ -109,7 +109,7 @@ export const Tabs = memo(function Tabs({ tabs, active, onOpen, onClose, onAdd }:
         </div>
       </div>
       <button className="tab-add" title={tr("tabs.add", { keys: isMac ? "⌘O" : "Ctrl+O" })} onClick={() => onAdd()}>
-        <Icon name="add" size={14} />{tr("tabs.addLabel")}
+        <Icon name="add" size={12} />{tr("tabs.addLabel")}
       </button>
       {over && (
         <button ref={allBtn} className="tab-menu" title={tr("tabs.listTip", { n: tabs.length, keys: KEYS })} aria-label={tr("tabs.list", { n: tabs.length })} onClick={allMenu}>

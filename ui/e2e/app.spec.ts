@@ -533,13 +533,14 @@ test("사이드바: 펼친 섹션들이 높이를 똑같이 나누고 안에서 
   await expect(page.locator(".sidebar .splitter")).toHaveCount(0);
 });
 
-test("커밋 상세: 정보 열엔 제목만, 본문 있는 커밋은 파일 목록 맨 위 '커밋 메시지'를 누르면 넓은 영역에 전체 메시지", async ({ page }) => {
+test("커밋 상세: 제목 아래 본문 첫 줄 미리보기, 누르면 넓은 영역에 전체 메시지", async ({ page }) => {
   await openRepo(page);
   await page.locator(".commits").getByText("NUL 구분자").first().click();
   await expect(page.locator(".info-subject")).toHaveText("로그 파서");
-  // 본문이 있으면 메시지가 기본으로 열리고, 파일을 누르면 diff
-  const item = page.getByRole("option", { name: "커밋 메시지" });
-  await expect(item).toHaveAttribute("aria-selected", "true");
+  // 본문이 있으면 메시지가 기본으로 열리고(제목 칸 강조), 파일을 누르면 diff
+  await expect(page.getByRole("option", { name: "커밋 메시지" })).toHaveCount(0);
+  const preview = page.locator(".info-preview");
+  await expect(page.locator(".info-msg")).toHaveClass(/selected/);
   const doc = page.locator(".msg-doc");
   await expect(doc.locator("h3")).toHaveText("로그 파서");
   await expect(doc.locator(".head")).toHaveText("What:");
@@ -547,12 +548,15 @@ test("커밋 상세: 정보 열엔 제목만, 본문 있는 커밋은 파일 목
   // 트레일러는 표로 (공동 작성자는 사진으로 따로)
   await expect(doc.locator(".msg-trailers dt")).toHaveText(["Resolves", "AI-Use"]);
   await expect(doc.locator(".msg-trailers dd")).toHaveText(["ABC-34", "yes"]);
-  await page.locator(".files [role=option]").nth(1).click();
+  await page.locator(".files [role=option]").first().click();
   await expect(page.locator(".msg-view")).toHaveCount(0);
   await expect(page.locator(".diff")).toBeVisible();
-  // 본문 없는 커밋엔 항목이 없다
+  await expect(page.locator(".info-msg")).not.toHaveClass(/selected/);
+  await preview.click();
+  await expect(doc.locator("h3")).toHaveText("로그 파서");
+  // 본문 없는 커밋엔 미리보기가 없다
   await page.locator(".commits").getByText("README 정리").click();
-  await expect(item).toHaveCount(0);
+  await expect(preview).toHaveCount(0);
   await expect(page.locator(".msg-view")).toHaveCount(0);
 });
 

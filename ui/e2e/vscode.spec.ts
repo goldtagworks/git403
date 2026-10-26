@@ -466,7 +466,7 @@ for (const theme of ["vscode-light", "vscode-dark"]) {
     const initial = "c100000000000000000000000000000000000000";
     await sendSelect(page, initial);
     await expect(page.locator(".info-subject")).toHaveText("Initial commit");
-    await expect(page.locator(".info-sha")).toContainText(initial);
+    await expect(page.locator(".info-sha")).toContainText(initial.slice(0, 7));
     await page.getByRole("option", { name: /lib\.rs/ }).click();
     await expect(page.locator(".diff .dl.add", { hasText: "new line" })).toBeVisible();
     await page.screenshot({ path: `e2e/results/screens/vscode-detail-${theme}.png` });

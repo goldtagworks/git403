@@ -21,7 +21,7 @@ test("작성자 사진: 보이는 고유 이메일을 한 번에 요청하고, �
   await expect(initials.first()).toHaveText("박");
   await expect(initials.first()).toHaveClass(/av-\d/);
   // 상세의 작성자도 같은 사진
-  await expect(page.locator(".info .profile .avatar")).toHaveCount(1);
+  await expect(page.locator(".info .people .person:first-child .avatar")).toHaveCount(1);
   // 스크롤·재선택해도 다시 요청하지 않는다
   await page.locator(".graph-scroll").evaluate((e) => (e.scrollTop = 40));
   await rows.nth(2).click();
