@@ -973,6 +973,7 @@ export const ko: Record<Key, string> = {
   "details.copyPath": "경로 복사",
   "details.empty": "커밋을 선택하면 변경 내용이 보입니다",
   "details.parents": "부모",
+  "details.authored": "{when} 작성",
   "details.message": "커밋 메시지",
   "details.coAuthor": "공동 작성자",
   "details.committedBy": "커밋한 사람",

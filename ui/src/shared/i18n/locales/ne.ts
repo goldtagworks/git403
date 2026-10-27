@@ -973,6 +973,7 @@ export const ne: Record<Key, string> = {
   "details.copyPath": "पाथ प्रतिलिपि गर्नुहोस्",
   "details.empty": "परिवर्तनहरू हेर्न कमिट छान्नुहोस्",
   "details.parents": "अभिभावक",
+  "details.authored": "{when} मा लेखिएको",
   "details.message": "कमिट सन्देश",
   "details.coAuthor": "सह-लेखक",
   "details.committedBy": "कमिट गर्ने",

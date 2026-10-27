@@ -973,6 +973,7 @@ export const km: Record<Key, string> = {
   "details.copyPath": "ចម្លងផ្លូវ",
   "details.empty": "ជ្រើសរើស commit ដើម្បីមើលការផ្លាស់ប្តូររបស់វា",
   "details.parents": "មេ",
+  "details.authored": "សរសេរ {when}",
   "details.message": "សារ commit",
   "details.coAuthor": "សហអ្នកនិពន្ធ",
   "details.committedBy": "បានកមមីតដោយ",

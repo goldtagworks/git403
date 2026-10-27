@@ -973,6 +973,7 @@ export const vi: Record<Key, string> = {
   "details.copyPath": "Sao chép đường dẫn",
   "details.empty": "Chọn một commit để xem thay đổi",
   "details.parents": "Commit cha",
+  "details.authored": "tạo lúc {when}",
   "details.message": "Thông điệp commit",
   "details.coAuthor": "Đồng tác giả",
   "details.committedBy": "Người commit",

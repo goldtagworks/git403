@@ -973,6 +973,7 @@ export const tr: Record<Key, string> = {
   "details.copyPath": "Yolu kopyala",
   "details.empty": "Değişikliklerini görmek için bir commit seçin",
   "details.parents": "Üst",
+  "details.authored": "{when} yazıldı",
   "details.message": "Commit mesajı",
   "details.coAuthor": "Ortak yazar",
   "details.committedBy": "Commit eden",

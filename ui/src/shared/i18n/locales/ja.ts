@@ -973,6 +973,7 @@ export const ja: Record<Key, string> = {
   "details.copyPath": "パスをコピー",
   "details.empty": "コミットを選択すると変更内容が表示されます",
   "details.parents": "親",
+  "details.authored": "{when} に作成",
   "details.message": "コミットメッセージ",
   "details.coAuthor": "共同作成者",
   "details.committedBy": "コミット者",

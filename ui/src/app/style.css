@@ -1250,9 +1250,24 @@ html:not([data-big]) .main:not([data-wide]) > .detail-col .details > :not(.info)
 html:not([data-big]) .main:not([data-wide]) > .detail-col .details > .info { flex: 1; width: auto !important; max-width: none; }
 html[data-big] .main[data-layout="right"] > .detail-col, .main[data-layout="right"][data-wide] > .detail-col { flex: 1; width: auto !important; max-width: none; }
 html[data-big] .detail-col .details > .info { width: var(--detail-w) !important; max-width: 60%; }
-/* 오른쪽 열에선 메시지 전체를 열 안에 바로 보인다(GitKraken처럼). 아래 배치에선 첫 줄 미리보기 → 누르면 diff 자리에 */
-.info-body { display: none; }
-.detail-col .info-body { display: block; margin-top: 8px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
-.detail-col .info-preview { display: none; }
-.detail-col .info-subject { -webkit-line-clamp: unset; }
-.detail-col .info-msg.selected { box-shadow: none; }
+/* 오른쪽 열 메시지 상자 (GitKraken식, Details right): 제목·글자 수·본문 전체, 누르면 그 자리에서 고치기. 아래 가로 분할선으로 높이 조절 */
+.info-head { display: flex; justify-content: center; gap: 4px; font-size: 12px; margin-bottom: 8px; }
+.msg-box { display: flex; flex-direction: column; min-height: 60px; overflow: auto; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); cursor: text; }
+.msg-box:hover:not(.editing) { border-color: var(--muted); }
+.msg-box.editing { border-color: var(--accent); }
+.msg-box-subject { display: flex; align-items: baseline; gap: 8px; font-size: 15px; font-weight: 600; line-height: 1.4; }
+.msg-box-subject > :first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.msg-box-subject input { flex: 1; min-width: 0; padding: 0; border: 0; background: none; color: var(--fg); font: inherit; outline: none; }
+.msg-count { flex: none; font-size: 12px; font-weight: 400; }
+.msg-box textarea { flex: 1; min-height: 80px; margin-top: 8px; padding: 0; border: 0; background: none; color: var(--fg); font: inherit; font-size: 13px; line-height: 1.55; resize: none; outline: none; }
+.msg-box .info-body { margin-top: 8px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+.detail-col .info > .splitter.y { margin: 2px 0; }
+.msg-actions { display: flex; gap: 8px; margin-bottom: 10px; }
+.msg-actions button { flex: 1; }
+.person.profile { align-items: flex-start; gap: 10px; margin-bottom: 4px; }
+.person.profile .avatar { border-radius: 6px; }
+.profile-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-top: 3px; }
+.profile-text .name { font-size: 15px; }
+.person.profile .when { padding-top: 5px; }
+.detail-col .guide-tabs { display: flex; justify-content: center; }
+.detail-col .people { margin-top: 8px; }

@@ -973,6 +973,7 @@ export const mn: Record<Key, string> = {
   "details.copyPath": "Зам хуулах",
   "details.empty": "Өөрчлөлтийг харахын тулд коммит сонгоно уу",
   "details.parents": "Эцэг",
+  "details.authored": "{when} бичсэн",
   "details.message": "Коммитын мессеж",
   "details.coAuthor": "Хамтран зохиогч",
   "details.committedBy": "Коммит хийсэн",

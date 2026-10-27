@@ -972,6 +972,7 @@ export const en = {
   "details.copyPath": "Copy path",
   "details.empty": "Select a commit to see its changes",
   "details.parents": "Parent",
+  "details.authored": "authored {when}",
   "details.message": "Commit message",
   "details.coAuthor": "Co-author",
   "details.committedBy": "Committed by",

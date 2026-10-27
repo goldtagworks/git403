@@ -14,7 +14,7 @@ import { fileMenu } from "../../features/inspect/fileMenu";
 import { contextMenu } from "../../shared/ui/menu";
 import { ctx, ops } from "../../shared/model/ops";
 import { Avatar, requestAvatars } from "../../shared/ui/avatar";
-import { startReword } from "../../features/rebase/Reword";
+import { applyReword, joinMessage, rewordPlan, splitSubject, startReword } from "../../features/rebase/Reword";
 import { Icon } from "../../shared/ui/Icon";
 import { FileNav, neighbors, revealSelected } from "../../shared/ui/FileNav";
 import { IS_VSCODE } from "../../shared/api/bridge";
@@ -33,8 +33,8 @@ const savedView = (): FileView => {
 
 const DATE_OPTS: Intl.DateTimeFormatOptions = { dateStyle: "medium", timeStyle: "short" };
 
-/** 선택한 커밋의 정보 · 변경 파일 · diff (하단 패널). */
-export const Details = memo(function Details({ repo, commit, rules }: { repo: string; commit: Commit | null; rules: IssueRule[] }) {
+/** 선택한 커밋의 정보 · 변경 파일 · diff. right: 오른쪽 상세 열(GitKraken식 메시지 상자 + 가로 분할선 + 바로 고치기) */
+export const Details = memo(function Details({ repo, commit, rules, right }: { repo: string; commit: Commit | null; rules: IssueRule[]; right?: boolean }) {
   countRender("Details");
   useLocale();
   const [files, setFiles] = useState<ChangedFile[]>([]);
@@ -42,6 +42,10 @@ export const Details = memo(function Details({ repo, commit, rules }: { repo: st
   const [picked, setFile] = useState<string | null>(null);
   const [diff, setDiff] = useState("");
   const [infoW, infoSplit] = useSplit("details", 340, 200, 900, "x");
+  const [msgH, msgSplit] = useSplit("detail-msg", 240, 60, 900, "y");
+  // 오른쪽 열에서 메시지를 바로 고치는 중이면 [제목, 본문]
+  const [edit, setEdit] = useState<[string, string] | null>(null);
+  const [saving, setSaving] = useState(false);
   const [fileView, setFileView] = useState<FileView>(savedView);
   const changeView = (v: FileView) => {
     setFileView(v);
@@ -54,6 +58,7 @@ export const Details = memo(function Details({ repo, commit, rules }: { repo: st
   const ignoreWs = useSyncExternalStore(onPrefs, () => pref("ignoreWs"));
 
   useEffect(() => {
+    setEdit(null);
     setFiles([]);
     setFile(null);
     setDiff("");
@@ -140,7 +145,69 @@ export const Details = memo(function Details({ repo, commit, rules }: { repo: st
             <span className="brief-who">{commit.author}</span>
           </div>
         )}
-        {!gv.open && (
+        {!gv.open && right && (
+          <>
+          <div className="info-head muted">{t("details.commit")} <Sha id={commit.id} /></div>
+          <div className={"msg-box" + (edit ? " editing" : "")} style={{ height: msgH }} onClick={(e) => !edit && !(e.target as HTMLElement).closest("a") && !getSelection()?.toString() && setEdit(splitSubject(body || commit.subject))}>
+            {edit ? (
+              <>
+                <div className="msg-box-subject">
+                  <input aria-label={t("reword.subject")} value={edit[0]} autoFocus onChange={(e) => setEdit([e.target.value, edit[1]])} onKeyDown={(e) => e.key === "Escape" && (e.stopPropagation(), setEdit(null))} />
+                  <span className="msg-count muted">{edit[0].length}</span>
+                </div>
+                <textarea aria-label={t("reword.body")} placeholder={t("reword.body")} value={edit[1]} onChange={(e) => setEdit([edit[0], e.target.value])} onKeyDown={(e) => e.key === "Escape" && (e.stopPropagation(), setEdit(null))} />
+              </>
+            ) : (
+              <>
+                <div className="msg-box-subject selectable" title={t("reword.title")}>
+                  <span>{subject.map((p, i) => (typeof p === "string" ? p : <a key={i} className="issue-link" href={p.url} title={p.url} onClick={(e) => (e.preventDefault(), ops.openUrl(p.url))}>{p.text}</a>))}</span>
+                  <span className="msg-count muted">{commit.subject.length}</span>
+                </div>
+                {hasMessage && <div className="info-body selectable"><MessageBody body={msg.body} trailers={msg.trailers} rules={compiled} /></div>}
+              </>
+            )}
+          </div>
+          {msgSplit}
+          {edit && (
+            <div className="msg-actions">
+              <button className="primary" disabled={saving || !edit[0].trim() || joinMessage(...edit) === joinMessage(...splitSubject(body || commit.subject))} onClick={async () => {
+                const plan = rewordPlan(commit.id);
+                if (!plan) return;
+                setSaving(true);
+                if (await applyReword(plan, joinMessage(...edit))) setEdit(null);
+                setSaving(false);
+              }}>{t("reword.run")}</button>
+              <button onClick={() => setEdit(null)}>{t("common.cancel")}</button>
+            </div>
+          )}
+          <div className="people">
+            <div className="person profile">
+              <Avatar name={commit.author} email={commit.email} size={44} />
+              <div className="profile-text">
+                <span className="name" title={`${commit.author} <${commit.email}>`}>{commit.author}</span>
+                <span className="muted">{t("details.authored", { when: dateFmt(DATE_OPTS).format(commit.time * 1000) })}</span>
+              </div>
+              <span className="muted when">{t("details.parents")} {commit.parents.length ? commit.parents.map((p, i) => <Fragment key={p}>{i > 0 && ", "}<Sha id={p} className="" /></Fragment>) : t("common.none")}</span>
+            </div>
+            {coAuthors.map((a) => (
+              <div key={a.email} className="person sub" title={`${a.name} <${a.email}>`}>
+                <Avatar name={a.name} email={a.email} size={16} />
+                <span className="muted">{t("details.coAuthor")}</span>
+                <span className="name">{a.name}</span>
+              </div>
+            ))}
+            {otherCommitter && (
+              <div className="person sub" title={`${otherCommitter[0]} <${otherCommitter[1]}>`}>
+                <Avatar name={otherCommitter[0]} email={otherCommitter[1]} size={16} />
+                <span className="muted">{t("details.committedBy")}</span>
+                <span className="name">{otherCommitter[0]}</span>
+                <span className="muted when">{dateFmt(DATE_OPTS).format(otherCommitter[2] * 1000)}</span>
+              </div>
+            )}
+          </div>
+          </>
+        )}
+        {!gv.open && !right && (
           <>
           <div className={"info-msg" + (file === MSG ? " selected" : "")}>
             <div className="info-subject selectable" title={commit.subject}>
@@ -153,11 +220,6 @@ export const Details = memo(function Details({ repo, commit, rules }: { repo: st
             <button className="info-edit" title={t("reword.title")} aria-label={t("reword.title")} onClick={() => void startReword(commit.id)}>
               <Icon name="edit" size={12} />
             </button>
-            {hasMessage && (
-              <div className="info-body selectable">
-                <MessageBody body={msg.body} trailers={msg.trailers} rules={compiled} />
-              </div>
-            )}
             {hasMessage && (
               <button className="info-preview" title={t("details.showMessage")} onClick={() => setFile(MSG)}>
                 <span>{preview}</span>

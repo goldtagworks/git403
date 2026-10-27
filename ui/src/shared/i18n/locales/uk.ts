@@ -973,6 +973,7 @@ export const uk: Record<Key, string> = {
   "details.copyPath": "Копіювати шлях",
   "details.empty": "Виберіть коміт, щоб побачити його зміни",
   "details.parents": "Батьківський",
+  "details.authored": "створено {when}",
   "details.message": "Повідомлення коміту",
   "details.coAuthor": "Співавтор",
   "details.committedBy": "Комітер",

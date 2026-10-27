@@ -973,6 +973,7 @@ export const zhTW: Record<Key, string> = {
   "details.copyPath": "複製路徑",
   "details.empty": "選擇提交以查看其變更",
   "details.parents": "父提交",
+  "details.authored": "{when} 撰寫",
   "details.message": "提交訊息",
   "details.coAuthor": "共同作者",
   "details.committedBy": "提交者",

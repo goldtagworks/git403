@@ -973,6 +973,7 @@ export const zhCN: Record<Key, string> = {
   "details.copyPath": "复制路径",
   "details.empty": "选择一个提交以查看其更改",
   "details.parents": "父提交",
+  "details.authored": "{when} 创作",
   "details.message": "提交信息",
   "details.coAuthor": "合著者",
   "details.committedBy": "提交者",

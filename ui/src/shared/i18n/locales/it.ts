@@ -973,6 +973,7 @@ export const it: Record<Key, string> = {
   "details.copyPath": "Copia percorso",
   "details.empty": "Seleziona un commit per vederne le modifiche",
   "details.parents": "Padre",
+  "details.authored": "scritto il {when}",
   "details.message": "Messaggio di commit",
   "details.coAuthor": "Coautore",
   "details.committedBy": "Commit di",

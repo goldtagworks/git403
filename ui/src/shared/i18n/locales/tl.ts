@@ -973,6 +973,7 @@ export const tl: Record<Key, string> = {
   "details.copyPath": "Kopyahin ang path",
   "details.empty": "Pumili ng commit para makita ang mga pagbabago nito",
   "details.parents": "Parent",
+  "details.authored": "isinulat {when}",
   "details.message": "Mensahe ng commit",
   "details.coAuthor": "Kasamang may-akda",
   "details.committedBy": "Kinomit ni",

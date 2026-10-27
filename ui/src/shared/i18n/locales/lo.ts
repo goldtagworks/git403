@@ -973,6 +973,7 @@ export const lo: Record<Key, string> = {
   "details.copyPath": "ສຳເນົາເສັ້ນທາງ",
   "details.empty": "ເລືອກຄອມມິດເພື່ອເບິ່ງການປ່ຽນແປງ",
   "details.parents": "Parent",
+  "details.authored": "ຂຽນເມື່ອ {when}",
   "details.message": "ຂໍ້ຄວາມຄອມມິດ",
   "details.coAuthor": "ຜູ້ຂຽນຮ່ວມ",
   "details.committedBy": "ຄອມມິດໂດຍ",

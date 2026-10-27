@@ -973,6 +973,7 @@ export const th: Record<Key, string> = {
   "details.copyPath": "คัดลอก path",
   "details.empty": "เลือก commit เพื่อดูการเปลี่ยนแปลง",
   "details.parents": "Parent",
+  "details.authored": "เขียนเมื่อ {when}",
   "details.message": "ข้อความ commit",
   "details.coAuthor": "ผู้เขียนร่วม",
   "details.committedBy": "คอมมิตโดย",

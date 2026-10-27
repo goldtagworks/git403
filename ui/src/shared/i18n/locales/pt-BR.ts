@@ -973,6 +973,7 @@ export const ptBR: Record<Key, string> = {
   "details.copyPath": "Copiar caminho",
   "details.empty": "Selecione um commit para ver as alterações",
   "details.parents": "Pai",
+  "details.authored": "escrito em {when}",
   "details.message": "Mensagem do commit",
   "details.coAuthor": "Coautor",
   "details.committedBy": "Commit por",

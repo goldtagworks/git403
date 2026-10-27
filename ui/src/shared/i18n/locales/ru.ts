@@ -973,6 +973,7 @@ export const ru: Record<Key, string> = {
   "details.copyPath": "Копировать путь",
   "details.empty": "Выберите коммит, чтобы увидеть изменения",
   "details.parents": "Родитель",
+  "details.authored": "создан {when}",
   "details.message": "Сообщение коммита",
   "details.coAuthor": "Соавтор",
   "details.committedBy": "Коммитер",

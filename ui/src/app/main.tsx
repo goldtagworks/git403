@@ -523,7 +523,7 @@ function App() {
             )}
             {right ? (
               <div className="detail-col" style={{ width: colW, ["--detail-w" as string]: colW + "px" }}>
-                {selected === WORKTREE && status ? <ChangesView repo={repo} status={status} onError={toastError} /> : <Details repo={repo} commit={commit} rules={issueRules} />}
+                {selected === WORKTREE && status ? <ChangesView repo={repo} status={status} onError={toastError} /> : <Details repo={repo} commit={commit} rules={issueRules} right />}
               </div>
             ) : COMPACT ? null : !DETAIL && selected === WORKTREE && status ? (
               <ChangesView repo={repo} status={status} onError={toastError} />

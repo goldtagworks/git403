@@ -973,6 +973,7 @@ export const nl: Record<Key, string> = {
   "details.copyPath": "Pad kopiëren",
   "details.empty": "Selecteer een commit om de wijzigingen te zien",
   "details.parents": "Ouder",
+  "details.authored": "geschreven {when}",
   "details.message": "Commitbericht",
   "details.coAuthor": "Co-auteur",
   "details.committedBy": "Gecommit door",

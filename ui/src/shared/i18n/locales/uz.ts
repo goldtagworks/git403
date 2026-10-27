@@ -973,6 +973,7 @@ export const uz: Record<Key, string> = {
   "details.copyPath": "Yo'lni nusxalash",
   "details.empty": "O'zgarishlarni ko'rish uchun kommitni tanlang",
   "details.parents": "Ota kommit",
+  "details.authored": "{when} yozilgan",
   "details.message": "Kommit xabari",
   "details.coAuthor": "Hammuallif",
   "details.committedBy": "Commit qilgan",

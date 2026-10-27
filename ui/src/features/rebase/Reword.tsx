@@ -14,20 +14,54 @@ let openSheet: ((s: State) => void) | null = null;
  * 그 커밋부터 HEAD까지 그대로 다시 쌓으며 메시지만 바꾸는 interactive rebase(`rebase_interactive`의 reword).
  * 현재 브랜치(첫 부모 계보)의 커밋만, 사이에 머지 커밋이 있으면 막는다.
  */
-export async function startReword(sha: string) {
-  if (ctx.status?.operation) return ctx.error(t("reword.busy"));
+export interface RewordPlan { commit: Commit; chain: Commit[] }
+
+/** 수정할 수 있는지 보고 대상 구간(그 커밋 ~ HEAD, 오래된 것부터)을 돌려준다. 안 되면 오류를 띄우고 null */
+export function rewordPlan(sha: string): RewordPlan | null {
+  if (ctx.status?.operation) return ctx.error(t("reword.busy")), null;
   const byId = new Map(ctx.commits.map((c) => [c.id, c]));
   const headId = ctx.refs.find((r) => r.head)?.target;
   const chain: Commit[] = [];
   let c = headId ? byId.get(headId) : undefined;
   for (; c && c.id !== sha; c = byId.get(c.parents[0])) chain.push(c);
-  if (!c) return ctx.error(t("reword.notOnHead"));
+  if (!c) return ctx.error(t("reword.notOnHead")), null;
   chain.push(c);
-  if (chain.some((x) => x.parents.length > 1)) return ctx.error(t("reword.hasMerge"));
-  if (chain.length > 1 && !c.parents.length) return ctx.error(t("reword.root"));
-  const msg = await api.commitMessage(ctx.repo, sha).catch(() => c!.subject);
+  if (chain.some((x) => x.parents.length > 1)) return ctx.error(t("reword.hasMerge")), null;
+  if (chain.length > 1 && !c.parents.length) return ctx.error(t("reword.root")), null;
+  return { commit: c, chain: chain.reverse() };
+}
+
+/** 메시지를 바꾼다. 원격에 있으면 확인. 성공하면 true (취소·실패는 false, 실패 토스트는 여기서) */
+export async function applyReword({ commit, chain }: RewordPlan, message: string): Promise<boolean> {
+  try {
+    const repo = ctx.repo;
+    const pushed = (await api.git(repo, ["branch", "-r", "--contains", commit.id]).catch(() => "")).trim();
+    if (pushed && !(await ask(t("reword.pushed", { refs: pushed.split("\n").map((l) => l.trim()).join(", ") }), { title: t("reword.title"), kind: "warning" }))) return false;
+    if (chain.length === 1) await api.git(repo, ["commit", "--amend", "--only", "--allow-empty", "-m", message]);
+    else await api.rebaseInteractive(repo, commit.parents[0], chain.map((c) => ({ action: c.id === commit.id ? "reword" : "pick", sha: c.id, message: c.id === commit.id ? message : undefined })));
+    ctx.notify(t("reword.done"), { kind: "success" });
+    return true;
+  } catch (e) {
+    ctx.error(t("reword.fail"), String(e));
+    return false;
+  }
+}
+
+/** 제목·본문 → git 메시지 (본문이 비면 제목만) */
+export const joinMessage = (subject: string, body: string) => subject.trim() + (body.trim() ? "\n\n" + body.trim() : "") + "\n";
+/** 전체 메시지 → [제목, 본문] */
+export const splitSubject = (msg: string): [string, string] => {
   const [subject, ...rest] = msg.replace(/\s+$/, "").split("\n");
-  openSheet?.({ commit: c, chain: chain.reverse(), subject, body: rest.join("\n").replace(/^\n+/, "") });
+  return [subject, rest.join("\n").replace(/^\n+/, "")];
+};
+
+/** 커밋 메시지 수정 시트를 연다 (그래프 우클릭·아래 배치의 연필) */
+export async function startReword(sha: string) {
+  const plan = rewordPlan(sha);
+  if (!plan) return;
+  const msg = await api.commitMessage(ctx.repo, sha).catch(() => plan.commit.subject);
+  const [subject, body] = splitSubject(msg);
+  openSheet?.({ ...plan, subject, body });
 }
 
 function RewordSheet({ commit, chain, subject: s0, body: b0, onClose }: State & { onClose: () => void }) {
@@ -35,21 +69,11 @@ function RewordSheet({ commit, chain, subject: s0, body: b0, onClose }: State & 
   const [subject, setSubject] = useState(s0);
   const [body, setBody] = useState(b0);
   const [busy, setBusy] = useState(false);
-  const message = subject.trim() + (body.trim() ? "\n\n" + body.trim() : "") + "\n";
   const same = subject.trim() === s0.trim() && body.trim() === b0.trim();
 
   const run = async () => {
     setBusy(true);
-    try {
-      const repo = ctx.repo;
-      const pushed = (await api.git(repo, ["branch", "-r", "--contains", commit.id]).catch(() => "")).trim();
-      if (pushed && !(await ask(t("reword.pushed", { refs: pushed.split("\n").map((l) => l.trim()).join(", ") }), { title: t("reword.title"), kind: "warning" }))) return setBusy(false);
-      if (chain.length === 1) await api.git(repo, ["commit", "--amend", "--only", "--allow-empty", "-m", message]);
-      else await api.rebaseInteractive(repo, commit.parents[0], chain.map((c) => ({ action: c.id === commit.id ? "reword" : "pick", sha: c.id, message: c.id === commit.id ? message : undefined })));
-      ctx.notify(t("reword.done"), { kind: "success" });
-    } catch (e) {
-      ctx.error(t("reword.fail"), String(e));
-    }
+    await applyReword({ commit, chain }, joinMessage(subject, body));
     onClose();
   };
 
