@@ -115,3 +115,13 @@ test("탭 줄 버튼·⌘⌥B로 상세 위치를 바로 바꾼다 (설정 창�
   expect(await page.evaluate(() => localStorage.getItem("detailLayout"))).toBe('"right"');
   await page.screenshot({ path: `e2e/results/screens/detail-right-toggle-${test.info().project.name}.png`, clip: { x: 900, y: 54, width: 380, height: 30 } });
 });
+
+test("툴바 설정 메뉴의 커밋 상세 위치로 아래 ↔ 오른쪽을 바꾼다", async ({ page }) => {
+  const settings = () => page.locator(".toolbar").getByRole("button", { name: "설정" }).click();
+  await settings();
+  await page.getByRole("menuitem", { name: "아래", exact: true }).click();
+  await expect(page.locator(".detail-col")).toHaveCount(0);
+  await settings();
+  await page.getByRole("menuitem", { name: "오른쪽" }).click();
+  await expect(page.locator(".detail-col")).toBeVisible();
+});

@@ -5,6 +5,7 @@ import { Icon } from "../../shared/ui/Icon";
 import type { IconName } from "../../shared/ui/icons";
 import { showMenu, type MenuEntry } from "../../shared/ui/menu";
 import { ops } from "../../shared/model/ops";
+import { pref, setPref } from "../../shared/lib/settings";
 import { countRender } from "../../shared/lib/profile";
 import type { ThemeMode } from "../../shared/lib/theme";
 import type { Ref, Status } from "../../shared/api/types";
@@ -192,6 +193,7 @@ export const Toolbar = memo(function Toolbar(p: Props) {
             { label: t("toolbar.settings"), action: () => ops.openSettings(), accelerator: "CmdOrCtrl+," },
             { separator: true },
             { label: t("toolbar.theme"), submenu: (["system", "light", "dark"] as const).map((m) => ({ label: t(({ system: "toolbar.themeSystem", light: "toolbar.themeLight", dark: "toolbar.themeDark" } as const)[m]), checked: p.theme === m, action: () => p.onTheme(m) })) },
+            { label: t("settings.detailLayout"), submenu: (["right", "bottom"] as const).map((m) => ({ label: t(m === "right" ? "settings.layoutRight" : "settings.layoutBottom"), checked: pref("detailLayout") === m, action: () => setPref("detailLayout", m) })) },
             { separator: true },
             { label: t("toolbar.addRemote"), action: ops.addRemote, disabled: none },
           ])
