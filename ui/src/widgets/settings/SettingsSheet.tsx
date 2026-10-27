@@ -44,6 +44,7 @@ function GeneralTab({ theme, onTheme }: { theme: ThemeMode; onTheme: (m: ThemeMo
   const [restore, setRestore] = useState(() => pref("restoreTabs"));
   const [limit, setLimit] = useState(() => String(pref("graphLimit")));
   const [auto, setAuto] = useState(() => pref("autoFetch"));
+  const [layout, setLayout] = useState(() => pref("detailLayout"));
   const [autoUp, setAutoUp] = useState(() => pref("autoUpdate"));
   const [ignoreEol, setIgnoreEol] = useState(() => pref("ignoreEol"));
   const [accent, setAccent] = useState(readAccent);
@@ -89,6 +90,12 @@ function GeneralTab({ theme, onTheme }: { theme: ThemeMode; onTheme: (m: ThemeMo
       <SettingsGroup title={t("settings.group.startup")}>
         <SettingsRow name={t("settings.restoreTabs")}>
           <input type="checkbox" checked={restore} onChange={(e) => (setRestore(e.target.checked), ops.setPref("restoreTabs", e.target.checked))} />
+        </SettingsRow>
+        <SettingsRow name={t("settings.detailLayout")} desc={t("settings.detailLayoutHelp")}>
+          <select value={layout} onChange={(e) => { const v = e.target.value as "right" | "bottom"; setLayout(v); ops.setPref("detailLayout", v); }}>
+            <option value="right">{t("settings.layoutRight")}</option>
+            <option value="bottom">{t("settings.layoutBottom")}</option>
+          </select>
         </SettingsRow>
         <SettingsRow name={t("settings.graphLimit", { min: GRAPH_LIMIT_RANGE[0].toLocaleString(), max: GRAPH_LIMIT_RANGE[1].toLocaleString() })} desc={t("settings.graphLimitHelp")}>
           <span className="folder-field">

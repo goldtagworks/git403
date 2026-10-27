@@ -35,7 +35,7 @@ const { step, finish } = Steps();
 let app = launch([repo]);
 let saved = null;
 try {
-  saved = await js(`const s = JSON.stringify({ ...localStorage }); localStorage.clear(); localStorage.setItem("language", '"ko"'); setTimeout(() => location.reload(), 0); return s;`);
+  saved = await js(`const s = JSON.stringify({ ...localStorage }); localStorage.clear(); localStorage.setItem("language", '"ko"'); localStorage.setItem("detailLayout", '"bottom"'); setTimeout(() => location.reload(), 0); return s;`);
   await new Promise((r) => setTimeout(r, 1000));
   await step("저장소를 열면 툴바에 이름, 그래프에 실제 커밋이 보인다", async () => {
     const name = basename(repo);
@@ -306,6 +306,26 @@ try {
     } finally {
       git("reset", "-q", "--hard", orig);
       rmSync(join(repo, "s.txt"), { force: true });
+    }
+  });
+
+  await step("상세 오른쪽 배치(기본값): 그래프 | 상세 열, 파일을 누르면 진짜 diff가 그래프 자리에 열리고 Esc로 돌아온다", async () => {
+    await js(`localStorage.removeItem("detailLayout"); setTimeout(() => location.reload(), 0);`);
+    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      await js(`
+        await waitFor(() => $(".detail-col"), "오른쪽 상세 열");
+        press(await waitFor(() => byText(".commits .subject", "두 번째 커밋"), "커밋"));
+        const opt = await waitFor(() => $$(".detail-col [role=option]").find((o) => o.textContent.includes("a.txt")), "a.txt");
+        opt.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+        await waitFor(() => document.documentElement.hasAttribute("data-big") && $(".detail-col .diff .add"), "그래프 자리 diff");
+        if (getComputedStyle($(".main > .pane.graph")).visibility !== "hidden") throw new Error("그래프가 가려지지 않음");
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        await waitFor(() => !document.documentElement.hasAttribute("data-big") && getComputedStyle($(".main > .pane.graph")).visibility === "visible", "그래프로 돌아옴");
+      `);
+    } finally {
+      await js(`localStorage.setItem("detailLayout", '"bottom"'); setTimeout(() => location.reload(), 0);`);
+      await new Promise((r) => setTimeout(r, 1000));
     }
   });
 

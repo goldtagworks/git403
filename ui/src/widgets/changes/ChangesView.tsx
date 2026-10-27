@@ -148,7 +148,7 @@ export const ChangesView = memo(function ChangesView({
               aria-selected={active}
               className={active ? "selected" : ""}
               title={f.oldPath ? `${f.oldPath} → ${f.path}` : f.path}
-              onMouseDown={() => setSel({ side, path: f.path })}
+              onMouseDown={() => (setSel({ side, path: f.path }), bigView.picked())}
               onDoubleClick={() => run(side === "staged" ? api.unstage(repo, [f.path]) : api.stage(repo, [f.path]))}
               onContextMenu={contextMenu(() => [
                 { label: t("diff.big"), action: () => (setSel({ side, path: f.path }), bigView.enter(true)) },

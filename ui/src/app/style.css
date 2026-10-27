@@ -343,9 +343,9 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 .msg-view { flex: 1; min-width: 0; overflow: auto; }
 .msg-doc { max-width: 760px; padding: 14px 20px 24px; font-size: 14px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
 .msg-doc h3 { margin: 0 0 12px; font-size: 16px; line-height: 1.4; }
-.msg-doc .head { font-weight: 600; }
-.msg-doc .li { padding-left: 16px; text-indent: -12px; }
-.msg-doc .li::before { content: "•"; display: inline-block; width: 12px; text-indent: 0; color: var(--muted); }
+.msg-doc .head, .info-body .head { font-weight: 600; }
+.msg-doc .li, .info-body .li { padding-left: 16px; text-indent: -12px; }
+.msg-doc .li::before, .info-body .li::before { content: "•"; display: inline-block; width: 12px; text-indent: 0; color: var(--muted); }
 .msg-trailers { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; margin: 16px 0 0; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12px; white-space: normal; }
 .msg-trailers dt { color: var(--muted); }
 .msg-trailers dd { margin: 0; }
@@ -1237,3 +1237,22 @@ html[data-big] .wide-bar { display: none; }
 .pr-sheet textarea { min-height: 160px; box-sizing: border-box; }
 @media (max-width: 520px) { .pr-flow { grid-template-columns: 1fr; } .pr-arrow { display: none; } }
 .pr-preview { min-height: 160px; box-sizing: border-box; overflow: auto; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+
+/* 상세 오른쪽 (설정 detailLayout = right, app/main.tsx): 그래프 | 상세 열. 평소엔 정보·파일 목록만 보이고,
+   파일을 누르면 크게 보기(data-big)로 diff가 그래프 자리에 열린다 — 상세 열 폭(--detail-w)은 그대로라 튀지 않는다.
+   로컬 변경 넓게 보기(data-wide)는 기존처럼 diff까지 함께 보인다. */
+.main[data-layout="right"] { flex-direction: row; }
+.main[data-layout="right"][data-wide] { flex-direction: column; }
+.main[data-layout="right"] > .pane.graph { flex: 1; min-width: 240px; min-height: 0; max-height: none; }
+.detail-col { flex: none; display: flex; min-width: 0; min-height: 0; max-width: calc(100% - 240px); }
+.detail-col > .details { min-width: 0; }
+html:not([data-big]) .main:not([data-wide]) > .detail-col .details > :not(.info) { display: none; }
+html:not([data-big]) .main:not([data-wide]) > .detail-col .details > .info { flex: 1; width: auto !important; max-width: none; }
+html[data-big] .main[data-layout="right"] > .detail-col, .main[data-layout="right"][data-wide] > .detail-col { flex: 1; width: auto !important; max-width: none; }
+html[data-big] .detail-col .details > .info { width: var(--detail-w) !important; max-width: 60%; }
+/* 오른쪽 열에선 메시지 전체를 열 안에 바로 보인다(GitKraken처럼). 아래 배치에선 첫 줄 미리보기 → 누르면 diff 자리에 */
+.info-body { display: none; }
+.detail-col .info-body { display: block; margin-top: 8px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+.detail-col .info-preview { display: none; }
+.detail-col .info-subject { -webkit-line-clamp: unset; }
+.detail-col .info-msg.selected { box-shadow: none; }

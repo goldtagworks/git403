@@ -1,4 +1,4 @@
-import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { StrictMode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { COMPACT, DETAIL, hideWindow, listen, onOpenRepo, onSelect, openCommit, reportSelected } from "../shared/api/bridge";
 import { api } from "../shared/api/api";
@@ -18,7 +18,7 @@ import { QuickLaunch } from "../features/quick-launch/QuickLaunch";
 import { RebaseHost } from "../features/rebase/RebaseSheet";
 import { RewordHost } from "../features/rebase/Reword";
 import { AutoFetch, SettingsHost } from "../widgets/settings/SettingsSheet";
-import { GRAPH_PAGE, graphLimit, pref } from "../shared/lib/settings";
+import { GRAPH_PAGE, graphLimit, onPrefs, pref } from "../shared/lib/settings";
 import { Sidebar } from "../widgets/sidebar/Sidebar";
 import { markSelected } from "../shared/model/selection";
 import { useRatioSplit, useSplit } from "../shared/ui/Splitter";
@@ -92,6 +92,9 @@ function App() {
   const [palette, setPalette] = useState(false);
   const [sideW, sideSplit] = useSplit("sidebar", 240, 160, 480, "x");
   const [listH, listSplit] = useRatioSplit("commits-ratio", 0.55, 120, 140, "y"); // 창 크기가 바뀌면 그래프·상세가 같은 비율로
+  // 상세 위치(설정): right면 그래프 | 오른쪽 상세 열(px, 왼쪽 경계를 끈다). 파일 diff는 크게 보기(그래프 자리)로 연다
+  const right = useSyncExternalStore(onPrefs, () => pref("detailLayout")) === "right" && !COMPACT && !DETAIL;
+  const [colW, colSplit] = useSplit("detail-col", 420, 280, 900, "x", undefined, true);
   const repoRef = useRef("");
   const loadSeq = useRef(0);
   // 그래프를 읽은 커밋 수(저장소별). full = 상한까지 다 읽었는지가 아니라 "읽은 개수만큼 꽉 찼는지"(더 있을 수 있음)
@@ -498,8 +501,8 @@ function App() {
             </div>
           )}
           {!COMPACT && !DETAIL && sideSplit}
-          <main className="main" data-wide={(!COMPACT && !DETAIL && selected === WORKTREE && status && wide) || undefined}>
-            {!DETAIL && <div className="pane graph" style={{ height: COMPACT ? "100%" : `${listH * 100}%` }}>
+          <main className="main" data-layout={right ? "right" : undefined} data-wide={(!COMPACT && !DETAIL && selected === WORKTREE && status && wide) || undefined}>
+            {!DETAIL && <div className="pane graph" style={right ? undefined : { height: COMPACT ? "100%" : `${listH * 100}%` }}>
               <CommitGraph
                 view={view}
                 refs={refs}
@@ -511,14 +514,18 @@ function App() {
                 onOpen={COMPACT ? openInExt : undefined}
               />
             </div>}
-            {!COMPACT && !DETAIL && listSplit}
+            {!COMPACT && !DETAIL && (right ? colSplit : listSplit)}
             {!COMPACT && !DETAIL && selected === WORKTREE && status && wide && (
               <div className="wide-bar">
                 <button onClick={() => setWide(false)}>← {t("app.backToGraph")}</button>
                 <span>{t("graph.localChanges")}</span>
               </div>
             )}
-            {COMPACT ? null : !DETAIL && selected === WORKTREE && status ? (
+            {right ? (
+              <div className="detail-col" style={{ width: colW, ["--detail-w" as string]: colW + "px" }}>
+                {selected === WORKTREE && status ? <ChangesView repo={repo} status={status} onError={toastError} /> : <Details repo={repo} commit={commit} rules={issueRules} />}
+              </div>
+            ) : COMPACT ? null : !DETAIL && selected === WORKTREE && status ? (
               <ChangesView repo={repo} status={status} onError={toastError} />
             ) : (
               <Details repo={repo} commit={commit} rules={issueRules} />

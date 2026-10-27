@@ -25,13 +25,15 @@ export interface Prefs {
   diffWs: boolean;
   /** 연결한 gh 계정으로 임시 전환한 작업(Push·Fetch 등)이 끝나면 원래 계정으로 되돌림 */
   ghRestore: boolean;
+  /** 커밋 상세·로컬 변경 위치: right = 그래프 오른쪽 열(파일을 누르면 diff가 그래프 자리를 덮는다), bottom = 그래프 아래 */
+  detailLayout: "right" | "bottom";
   /** 표시 언어. system이면 OS 언어를 따른다 (i18n.ts) */
   language: Locale | "system";
 }
 /** 지원 언어 목록의 원본 (i18n.ts의 DICTS·LANGS, Rust `gc_i18n::SUPPORTED_LOCALES`와 같아야 한다) */
 export const LOCALES = ["en", "ko", "zh-CN", "zh-TW", "vi", "ja", "tl", "km", "uz", "lo", "ru", "th", "mn", "ne", "de", "fr", "es", "pt-BR", "it", "pl", "tr", "uk", "nl"] as const;
 export type Locale = (typeof LOCALES)[number];
-export const DEFAULT_PREFS: Prefs = { restoreTabs: true, graphLimit: 20000, autoFetch: 5, autoUpdate: true, ignoreEol: false, ignoreWs: false, diffWrap: false, diffFull: false, diffWs: false, ghRestore: true, language: "system" };
+export const DEFAULT_PREFS: Prefs = { restoreTabs: true, graphLimit: 20000, autoFetch: 5, autoUpdate: true, ignoreEol: false, ignoreWs: false, diffWrap: false, diffFull: false, diffWs: false, ghRestore: true, detailLayout: "right", language: "system" };
 /** 그래프를 처음 읽는 커밋 수(한 페이지). 아래로 스크롤하면 두 배씩 더 읽는다(상한 `graphLimit`까지). */
 export const GRAPH_PAGE = 5000;
 export const GRAPH_LIMIT_RANGE = [100, 200000] as const;
@@ -48,6 +50,7 @@ const norm: { [K in keyof Prefs]: (v: unknown) => Prefs[K] } = {
   diffWrap: (v) => (typeof v === "boolean" ? v : DEFAULT_PREFS.diffWrap),
   diffFull: (v) => (typeof v === "boolean" ? v : DEFAULT_PREFS.diffFull),
   diffWs: (v) => (typeof v === "boolean" ? v : DEFAULT_PREFS.diffWs),
+  detailLayout: (v) => (v === "bottom" ? "bottom" : "right"),
   autoFetch: (v) => ((AUTO_FETCH_MINUTES as readonly unknown[]).includes(v) ? (v as number) : DEFAULT_PREFS.autoFetch),
 };
 /** 정수로 바꿔 허용 범위로 맞춘다. 숫자가 아니면 기본값 */

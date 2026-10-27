@@ -30,6 +30,8 @@ export const bigView = {
     return avail;
   },
   setAvail: (v: boolean) => void (avail = v),
+  /** 파일을 골랐을 때: 상세가 오른쪽 열(설정 detailLayout = right)이면 diff는 크게 보기로만 보이므로 연다 */
+  picked: () => document.querySelector('.main[data-layout="right"]') && set(true),
   on,
 };
 

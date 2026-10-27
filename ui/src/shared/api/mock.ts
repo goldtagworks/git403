@@ -320,6 +320,10 @@ const settingsPreview = {
   warnings: [{ code: "settings.io.newerVersion", vars: { version: "2" }, message: "This file is from a newer version of git403 (format 2); only known items are read" }],
 };
 let jobs = 0;
+// 기존 mock E2E는 상세가 그래프 아래(bottom)인 화면을 전제로 한다. 오른쪽 배치는 e2e/detail-right.spec.ts가 직접 켠다
+try {
+  if (localStorage.getItem("detailLayout") === null) localStorage.setItem("detailLayout", JSON.stringify("bottom"));
+} catch {}
 mockWindows("main"); // getCurrentWindow()(창 숨기기)가 쓰는 창 정보
 /** 실제 백엔드처럼 `git`의 ok(정상 종료 코드)를 따른다: 그 코드로 끝난 mock 오류는 빈 출력 */
 const okCode = (args: any, e: unknown) => {

@@ -100,10 +100,8 @@ export const Details = memo(function Details({ repo, commit, rules }: { repo: st
   }, [repo, commit?.id]);
   const otherCommitter = committer && (committer[0] !== commit?.author || committer[1] !== commit?.email) ? committer : null;
   // 본문 첫 줄 미리보기 (트레일러뿐이면 트레일러 첫 줄). 누르면 diff 자리에 메시지 전체
-  const preview = useMemo(() => {
-    const m = splitMessage(body);
-    return m.body.split("\n")[0] || (m.trailers[0] ? `${m.trailers[0][0]}: ${m.trailers[0][1]}` : "");
-  }, [body]);
+  const msg = useMemo(() => splitMessage(body), [body]);
+  const preview = msg.body.split("\n")[0] || (msg.trailers[0] ? `${msg.trailers[0][0]}: ${msg.trailers[0][1]}` : "");
   const hasMessage = !!preview;
   const file = picked ?? (hasMessage ? MSG : files[0]?.path ?? null);
   useEffect(() => {
@@ -155,6 +153,11 @@ export const Details = memo(function Details({ repo, commit, rules }: { repo: st
             <button className="info-edit" title={t("reword.title")} aria-label={t("reword.title")} onClick={() => void startReword(commit.id)}>
               <Icon name="edit" size={12} />
             </button>
+            {hasMessage && (
+              <div className="info-body selectable">
+                <MessageBody body={msg.body} trailers={msg.trailers} rules={compiled} />
+              </div>
+            )}
             {hasMessage && (
               <button className="info-preview" title={t("details.showMessage")} onClick={() => setFile(MSG)}>
                 <span>{preview}</span>
@@ -220,7 +223,7 @@ export const Details = memo(function Details({ repo, commit, rules }: { repo: st
                 className={r.file.path === file ? "selected" : ""}
                 style={{ paddingLeft: 4 + r.depth * 14 }}
                 title={r.file.path}
-                onMouseDown={() => setFile(r.file.path)}
+                onMouseDown={() => (setFile(r.file.path), bigView.picked())}
                 onDoubleClick={IS_VSCODE ? () => ops.openInEditor(r.file.path, commit.id) : () => bigView.enter()}
                 onContextMenu={contextMenu(() => [{ label: t("diff.big"), action: () => (setFile(r.file.path), bigView.enter(true)) }, { separator: true }, ...fileMenu(r.file.path, commit.id)])}
               >
@@ -276,20 +279,29 @@ function MessageView({ message, rules }: { message: string; rules: Compiled[] })
       <div className="diff-file">{t("details.message")}</div>
       <div className="msg-doc">
         <h3><Linked text={message.split("\n")[0]} rules={rules} /></h3>
-        {body.split("\n").map((l, i) => (
-          <div key={i} className={/^\s*[-*•]\s/.test(l) ? "li" : /^\S.*:$/.test(l.trim()) ? "head" : undefined}>
-            {l.trim() ? <Linked text={l.replace(/^\s*[-*•]\s/, "")} rules={rules} /> : "\u00a0"}
-          </div>
-        ))}
-        {trailers.length > 0 && (
-          <dl className="msg-trailers">
-            {trailers.map(([k, v], i) => (
-              <Fragment key={i}><dt>{k}</dt><dd><Linked text={v} rules={rules} /></dd></Fragment>
-            ))}
-          </dl>
-        )}
+        <MessageBody body={body} trailers={trailers} rules={rules} />
       </div>
     </div>
+  );
+}
+
+/** 본문(머리말·목록 구분) + 트레일러 표. 메시지 화면과 오른쪽 상세 열(.info-body)이 같이 쓴다 */
+function MessageBody({ body, trailers, rules }: { body: string; trailers: [string, string][]; rules: Compiled[] }) {
+  return (
+    <>
+      {body.split("\n").map((l, i) => (
+        <div key={i} className={/^\s*[-*•]\s/.test(l) ? "li" : /^\S.*:$/.test(l.trim()) ? "head" : undefined}>
+          {l.trim() ? <Linked text={l.replace(/^\s*[-*•]\s/, "")} rules={rules} /> : "\u00a0"}
+        </div>
+      ))}
+      {trailers.length > 0 && (
+        <dl className="msg-trailers">
+          {trailers.map(([k, v], i) => (
+            <Fragment key={i}><dt>{k}</dt><dd><Linked text={v} rules={rules} /></dd></Fragment>
+          ))}
+        </dl>
+      )}
+    </>
   );
 }
 
