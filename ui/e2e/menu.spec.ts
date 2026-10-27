@@ -135,7 +135,7 @@ test.describe("우클릭 메뉴 순서", () => {
     const rows = await menuRows(page);
     expect(rows).toEqual([
       "체크아웃: feature/graph", "체크아웃: hotfix/pull-lock", "이 커밋 체크아웃 (detached)", "-",
-      "여기서 새 브랜치…", "cherry-pick", "현재 브랜치에 머지…", "현재 브랜치를 여기로 rebase", "여기 다음부터 interactive rebase…",
+      "여기서 새 브랜치…", "cherry-pick", "현재 브랜치에 머지…", "현재 브랜치를 여기로 rebase", "여기 다음부터 interactive rebase…", "메시지 수정…",
       "▸ 현재 브랜치를 여기로 reset",
       "현재 브랜치를 여기로 reset…", "-", "Soft: 변경을 스테이지에 유지", "Mixed: 변경을 작업 디렉터리에 유지", "Hard: 모든 변경 버리기",
       "되돌리는 커밋 만들기 (revert)", "-",

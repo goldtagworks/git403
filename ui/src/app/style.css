@@ -331,8 +331,11 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 /* 제목은 한 줄(넘치면 …). 전체는 오른쪽 커밋 메시지·툴팁에서 본다 */
 /* 오른쪽 .diff-file 머리줄과 같은 배경·아래선·높이(4px + 18px + 4px + 1px) — .info 여백만큼 끝까지 편다 */
 /* 제목·본문 미리보기: 오른쪽 .diff-file 머리줄과 같은 배경. .info 여백만큼 끝까지 편다. 제목은 3줄까지 */
-.info-msg { margin: calc(-1 * var(--info-pad-y)) calc(-1 * var(--info-pad-x)) 10px; padding: 6px var(--info-pad-x); background: var(--surface); border-bottom: 1px solid var(--border); }
+.info-msg { position: relative; margin: calc(-1 * var(--info-pad-y)) calc(-1 * var(--info-pad-x)) 10px; padding: 6px var(--info-pad-x); background: var(--surface); border-bottom: 1px solid var(--border); }
 .info-msg.selected { box-shadow: inset 2px 0 0 var(--accent); }
+.info-edit { position: absolute; top: 4px; right: 6px; display: flex; padding: 3px; border: 0; border-radius: 4px; background: var(--surface); color: var(--muted); opacity: 0; }
+.info-msg:hover .info-edit, .info-edit:focus-visible { opacity: 1; }
+.info-edit:hover { background: var(--hover); color: var(--fg); }
 .info-subject { font-weight: 600; line-height: 18px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
 .info-preview { display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 4px; padding: 2px 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
 .info-preview span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

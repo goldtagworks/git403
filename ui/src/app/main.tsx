@@ -16,6 +16,7 @@ import { InspectorHost } from "../features/inspect/Inspector";
 import type { IssueRule } from "../shared/lib/issues";
 import { QuickLaunch } from "../features/quick-launch/QuickLaunch";
 import { RebaseHost } from "../features/rebase/RebaseSheet";
+import { RewordHost } from "../features/rebase/Reword";
 import { AutoFetch, SettingsHost } from "../widgets/settings/SettingsSheet";
 import { GRAPH_PAGE, graphLimit, pref } from "../shared/lib/settings";
 import { Sidebar } from "../widgets/sidebar/Sidebar";
@@ -558,6 +559,7 @@ function App() {
       <PromptHost />
       <Toasts />
       <RebaseHost />
+      <RewordHost />
       <HostingHost />
       <AiHost />
       <AutoFetch repo={repo} />

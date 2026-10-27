@@ -273,6 +273,42 @@ try {
     }
   });
 
+  await step("커밋 메시지 수정: 오래된 커밋은 이후 커밋을 그대로 다시 쌓고, HEAD는 스테이지를 건드리지 않고 amend (진짜 git)", async () => {
+    const orig = git("rev-parse", "HEAD");
+    writeFileSync(join(repo, "r.txt"), "r\n");
+    git("add", "r.txt");
+    git("commit", "-qm", "reword 대상");
+    git("commit", "-q", "--allow-empty", "-m", "reword 다음");
+    const tree = git("rev-parse", "HEAD^{tree}");
+    const reword = (subject, body) => `
+      press(await waitFor(() => byText(".commits .subject", ${JSON.stringify(subject)}), "커밋 행"));
+      press(await waitFor(() => $('.info-edit'), "메시지 수정 버튼"));
+      const sheet = await waitFor(() => $('[role=dialog][aria-label="커밋 메시지 수정"]'), "시트");
+      await waitFor(() => $('input[aria-label="제목"]', sheet)?.value === ${JSON.stringify(subject)}, "기존 제목");
+      fill($('input[aria-label="제목"]', sheet), ${JSON.stringify(subject + " 수정")});
+      fill($('textarea[aria-label="본문(선택)"]', sheet), ${JSON.stringify(body)});
+      press($$("button", sheet).find((b) => b.textContent === "메시지 수정"));
+      await waitFor(() => byText(".toast *", "커밋 메시지를 수정했습니다"), "완료 토스트", 20000);
+      await waitFor(() => byText(".commits .subject", ${JSON.stringify(subject + " 수정")}), "그래프 갱신");
+    `;
+    try {
+      await js(reword("reword 대상", "본문 첫 줄\n둘째 줄"));
+      eq(git("log", "-1", "--format=%B", "HEAD~1"), "reword 대상 수정\n\n본문 첫 줄\n둘째 줄", "오래된 커밋 메시지");
+      eq(git("log", "-1", "--format=%s", "HEAD"), "reword 다음", "이후 커밋 유지");
+      eq(git("rev-parse", "HEAD~2"), orig, "부모 그대로");
+      eq(git("rev-parse", "HEAD^{tree}"), tree, "내용 그대로");
+      writeFileSync(join(repo, "s.txt"), "staged\n");
+      git("add", "s.txt");
+      await js(reword("reword 다음", ""));
+      eq(git("log", "-1", "--format=%B", "HEAD"), "reword 다음 수정", "HEAD 메시지");
+      eq(git("rev-parse", "HEAD^{tree}"), tree, "스테이지는 커밋에 안 들어감");
+      eq(git("diff", "--cached", "--name-only"), "s.txt", "스테이지 유지");
+    } finally {
+      git("reset", "-q", "--hard", orig);
+      rmSync(join(repo, "s.txt"), { force: true });
+    }
+  });
+
   await step("창 위치·크기를 종료 때 저장하고 다시 실행하면 되살린다", async () => {
     await nat("@move 140 120 1010 690");
     await new Promise((r) => setTimeout(r, 300));

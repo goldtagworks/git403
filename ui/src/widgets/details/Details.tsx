@@ -14,6 +14,7 @@ import { fileMenu } from "../../features/inspect/fileMenu";
 import { contextMenu } from "../../shared/ui/menu";
 import { ctx, ops } from "../../shared/model/ops";
 import { Avatar, requestAvatars } from "../../shared/ui/avatar";
+import { startReword } from "../../features/rebase/Reword";
 import { Icon } from "../../shared/ui/Icon";
 import { FileNav, neighbors, revealSelected } from "../../shared/ui/FileNav";
 import { IS_VSCODE } from "../../shared/api/bridge";
@@ -151,6 +152,9 @@ export const Details = memo(function Details({ repo, commit, rules }: { repo: st
                 ),
               )}
             </div>
+            <button className="info-edit" title={t("reword.title")} aria-label={t("reword.title")} onClick={() => void startReword(commit.id)}>
+              <Icon name="edit" size={12} />
+            </button>
             {hasMessage && (
               <button className="info-preview" title={t("details.showMessage")} onClick={() => setFile(MSG)}>
                 <span>{preview}</span>

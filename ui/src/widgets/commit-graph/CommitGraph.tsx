@@ -11,6 +11,7 @@ import { isHiddenRef, useHiddenSet } from "../../shared/lib/hidden";
 import { ctx, ops } from "../../shared/model/ops";
 import { resetMenu, stashMenu } from "../../shared/model/menus";
 import { startInteractiveRebase } from "../../features/rebase/RebaseSheet";
+import { startReword } from "../../features/rebase/Reword";
 import { WORKTREE, type Commit, type GraphView, type Ref } from "../../shared/api/types";
 import { countRender } from "../../shared/lib/profile";
 import { bigView } from "../../shared/model/bigview";
@@ -105,6 +106,7 @@ const commitMenu = (c: Commit, refs: Ref[]): MenuEntry[] => {
     { label: t("graph.merge"), action: () => ops.merge(c.id) },
     { label: t("graph.rebase"), action: () => ops.rebase(c.id) },
     { label: t("graph.irebase"), action: () => startInteractiveRebase(c.id) },
+    { label: t("reword.menu"), action: () => void startReword(c.id) },
     resetMenu(c.id),
     { label: t("graph.revert"), action: () => ops.revert(c.id) },
     ...(ops.aiOn() ? [{ separator: true } as MenuEntry, { label: t("graph.aiReview"), action: () => ops.aiReviewCommit(c.id, c.subject) }, { label: t("graph.aiGuide"), action: () => ops.guideCommit(c.id) }] : []),
