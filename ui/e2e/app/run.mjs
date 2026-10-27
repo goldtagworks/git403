@@ -221,6 +221,34 @@ try {
     `);
   });
 
+  await step("탭을 끌어 순서를 바꾸면 저장되고, 끈 뒤 클릭으로 탭이 바뀌지 않는다 (실제 웹뷰 포인터 이벤트)", async () => {
+    const other = temp("e2e-tab2");
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: other });
+    const tabs = JSON.stringify([repo, other]);
+    await js(`localStorage.setItem("tabs", ${JSON.stringify(tabs)}); localStorage.setItem("activeTab", ${JSON.stringify(JSON.stringify(repo))}); setTimeout(() => location.reload(), 0);`);
+    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      await js(`
+        await waitFor(() => $$(".tab").length === 2 && $(".tab.active")?.dataset.path === ${JSON.stringify(repo)}, "탭 2개");
+        const [a, b] = $$(".tab").map((e) => e.getBoundingClientRect());
+        const el = $$(".tab")[0], y = a.top + a.height / 2;
+        const ev = (t, x, tgt) => tgt.dispatchEvent(new PointerEvent(t, { bubbles: true, button: 0, clientX: x, clientY: y, pointerId: 1, isPrimary: true }));
+        ev("pointerdown", a.left + a.width / 2, el.firstElementChild);
+        for (let i = 1; i <= 10; i++) { ev("pointermove", a.left + a.width / 2 + ((b.right - a.left - a.width / 2) * i) / 10, window); await new Promise((r) => setTimeout(r, 16)); }
+        ev("pointerup", b.right, window);
+        el.firstElementChild.click();
+        await waitFor(() => $$(".tab")[1]?.dataset.path === ${JSON.stringify(repo)}, "순서 바뀜");
+        if (JSON.parse(localStorage.getItem("tabs"))[1] !== ${JSON.stringify(repo)}) throw new Error("저장 안 됨: " + localStorage.getItem("tabs"));
+        if ($(".tab.active").dataset.path !== ${JSON.stringify(repo)}) throw new Error("드래그 뒤 클릭으로 탭이 바뀜");
+        if (el.style.transform) throw new Error("transform 남음: " + el.style.transform);
+      `);
+    } finally {
+      await js(`localStorage.setItem("tabs", ${JSON.stringify(JSON.stringify([repo]))}); setTimeout(() => location.reload(), 0);`);
+      await new Promise((r) => setTimeout(r, 1000));
+      rmSync(other, { recursive: true, force: true });
+    }
+  });
+
   await step("창 위치·크기를 종료 때 저장하고 다시 실행하면 되살린다", async () => {
     await nat("@move 140 120 1010 690");
     await new Promise((r) => setTimeout(r, 300));

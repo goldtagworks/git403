@@ -246,6 +246,16 @@ function App() {
   useEffect(() => void (repo && store("activeTab", repo)), [repo]);
   ctx.activeTab = pending ?? repo;
 
+  const moveTab = useCallback(
+    (path: string, i: number) => changeTabs((t) => {
+      if (t[i] === path) return t;
+      const n = t.filter((p) => p !== path);
+      n.splice(i, 0, path);
+      return n;
+    }),
+    [changeTabs],
+  );
+
   const closeTab = useCallback((path: string) => {
     const i = ctx.tabs.indexOf(path);
     changeTabs((t) => t.filter((x) => x !== path));
@@ -448,7 +458,7 @@ function App() {
         onForget={forget}
         onQuickLaunch={showPalette}
       />}
-      {!COMPACT && !DETAIL && tabs.length > 0 && <Tabs tabs={tabs} active={pending ?? repo} onOpen={loadAll} onClose={closeTab} onAdd={open} />}
+      {!COMPACT && !DETAIL && tabs.length > 0 && <Tabs tabs={tabs} active={pending ?? repo} onOpen={loadAll} onClose={closeTab} onAdd={open} onMove={moveTab} />}
       <Notices />
       {status?.operation && (
         <div className="banner op">

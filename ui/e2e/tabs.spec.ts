@@ -195,3 +195,22 @@ test("마우스 휠의 세로 스크롤이 탭 줄을 가로로 움직인다", a
   // 스크롤바는 보이지 않는다
   expect(await page.locator(".tabs-scroll").evaluate((e) => e.offsetHeight - e.clientHeight)).toBe(0);
 });
+
+test("탭 드래그로 순서 변경: 놓으면 순서가 바뀌고 저장되며, 활성 탭은 그대로", async ({ page }) => {
+  const paths = PATHS.slice(0, 4);
+  await start(page, paths, paths[1]);
+  const box = (n: number) => page.locator(".tab").nth(n).boundingBox();
+  const a = (await box(0))!, c = (await box(2))!;
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++) await page.mouse.move(a.x + a.width / 2 + ((c.x + c.width * 0.8 - a.x - a.width / 2) * i) / 10, a.y + a.height / 2);
+  await page.mouse.up();
+  const order = [paths[1], paths[2], paths[0], paths[3]];
+  expect(await page.locator(".tab").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.path))).toEqual(order);
+  expect(await activePath(page)).toBe(paths[1]); // 드래그 뒤 클릭으로 탭이 바뀌지 않는다
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("tabs")!))).toEqual(order);
+  expect(await page.locator(".tab").first().evaluate((e) => e.style.transform)).toBe("");
+  // 짧은 클릭은 그대로 탭 전환
+  await page.locator(".tab").nth(3).getByRole("tab").click();
+  expect(await activePath(page)).toBe(paths[3]);
+});

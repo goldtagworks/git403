@@ -11,11 +11,13 @@ const dir = (p: string) => p.slice(0, Math.max(0, p.length - base(p).length)).re
 const KEYS = isMac ? "⌘⌥←/→" : "Ctrl+Alt+←/→";
 
 /** 열린 저장소 탭. 끝의 메뉴로 작업공간(탭 묶음) 저장·전환. */
-export const Tabs = memo(function Tabs({ tabs, active, onOpen, onClose, onAdd }: {
+export const Tabs = memo(function Tabs({ tabs, active, onOpen, onClose, onAdd, onMove }: {
   tabs: string[];
   active: string;
   onOpen: (path: string) => void;
   onClose: (path: string) => void;
+  /** 드래그로 순서 변경: path를 index 자리로 */
+  onMove: (path: string, index: number) => void;
   /** 끝의 + 버튼: 저장소 열기(⌘O와 같음) */
   onAdd: () => void;
 }) {
@@ -79,6 +81,35 @@ export const Tabs = memo(function Tabs({ tabs, active, onOpen, onClose, onAdd }:
     fades();
   }, [active, tabs.length, over, fades]);
 
+  /** 탭 드래그 순서 변경. 4px 넘게 움직이면 시작, 이웃 탭 중앙을 넘을 때마다 자리를 바꾸고 끄는 탭은 transform으로 포인터를 따라간다 */
+  const dragged = useRef(false);
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>, path: string) => {
+    if (e.button !== 0 || (e.target as HTMLElement).closest(".tab-close")) return;
+    const el = e.currentTarget, x0 = e.clientX, left0 = el.offsetLeft;
+    let on = false;
+    dragged.current = false;
+    const move = (ev: PointerEvent) => {
+      if (!on && Math.abs(ev.clientX - x0) < 4) return;
+      if (!on) (on = dragged.current = true), el.classList.add("dragging");
+      const sibs = [...scroll.current!.children] as HTMLElement[];
+      const i = sibs.indexOf(el), mid = left0 + ev.clientX - x0 + el.offsetWidth / 2;
+      const prev = sibs[i - 1], next = sibs[i + 1];
+      if (prev && mid < prev.offsetLeft + prev.offsetWidth / 2) onMove(path, i - 1);
+      else if (next && mid > next.offsetLeft + next.offsetWidth / 2) onMove(path, i + 1);
+      el.style.transform = `translateX(${left0 + ev.clientX - x0 - el.offsetLeft}px)`;
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      el.style.transform = "";
+      el.classList.remove("dragging");
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  };
+
   const workspaceMenu = (): MenuEntry[] => {
     const names = ops.workspaceNames();
     return [
@@ -97,7 +128,9 @@ export const Tabs = memo(function Tabs({ tabs, active, onOpen, onClose, onAdd }:
       <div ref={view} className="tabs-view">
         <div ref={scroll} className="tabs-scroll">
           {tabs.map((t) => (
-            <div key={t} data-path={t} className={"tab" + (t === active ? " active" : "")} title={t}>
+            <div key={t} data-path={t} className={"tab" + (t === active ? " active" : "")} title={t}
+              onPointerDown={(e) => onPointerDown(e, t)}
+              onClickCapture={(e) => dragged.current && (e.stopPropagation(), (dragged.current = false))}>
               <button role="tab" aria-selected={t === active} onClick={() => t !== active && onOpen(t)}>
                 {base(t)}
               </button>
