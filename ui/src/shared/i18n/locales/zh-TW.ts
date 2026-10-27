@@ -848,6 +848,7 @@ export const zhTW: Record<Key, string> = {
   "app.moreFail": "無法載入更多提交",
   "app.selectMissing": "在此儲存庫的圖表中找不到提交 {sha}",
   "app.jobFailed": "{name} 失敗",
+  "app.tagKept": "本機標籤 {tags} 與遠端不同，已保持原狀",
   "app.jobDone": "{name} 已完成",
   "app.jobRunning": "{name}…",
   "app.authTitle": "需要驗證",

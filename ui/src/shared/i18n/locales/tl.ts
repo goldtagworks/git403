@@ -848,6 +848,7 @@ export const tl: Record<Key, string> = {
   "app.moreFail": "Hindi ma-load ang iba pang commit",
   "app.selectMissing": "Hindi nahanap ang commit na {sha} sa graph ng repository na ito",
   "app.jobFailed": "Nabigo ang {name}",
+  "app.tagKept": "Iba ang lokal na tag {tags} sa remote kaya pinanatili ito",
   "app.jobDone": "Tapos na ang {name}",
   "app.jobRunning": "{name}…",
   "app.authTitle": "Kailangan ng authentication",

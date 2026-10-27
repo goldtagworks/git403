@@ -848,6 +848,7 @@ export const ja: Record<Key, string> = {
   "app.moreFail": "さらにコミットを読み込めません",
   "app.selectMissing": "このリポジトリのグラフにコミット {sha} が見つかりませんでした",
   "app.jobFailed": "{name} に失敗しました",
+  "app.tagKept": "ローカルタグ {tags} がリモートと異なるため、そのまま残しました",
   "app.jobDone": "{name} が完了しました",
   "app.jobRunning": "{name}…",
   "app.authTitle": "認証が必要です",

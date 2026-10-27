@@ -848,6 +848,7 @@ export const ko: Record<Key, string> = {
   "app.moreFail": "커밋을 더 읽을 수 없습니다",
   "app.selectMissing": "이 저장소의 그래프에서 커밋 {sha}을(를) 찾을 수 없습니다",
   "app.jobFailed": "{name} 실패",
+  "app.tagKept": "로컬 태그 {tags}가 원격과 달라 그대로 두었습니다",
   "app.jobDone": "{name} 완료",
   "app.jobRunning": "{name} 중…",
   "app.authTitle": "인증 필요",

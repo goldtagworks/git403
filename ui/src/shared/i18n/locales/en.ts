@@ -847,6 +847,7 @@ export const en = {
   "app.moreFail": "Cannot load more commits",
   "app.selectMissing": "Commit {sha} was not found in this repository's graph",
   "app.jobFailed": "{name} failed",
+  "app.tagKept": "Local tag {tags} differs from the remote and was kept as is",
   "app.jobDone": "{name} done",
   "app.jobRunning": "{name}…",
   "app.authTitle": "Authentication required",

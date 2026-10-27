@@ -48,6 +48,20 @@ if (import.meta.env.VITE_MOCK) await import("../shared/api/mock");
 api.setLocale(locale()).catch(() => {});
 onLocale(() => api.setLocale(locale()).catch(() => {}));
 
+/** fetch 오류가 "태그 덮어쓰기 거부"뿐이면 그 태그 이름들(쉼표로), 아니면 null.
+ *  --all이면 거부된 원격마다 "error: could not fetch <원격>"이 붙는다. 다른 error·fatal·거부가 있으면 진짜 실패다 */
+function clobberedTags(err: string): string | null {
+  const tags = new Set<string>();
+  for (const l of err.replace(/^git exited with code [^:]*: /, "").split("\n").map((l) => l.trim())) {
+    const m = l.match(/^! \[rejected\]\s+(\S+)\s+->\s+\S+\s+\(would clobber existing tag\)$/);
+    if (m) tags.add(m[1]);
+    else if (/^(fatal|error):/.test(l) ? !/^error: could not fetch \S+$/.test(l) : l.startsWith("! ")) return null;
+  }
+  return tags.size ? [...tags].join(", ") : null;
+}
+/** 이미 안내한 저장소·태그 (자동 Fetch마다 반복하지 않게) */
+const keptTags = new Set<string>();
+
 function App() {
   useLocale(); // 언어가 바뀔 때만 App 아래 non-memo 화면이 다시 그려진다
   const theme = useTheme();
@@ -279,6 +293,13 @@ function App() {
     jobs.current.delete(id);
     setJob(null);
     setMessage("");
+    // fetch --tags: 원격에서 옮겨진 태그만 거부(would clobber)되고 나머지는 받았다 → 실패가 아니라 안내. 로컬 태그는 덮어쓰지 않는다
+    const kept = err && j.args?.[0] === "fetch" ? clobberedTags(err) : null;
+    if (kept) {
+      err = null;
+      const key = j.repo + "\0" + kept;
+      if (!keptTags.has(key)) keptTags.add(key), toast(t("app.tagKept", { tags: kept }), { kind: "info" });
+    }
     if (j.quiet) {
       // 자동 작업: 재조회 없음. 갱신은 파일 감시(repo-changed refs)가 한다. 실패는 연속 실패 중 한 번만 경고 토스트
       if (!err) quietFailed.current = false;

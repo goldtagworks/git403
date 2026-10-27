@@ -848,6 +848,7 @@ export const uz: Record<Key, string> = {
   "app.moreFail": "Ko'proq kommitlarni yuklab bo'lmadi",
   "app.selectMissing": "{sha} kommiti bu repozitoriy grafigida topilmadi",
   "app.jobFailed": "{name} bajarilmadi",
+  "app.tagKept": "Mahalliy teg {tags} masofaviydan farq qiladi va o‘zgarishsiz qoldirildi",
   "app.jobDone": "{name} bajarildi",
   "app.jobRunning": "{name}…",
   "app.authTitle": "Autentifikatsiya talab qilinadi",

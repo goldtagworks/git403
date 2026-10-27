@@ -848,6 +848,7 @@ export const tr: Record<Key, string> = {
   "app.moreFail": "Daha fazla commit yüklenemiyor",
   "app.selectMissing": "{sha} commit'i bu deponun grafiğinde bulunamadı",
   "app.jobFailed": "{name} başarısız",
+  "app.tagKept": "Yerel etiket {tags} uzak sunucudakinden farklı, olduğu gibi bırakıldı",
   "app.jobDone": "{name} tamamlandı",
   "app.jobRunning": "{name}…",
   "app.authTitle": "Kimlik doğrulama gerekli",

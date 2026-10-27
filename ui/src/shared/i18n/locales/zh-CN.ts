@@ -848,6 +848,7 @@ export const zhCN: Record<Key, string> = {
   "app.moreFail": "无法加载更多提交",
   "app.selectMissing": "在此仓库的图表中找不到提交 {sha}",
   "app.jobFailed": "{name} 失败",
+  "app.tagKept": "本地标签 {tags} 与远程不同，已保持原样",
   "app.jobDone": "{name} 完成",
   "app.jobRunning": "{name}…",
   "app.authTitle": "需要身份验证",

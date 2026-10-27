@@ -848,6 +848,7 @@ export const km: Record<Key, string> = {
   "app.moreFail": "មិនអាចផ្ទុក commit បន្ថែមបានទេ",
   "app.selectMissing": "រកមិនឃើញ commit {sha} ក្នុងក្រាហ្វរបស់ repository នេះទេ",
   "app.jobFailed": "{name} បរាជ័យ",
+  "app.tagKept": "ស្លាកមូលដ្ឋាន {tags} ខុសពីរីម៉ូត ហើយត្រូវបានរក្សាទុកដដែល",
   "app.jobDone": "{name} រួចរាល់",
   "app.jobRunning": "{name}…",
   "app.authTitle": "ត្រូវការការផ្ទៀងផ្ទាត់",

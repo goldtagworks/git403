@@ -848,6 +848,7 @@ export const lo: Record<Key, string> = {
   "app.moreFail": "ໂຫຼດຄອມມິດເພີ່ມບໍ່ໄດ້",
   "app.selectMissing": "ບໍ່ພົບຄອມມິດ {sha} ໃນກຣາຟຂອງຣີໂພຊິທໍຣີນີ້",
   "app.jobFailed": "{name} ລົ້ມເຫຼວ",
+  "app.tagKept": "ແທັກໃນເຄື່ອງ {tags} ຕ່າງຈາກຣີໂໝດ ຈຶ່ງເກັບໄວ້ຄືເກົ່າ",
   "app.jobDone": "{name} ສຳເລັດ",
   "app.jobRunning": "{name}…",
   "app.authTitle": "ຕ້ອງຢືນຢັນຕົວຕົນ",

@@ -3,9 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <!-- 시작 스플래시 창(tauri.conf.json의 splash). 메인 창은 숨긴 채 로드하고, 끝나면 UI가 이 창을 닫는다(src/shared/lib/splash.ts) -->
+    <script>
+      // 설정의 테마(같은 origin의 localStorage, src/shared/lib/theme.ts)를 따른다. "system"이면 OS 설정
+      try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}
+    </script>
     <style>
       :root { --bg: #f1f2f5; --fg: #1e2026; --dim: #6b7080; --track: #dcdfe5; --accent: #3b82f6; }
-      @media (prefers-color-scheme: dark) { :root { --bg: #131519; --fg: #e6e8ec; --dim: #8b90a0; --track: #2a2d34; } }
+      @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #131519; --fg: #e6e8ec; --dim: #8b90a0; --track: #2a2d34; } }
+      :root[data-theme="dark"] { --bg: #131519; --fg: #e6e8ec; --dim: #8b90a0; --track: #2a2d34; }
       html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); cursor: default; user-select: none; -webkit-user-select: none; }
       body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", sans-serif; }
       img { width: 64px; height: 64px; }

@@ -848,6 +848,7 @@ export const vi: Record<Key, string> = {
   "app.moreFail": "Không tải thêm được commit",
   "app.selectMissing": "Không tìm thấy commit {sha} trong đồ thị của kho lưu trữ này",
   "app.jobFailed": "{name} thất bại",
+  "app.tagKept": "Thẻ cục bộ {tags} khác với remote nên được giữ nguyên",
   "app.jobDone": "{name} xong",
   "app.jobRunning": "{name}…",
   "app.authTitle": "Cần xác thực",

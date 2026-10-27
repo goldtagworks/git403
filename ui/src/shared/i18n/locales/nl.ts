@@ -848,6 +848,7 @@ export const nl: Record<Key, string> = {
   "app.moreFail": "Kan niet meer commits laden",
   "app.selectMissing": "Commit {sha} is niet gevonden in de graaf van deze repository",
   "app.jobFailed": "{name} mislukt",
+  "app.tagKept": "Lokale tag {tags} wijkt af van de remote en is behouden",
   "app.jobDone": "{name} klaar",
   "app.jobRunning": "{name}…",
   "app.authTitle": "Authenticatie vereist",

@@ -848,6 +848,7 @@ export const it: Record<Key, string> = {
   "app.moreFail": "Impossibile caricare altri commit",
   "app.selectMissing": "Il commit {sha} non è stato trovato nel grafico di questo repository",
   "app.jobFailed": "{name} non riuscito",
+  "app.tagKept": "Il tag locale {tags} è diverso dal remoto ed è stato mantenuto",
   "app.jobDone": "{name} completato",
   "app.jobRunning": "{name}…",
   "app.authTitle": "Autenticazione richiesta",

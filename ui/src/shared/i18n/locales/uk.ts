@@ -848,6 +848,7 @@ export const uk: Record<Key, string> = {
   "app.moreFail": "Не вдається завантажити більше комітів",
   "app.selectMissing": "Коміт {sha} не знайдено в графі цього репозиторію",
   "app.jobFailed": "{name}: помилка",
+  "app.tagKept": "Локальний тег {tags} відрізняється від віддаленого й залишений як є",
   "app.jobDone": "{name}: завершено",
   "app.jobRunning": "{name}…",
   "app.authTitle": "Потрібна автентифікація",

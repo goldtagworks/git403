@@ -848,6 +848,7 @@ export const ru: Record<Key, string> = {
   "app.moreFail": "Не удалось загрузить больше коммитов",
   "app.selectMissing": "Коммит {sha} не найден в графе этого репозитория",
   "app.jobFailed": "{name}: ошибка",
+  "app.tagKept": "Локальный тег {tags} отличается от удалённого и оставлен как есть",
   "app.jobDone": "{name}: выполнено",
   "app.jobRunning": "{name}…",
   "app.authTitle": "Требуется аутентификация",

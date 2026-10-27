@@ -249,6 +249,30 @@ try {
     }
   });
 
+  await step("Fetch: 원격에서 옮겨진 태그는 덮어쓰지 않고 안내만, 나머지(새 브랜치)는 받고 실패로 띄우지 않는다 (진짜 git fetch --tags)", async () => {
+    const bare = temp("e2e-bare");
+    execFileSync("git", ["clone", "-q", "--bare", repo, bare]);
+    const old = git("rev-parse", "HEAD~1");
+    git("tag", "moved");
+    execFileSync("git", ["tag", "moved", old], { cwd: bare });
+    execFileSync("git", ["branch", "remote-only", old], { cwd: bare });
+    git("remote", "add", "origin", bare);
+    try {
+      const local = git("rev-parse", "moved");
+      await js(`
+        press(await waitFor(() => $$(".toolbar button").find((b) => b.textContent.trim() === "Fetch"), "Fetch 버튼"));
+        await waitFor(() => byText(".toast *", "로컬 태그 moved가 원격과 달라 그대로 두었습니다"), "태그 안내 토스트", 20000);
+        if (byText(".toast *", "Fetch 실패")) throw new Error("실패 토스트가 떴다");
+      `);
+      eq(git("rev-parse", "moved"), local, "로컬 태그는 그대로");
+      eq(git("rev-parse", "origin/remote-only"), old, "새 원격 브랜치는 받음");
+    } finally {
+      git("remote", "remove", "origin");
+      git("tag", "-d", "moved");
+      rmSync(bare, { recursive: true, force: true });
+    }
+  });
+
   await step("창 위치·크기를 종료 때 저장하고 다시 실행하면 되살린다", async () => {
     await nat("@move 140 120 1010 690");
     await new Promise((r) => setTimeout(r, 300));

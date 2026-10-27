@@ -848,6 +848,7 @@ export const mn: Record<Key, string> = {
   "app.moreFail": "Нэмэлт коммит ачаалах боломжгүй",
   "app.selectMissing": "{sha} коммит энэ репозиторын графаас олдсонгүй",
   "app.jobFailed": "{name} амжилтгүй",
+  "app.tagKept": "Дотоод шошго {tags} алсынхаас ялгаатай тул хэвээр үлдээлээ",
   "app.jobDone": "{name} дууслаа",
   "app.jobRunning": "{name}…",
   "app.authTitle": "Баталгаажуулалт шаардлагатай",

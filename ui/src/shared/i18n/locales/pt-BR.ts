@@ -848,6 +848,7 @@ export const ptBR: Record<Key, string> = {
   "app.moreFail": "Não é possível carregar mais commits",
   "app.selectMissing": "O commit {sha} não foi encontrado no gráfico deste repositório",
   "app.jobFailed": "{name} falhou",
+  "app.tagKept": "A tag local {tags} difere do remoto e foi mantida",
   "app.jobDone": "{name} concluído",
   "app.jobRunning": "{name}…",
   "app.authTitle": "Autenticação necessária",

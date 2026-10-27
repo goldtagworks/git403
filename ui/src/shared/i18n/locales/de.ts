@@ -848,6 +848,7 @@ export const de: Record<Key, string> = {
   "app.moreFail": "Weitere Commits können nicht geladen werden",
   "app.selectMissing": "Commit {sha} wurde im Graphen dieses Repositorys nicht gefunden",
   "app.jobFailed": "{name} fehlgeschlagen",
+  "app.tagKept": "Lokales Tag {tags} weicht vom Remote ab und wurde beibehalten",
   "app.jobDone": "{name} abgeschlossen",
   "app.jobRunning": "{name}…",
   "app.authTitle": "Authentifizierung erforderlich",

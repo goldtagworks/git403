@@ -848,6 +848,7 @@ export const ne: Record<Key, string> = {
   "app.moreFail": "थप कमिट लोड गर्न सकिएन",
   "app.selectMissing": "कमिट {sha} यो रिपोजिटरीको ग्राफमा भेटिएन",
   "app.jobFailed": "{name} असफल भयो",
+  "app.tagKept": "स्थानीय ट्याग {tags} रिमोटभन्दा फरक भएकाले जस्ताको तस्तै राखियो",
   "app.jobDone": "{name} सम्पन्न",
   "app.jobRunning": "{name}…",
   "app.authTitle": "प्रमाणीकरण आवश्यक छ",

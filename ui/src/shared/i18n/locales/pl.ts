@@ -848,6 +848,7 @@ export const pl: Record<Key, string> = {
   "app.moreFail": "Nie można wczytać kolejnych commitów",
   "app.selectMissing": "Nie znaleziono commita {sha} w grafie tego repozytorium",
   "app.jobFailed": "{name} nie powiodło się",
+  "app.tagKept": "Lokalny tag {tags} różni się od zdalnego i został zachowany",
   "app.jobDone": "{name} – zakończono",
   "app.jobRunning": "{name}…",
   "app.authTitle": "Wymagane uwierzytelnienie",

@@ -848,6 +848,7 @@ export const th: Record<Key, string> = {
   "app.moreFail": "โหลด commit เพิ่มไม่ได้",
   "app.selectMissing": "ไม่พบ commit {sha} ในกราฟของ repository นี้",
   "app.jobFailed": "{name} ล้มเหลว",
+  "app.tagKept": "แท็กในเครื่อง {tags} ต่างจากรีโมต จึงคงไว้ตามเดิม",
   "app.jobDone": "{name} เสร็จสิ้น",
   "app.jobRunning": "{name}…",
   "app.authTitle": "ต้องยืนยันตัวตน",
