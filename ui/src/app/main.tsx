@@ -415,6 +415,11 @@ function App() {
         }
         return;
       }
+      // ⌥⌘B(Alt+Ctrl+B): 커밋 상세 위치 오른쪽 ↔ 아래 (입력창 포커스 중엔 무시)
+      if (e.altKey && !e.shiftKey && e.code === "KeyB") {
+        if (!(e.target as HTMLElement | null)?.closest?.("input, textarea, select, [contenteditable]")) (e.preventDefault(), ops.toggleLayout());
+        return;
+      }
       // ⌘⇧↩(Ctrl+Shift+Enter): diff 크게 보기 열기·닫기 (입력창 포커스 중엔 무시)
       if (e.shiftKey && !e.altKey && e.key === "Enter") {
         // 시트(파일 히스토리·Blame)가 열려 있으면 시트가 자기 크게 보기로 받는다

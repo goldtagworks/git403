@@ -11,7 +11,7 @@ import { prompt, type Field } from "../ui/prompt";
 import { toast, toastError, type ToastOpts } from "../lib/toast";
 import type { MenuEntry } from "../ui/menu";
 import { autoRule, jiraCfg, jiraEffective, jiraRule, jiraSuggest, parseRules, type IssueRule, type JiraSuggestion } from "../lib/issues";
-import { GIT_SETTINGS_RE, JIRA_RE, parseConfig, setPref, type Prefs } from "../lib/settings";
+import { GIT_SETTINGS_RE, JIRA_RE, parseConfig, pref, setPref, type Prefs } from "../lib/settings";
 import { aiProvider } from "./aiProviders";
 import type { AiEffort, AiPart, AiResults, AiStatus, AiTask, Commit, HostAccount, Ref, RemoteInfo, Status } from "../api/types";
 import { guide } from "./guide";
@@ -1594,6 +1594,8 @@ export const ops = {
 
   // ---- 설정 (설정 창: SettingsSheet.tsx, docs/reuse.md) ----
   openSettings: (tab?: string) => ctx.showSettings(tab),
+  /** 커밋 상세 위치 전환 (오른쪽 ↔ 아래). 탭 줄 버튼·⌘⌥B·보기 메뉴·빠른 실행 */
+  toggleLayout: () => setPref("detailLayout", pref("detailLayout") === "right" ? "bottom" : "right"),
   /** git config 값 읽기. scope = global | local | all(우선순위 적용). 저장소가 없으면 홈 폴더에서 실행하므로 global은 항상 된다. 키는 소문자 */
   cfgRead: async (scope: "global" | "local" | "all", re: string = GIT_SETTINGS_RE) => {
     const cwd = ctx.repo || (await api.homeDir());

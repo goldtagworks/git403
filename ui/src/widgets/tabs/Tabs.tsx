@@ -1,4 +1,5 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { onPrefs, pref } from "../../shared/lib/settings";
 import { Icon } from "../../shared/ui/Icon";
 import { t as tr, useLocale } from "../../shared/i18n/i18n";
 import { showMenu, type MenuEntry } from "../../shared/ui/menu";
@@ -23,6 +24,7 @@ export const Tabs = memo(function Tabs({ tabs, active, onOpen, onClose, onAdd, o
 }) {
   countRender("Tabs");
   useLocale();
+  const layout = useSyncExternalStore(onPrefs, () => pref("detailLayout"));
   const root = useRef<HTMLDivElement>(null);
   const view = useRef<HTMLDivElement>(null);
   const scroll = useRef<HTMLDivElement>(null);
@@ -149,6 +151,9 @@ export const Tabs = memo(function Tabs({ tabs, active, onOpen, onClose, onAdd, o
           {tr("tabs.list", { n: tabs.length })}<Icon name="dropdown" size={11} />
         </button>
       )}
+      <button className="tab-menu tab-layout" aria-label={tr("layout.toggle")} title={tr(layout === "right" ? "layout.toBottom" : "layout.toRight", { keys: isMac ? "⌘⌥B" : "Ctrl+Alt+B" })} onClick={ops.toggleLayout}>
+        <Icon name={layout === "right" ? "panelRight" : "panelBottom"} size={15} />
+      </button>
       <button className="tab-menu" aria-label={tr("tabs.wsLabel")} onClick={() => showMenu(workspaceMenu())}>
         {tr("tabs.wsLabel")}<Icon name="dropdown" size={11} />
       </button>

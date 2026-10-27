@@ -88,3 +88,30 @@ test("메시지 상자: 가로 분할선으로 높이 조절(저장), 누르면 
   await expect(page.locator(".msg-box-subject")).toContainText("로그 파서");
   await expect(subj).toHaveCount(0);
 });
+
+test("변경 파일이 많아도 열 전체가 아니라 파일 목록만 스크롤되고 메시지 상자는 그대로 보인다", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 520 });
+  await page.locator(".commits").getByText("NUL 구분자").first().click();
+  const info = page.locator(".detail-col .info");
+  expect(await info.evaluate((e) => e.scrollHeight <= e.clientHeight + 1)).toBe(true);
+  const list = page.locator(".detail-col .files");
+  expect(await list.evaluate((e) => getComputedStyle(e).overflowY)).toBe("auto");
+  const lb = (await list.boundingBox())!, ib = (await info.boundingBox())!;
+  expect(lb.y + lb.height).toBeLessThanOrEqual(ib.y + ib.height + 1);
+  await expect(page.locator(".msg-box")).toBeInViewport();
+});
+
+test("탭 줄 버튼·⌘⌥B로 상세 위치를 바로 바꾼다 (설정 창도 따라간다)", async ({ page }) => {
+  const btn = page.getByRole("button", { name: "커밋 상세 위치 바꾸기 (오른쪽 ↔ 아래)" });
+  await expect(btn).toHaveAttribute("title", /커밋 상세를 아래로/);
+  const before = await renders(page);
+  await btn.click();
+  await expect(page.locator(".detail-col")).toHaveCount(0);
+  await expect(btn).toHaveAttribute("title", /커밋 상세를 오른쪽으로/);
+  const after = await renders(page);
+  expect(after.Sidebar).toBe(before.Sidebar);
+  await page.keyboard.press("ControlOrMeta+Alt+KeyB");
+  await expect(page.locator(".detail-col")).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("detailLayout"))).toBe('"right"');
+  await page.screenshot({ path: `e2e/results/screens/detail-right-toggle-${test.info().project.name}.png`, clip: { x: 900, y: 54, width: 380, height: 30 } });
+});

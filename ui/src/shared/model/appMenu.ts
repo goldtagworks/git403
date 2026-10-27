@@ -131,6 +131,7 @@ export function appMenuModel(s: AppMenuState, d: AppMenuDeps): MenuEntry[] {
     submenu: [
       { label: t("menu.refresh"), action: d.refresh, disabled: no, accelerator: key(`${MOD}+R`) },
       sep,
+      { label: t("layout.toggle"), action: ops.toggleLayout, accelerator: key(`${MOD}+Alt+B`) },
       { label: t("quick.big"), action: () => (bigView.avail || bigView.open) && bigView.toggle(), disabled: no, accelerator: key(`${MOD}+Shift+Enter`) },
       ...(ops.aiOn() ? [{ label: t("quick.guide"), action: guide.toggle, disabled: no, accelerator: key(`${MOD}+Alt+I`) } as MenuEntry] : []),
       sep,

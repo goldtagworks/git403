@@ -41,12 +41,12 @@ test.describe("macOS 메뉴 막대", () => {
       "새 브랜치…", "스태시…", "스태시 팝", "스냅샷 저장 (변경 유지)", "-",
       "Pull Request 만들기…", "원격 추가…", "패치 적용…", "저장소 통계…", "-", "서브모듈 추가…", "Worktree 추가…",
     ]);
-    expect(labels(top(m, "보기"))).toEqual(["새로고침", "-", "diff 크게 보기 (열기·닫기)", "-", "전체 화면"]);
+    expect(labels(top(m, "보기"))).toEqual(["새로고침", "-", "커밋 상세 위치 바꾸기 (오른쪽 ↔ 아래)", "diff 크게 보기 (열기·닫기)", "-", "전체 화면"]);
     expect(labels(top(m, "창"))).toEqual(["최소화", "확대/축소", "-", "다음 탭", "이전 탭"]);
     expect(labels(top(m, "도움말"))).toEqual(["빠른 실행"]);
   });
 
-  test("가속키: 기존 전역 단축키와 같은 키(⌘O·⌘P·⌘R·⌘⇧F/L/P/S/B·⌘W·⌘,·⌘⌥←/→·⌘⇧↩) + 새 키 ⌘N, 서로 겹치지 않는다", async ({ page }) => {
+  test("가속키: 기존 전역 단축키와 같은 키(⌘O·⌘P·⌘R·⌘⇧F/L/P/S/B·⌘W·⌘,·⌘⌥←/→·⌘⌥B·⌘⇧↩) + 새 키 ⌘N, 서로 겹치지 않는다", async ({ page }) => {
     const m = await bar(page);
     const acc = Object.fromEntries(m.flatMap((r) => (r.items ?? []).filter((i) => i.accelerator).map((i) => [`${r.label}/${i.label}`, i.accelerator!])));
     expect(acc).toEqual({
@@ -60,6 +60,7 @@ test.describe("macOS 메뉴 막대", () => {
       "저장소/새 브랜치…": "CmdOrCtrl+Shift+B",
       "저장소/스태시…": "CmdOrCtrl+Shift+S",
       "보기/새로고침": "CmdOrCtrl+R",
+      "보기/커밋 상세 위치 바꾸기 (오른쪽 ↔ 아래)": "CmdOrCtrl+Alt+B",
       "보기/diff 크게 보기 (열기·닫기)": "CmdOrCtrl+Shift+Enter",
       "창/다음 탭": "CmdOrCtrl+Alt+Right",
       "창/이전 탭": "CmdOrCtrl+Alt+Left",
@@ -117,7 +118,7 @@ test.describe("Windows 메뉴 막대", () => {
     expect(labels(top(m, "파일"))).toEqual([
       "저장소 열기…", "저장소 복제…", "새 저장소…", "폴더에서 저장소 찾기…", "-", "탭 닫기", "-", "터미널에서 열기", "폴더 열기", "-", "설정…", "git403 종료",
     ]);
-    expect(labels(top(m, "보기"))).toEqual(["새로고침", "-", "diff 크게 보기 (열기·닫기)", "-", "다음 탭", "이전 탭", "-", "전체 화면"]);
+    expect(labels(top(m, "보기"))).toEqual(["새로고침", "-", "커밋 상세 위치 바꾸기 (오른쪽 ↔ 아래)", "diff 크게 보기 (열기·닫기)", "-", "다음 탭", "이전 탭", "-", "전체 화면"]);
     const acc = m.flatMap((r) => (r.items ?? []).filter((i) => i.accelerator).map((i) => `${r.label}/${i.label}=${i.accelerator}`));
     expect(acc).toEqual(["파일/저장소 복제…=CmdOrCtrl+N"]); // 새 키만. 나머지는 keydown이 처리해 두 번 실행되지 않는다
   });

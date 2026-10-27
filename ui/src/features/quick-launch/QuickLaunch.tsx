@@ -39,6 +39,7 @@ export function QuickLaunch({ recent, onOpen, onClose }: { recent: string[]; onO
     if (!ctx.repo) return [...repoOps, ...repos];
     return [
       ...(ctx.tabs.length > 1 ? [{ label: t("tabs.next"), hint: isMac ? "⌘⌥→" : "Ctrl+Alt+→", run: () => ops.tabStep(1) }, { label: t("tabs.prev"), hint: isMac ? "⌘⌥←" : "Ctrl+Alt+←", run: () => ops.tabStep(-1) }] : []),
+      { label: t("layout.toggle"), hint: isMac ? "⌘⌥B" : "Ctrl+Alt+B", run: ops.toggleLayout },
       ...(bigView.avail || bigView.open ? [{ label: t("quick.big"), run: bigView.toggle }] : []), // 보여 줄 diff가 없으면 항목을 숨긴다
       { label: "Fetch", run: ops.fetch },
       { label: "Pull", run: ops.pullQuick },

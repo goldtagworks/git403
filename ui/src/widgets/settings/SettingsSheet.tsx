@@ -44,7 +44,7 @@ function GeneralTab({ theme, onTheme }: { theme: ThemeMode; onTheme: (m: ThemeMo
   const [restore, setRestore] = useState(() => pref("restoreTabs"));
   const [limit, setLimit] = useState(() => String(pref("graphLimit")));
   const [auto, setAuto] = useState(() => pref("autoFetch"));
-  const [layout, setLayout] = useState(() => pref("detailLayout"));
+  const layout = useSyncExternalStore(onPrefs, () => pref("detailLayout")); // 탭 줄 버튼·⌘⌥B로 바뀌어도 따라간다
   const [autoUp, setAutoUp] = useState(() => pref("autoUpdate"));
   const [ignoreEol, setIgnoreEol] = useState(() => pref("ignoreEol"));
   const [accent, setAccent] = useState(readAccent);
@@ -92,7 +92,7 @@ function GeneralTab({ theme, onTheme }: { theme: ThemeMode; onTheme: (m: ThemeMo
           <input type="checkbox" checked={restore} onChange={(e) => (setRestore(e.target.checked), ops.setPref("restoreTabs", e.target.checked))} />
         </SettingsRow>
         <SettingsRow name={t("settings.detailLayout")} desc={t("settings.detailLayoutHelp")}>
-          <select value={layout} onChange={(e) => { const v = e.target.value as "right" | "bottom"; setLayout(v); ops.setPref("detailLayout", v); }}>
+          <select value={layout} onChange={(e) => { ops.setPref("detailLayout", e.target.value as "right" | "bottom"); }}>
             <option value="right">{t("settings.layoutRight")}</option>
             <option value="bottom">{t("settings.layoutBottom")}</option>
           </select>

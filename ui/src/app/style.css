@@ -1271,3 +1271,8 @@ html[data-big] .detail-col .details > .info { width: var(--detail-w) !important;
 .person.profile .when { padding-top: 5px; }
 .detail-col .guide-tabs { display: flex; justify-content: center; }
 .detail-col .people { margin-top: 8px; }
+/* 오른쪽 열: 열 전체가 아니라 변경 파일 목록(·가이드)만 스크롤한다 — 메시지 상자·프로필은 고정 */
+.detail-col .details > .info { display: flex; flex-direction: column; overflow: hidden; }
+.detail-col .details > .info > * { flex: none; }
+.detail-col .details > .info > .files, .detail-col .details > .info > .guide { flex: 1 1 0; min-height: 60px; overflow: auto; }
+.detail-col .details > .info > .msg-box { flex: 0 1 auto; } /* 창이 낮으면 메시지 상자가 먼저 줄어(최소 60px) 파일 목록 자리를 남긴다 */
