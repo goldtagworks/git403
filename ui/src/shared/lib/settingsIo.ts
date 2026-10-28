@@ -2,7 +2,7 @@
 // 저장소별 키(hidden:<repo>, eolDeclined, jiraDismissed, jiraScope)와 일회성 상태(updateCheckedAt)는 허용 목록에 없다.
 
 /** 전역 설정 키(정확히 일치). 저장 위치: shared/lib/settings·theme·ops·CommitGraph 등 */
-export const UI_KEYS = ["theme", "accent", "language", "restoreTabs", "graphLimit", "autoFetch", "autoUpdate", "ignoreEol", "ignoreWs", "diffWrap", "diffFull", "diffWs", "ghRestore", "cols:hidden", "fileView", "bigHint", "terminalApp", "customCommands"] as const;
+export const UI_KEYS = ["theme", "accent", "language", "restoreTabs", "graphLimit", "autoFetch", "autoUpdate", "ignoreEol", "ignoreWs", "diffWrap", "diffFull", "diffWs", "ghRestore", "ghAutoSwitch", "cols:hidden", "fileView", "bigHint", "terminalApp", "customCommands"] as const;
 /** 이름이 이 접두사로 시작하는 키 (스플리터 폭 `split:*`, PR 리뷰 화면 `prr.*`) */
 export const UI_PREFIXES = ["split:", "prr."] as const;
 

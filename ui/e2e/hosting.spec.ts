@@ -469,7 +469,7 @@ for (const [name, flags, n] of [["gh 미설치", {}, 1], ["GitHub류가 아닌 �
 test("gh 계정 항목: 메뉴로 계정 전환, 연결·해제(연결 계정이 다르면 활성 → 연결 + 툴팁)", async ({ page }, info) => {
   await open(page, { __gh: GH });
   await ghItem(page).click();
-  await expect(ghMenu(page)).toHaveText(["✓ me", "goldtagworks", "이 저장소를 me에 연결", "이 저장소를 goldtagworks에 연결", "원격 접근 확인"]);
+  await expect(ghMenu(page)).toHaveText(["✓ me", "goldtagworks", "이 저장소를 me에 연결", "이 저장소를 goldtagworks에 연결", "원격 접근 확인", "✓ 저장소를 열 때 연결 계정으로 전환", "커밋 작성자: 데모 사용자 <demo@example.com> (전역)", "이 저장소 작성자 설정…"]);
   await ghMenu(page).filter({ hasText: /^\s*goldtagworks\s*$/ }).click();
   await expect(ghItem(page)).toHaveText("GitHub 계정 goldtagworks");
   expect(await callsOf(page, "gh_switch")).toEqual([["gh_switch", "goldtagworks"]]);
@@ -574,4 +574,116 @@ test("커밋 상세: 변경 파일을 못 읽으면 \"변경 없음\" 대신 알
   await open(page, { __changedFilesFail: "fatal: bad object" });
   await page.locator(".commits").getByText("Initial commit").click();
   await expect(page.locator(".toast", { hasText: "fatal: bad object" }).first()).toBeVisible();
+});
+
+// ---- gh 계정 자동 전환 · 저장소별 커밋 작성자 ----
+const GHB = { ...GH, bound: "goldtagworks" };
+test("gh 자동 전환: 열 때 연결 계정이 활성과 다르면 한 번 전환하고 토스트", async ({ page }) => {
+  await open(page, { __gh: GHB });
+  await expect(ghItem(page)).toHaveText("GitHub 계정 goldtagworks");
+  await expect(page.locator(".toast").filter({ hasText: "gh 계정을 goldtagworks로 전환했습니다" })).toHaveCount(1);
+  expect(await callsOf(page, "gh_switch")).toEqual([["gh_switch", "goldtagworks"]]);
+});
+test("gh 자동 전환: 창 포커스(quiet) 재조회에서는 전환하지 않는다", async ({ page }) => {
+  await open(page, { __gh: { ...GH, bound: "goldtagworks" } });
+  await expect.poll(async () => (await callsOf(page, "gh_switch")).length).toBe(1);
+  await page.evaluate(() => { (window as any).__gh.accounts = [{ user: "me", active: true }, { user: "goldtagworks", active: false }]; window.dispatchEvent(new Event("focus")); });
+  await expect(ghItem(page)).toHaveText("GitHub 계정 me → goldtagworks");
+  expect(await callsOf(page, "gh_switch")).toHaveLength(1);
+});
+test("gh 자동 전환: 연결 계정이 로그인돼 있지 않으면 전환하지 않는다", async ({ page }) => {
+  await open(page, { __gh: { ...GH, bound: "nobody" } });
+  await expect(ghItem(page)).toHaveText("GitHub 계정 me → nobody");
+  expect(await callsOf(page, "gh_switch")).toHaveLength(0);
+});
+test("gh 자동 전환: 메뉴 체크 항목으로 끄면 다시 열어도 전환하지 않고, 설정은 내보내기 ui 키에 들어 있다", async ({ page }) => {
+  await open(page, { __gh: GHB });
+  await expect.poll(async () => (await callsOf(page, "gh_switch")).length).toBe(1);
+  await ghItem(page).click();
+  await menuItem(page, /저장소를 열 때 연결 계정으로 전환/).click();
+  expect(await page.evaluate(() => localStorage.getItem("ghAutoSwitch"))).toBe("false");
+  await page.evaluate(() => { (window as any).__gh.accounts = [{ user: "me", active: true }, { user: "goldtagworks", active: false }]; });
+  await page.reload();
+  await expect(ghItem(page)).toHaveText("GitHub 계정 me → goldtagworks");
+  expect(await callsOf(page, "gh_switch")).toHaveLength(0);
+  expect((await import("../src/shared/lib/settingsIo")).isUiKey("ghAutoSwitch")).toBe(true);
+});
+test("저장소 커밋 작성자: 전역 표시 → 설정(--local 이름·이메일) → 저장소 표시 → 해제", async ({ page }) => {
+  await open(page, { __gh: GH });
+  const info = () => menuItem(page, /^커밋 작성자:/);
+  await ghItem(page).click();
+  await expect(info()).toHaveText("커밋 작성자: 데모 사용자 <demo@example.com> (전역)");
+  await expect(info()).toBeDisabled();
+  await expect(menuItem(page, "저장소 작성자 해제(전역 사용)")).toHaveCount(0);
+  await menuItem(page, "이 저장소 작성자 설정…").click();
+  const dlg = sheet(page, "이 저장소 커밋 작성자");
+  await dlg.getByLabel("이름").fill("로컬 작성자");
+  await dlg.getByLabel("이메일").fill("local@example.com");
+  await dlg.getByRole("button", { name: "저장" }).click();
+  await expect(dlg).toHaveCount(0);
+  const cfgCalls = (await callsOf(page, "config")).map((c) => c.join(" "));
+  expect(cfgCalls).toEqual(["config --local user.name 로컬 작성자", "config --local user.email local@example.com"]);
+  await ghItem(page).click();
+  await expect(info()).toHaveText("커밋 작성자: 로컬 작성자 <local@example.com> (저장소)");
+  await menuItem(page, "저장소 작성자 해제(전역 사용)").click();
+  expect((await callsOf(page, "config")).slice(2).map((c) => c.join(" "))).toEqual(["config --local --unset user.name", "config --local --unset user.email"]);
+  await ghItem(page).click();
+  await expect(info()).toHaveText("커밋 작성자: 데모 사용자 <demo@example.com> (전역)");
+});
+
+test("gh 자동 전환: 실패하면 경고 토스트를 한 번 띄우고 같은 저장소에서 다시 시도하지 않는다", async ({ page }) => {
+  await open(page, { __gh: { ...GHB, fail: "boom" } });
+  await expect(page.locator(".toast.warning").filter({ hasText: "전환하지 못했습니다" })).toHaveCount(1);
+  expect(await callsOf(page, "gh_switch")).toHaveLength(1);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await page.waitForTimeout(300);
+  expect(await callsOf(page, "gh_switch")).toHaveLength(1);
+});
+test("gh 자동 전환: 설정 > 계정의 체크로도 끈다", async ({ page }) => {
+  await open(page, { __gh: GHB });
+  await settingsTab(page, "계정");
+  const cb = sheet(page, "설정").getByLabel("저장소를 열 때 연결 계정으로 전환");
+  await expect(cb).toBeChecked();
+  await cb.uncheck();
+  expect(await page.evaluate(() => localStorage.getItem("ghAutoSwitch"))).toBe("false");
+});
+test("저장소 커밋 작성자: 두 번째 쓰기가 실패하면 이전 값으로 되돌리고, 읽기 실패는 오류로 보인다", async ({ page }) => {
+  await open(page, { __gh: GH, __cfg: { global: { "user.name": "전역", "user.email": "g@example.com" }, local: { "user.name": "이전", "user.email": "old@example.com" } } });
+  await page.evaluate(() => { const c = (window as any).__cfg.local; Object.defineProperty(c, "user.email", { get: () => "old@example.com", set() { throw "email write failed"; }, configurable: true, enumerable: true }); });
+  await ghItem(page).click();
+  await menuItem(page, "이 저장소 작성자 설정…").click();
+  const dlg = sheet(page, "이 저장소 커밋 작성자");
+  await dlg.getByLabel("이름").fill("새이름");
+  await dlg.getByLabel("이메일").fill("new@example.com");
+  await dlg.getByRole("button", { name: "저장" }).click();
+  await expect(page.locator(".toast.error")).toHaveCount(1);
+  expect(await page.evaluate(() => (window as any).__cfg.local["user.name"])).toBe("이전");
+  // 읽기 실패
+  await page.evaluate(() => ((window as any).__configFail = "fatal: bad config"));
+  await ghItem(page).click();
+  await expect(page.locator(".toast.error").filter({ hasText: "bad config" }).or(page.locator(".toast.error")).first()).toBeVisible();
+});
+test("gh 자동 전환: 탭을 바꿔 다른 저장소를 로드할 때도 연결 계정으로 전환한다", async ({ page }) => {
+  await page.addInitScript(() => { localStorage.setItem("tabs", JSON.stringify(["/work/a", "/work/b"])); localStorage.setItem("activeTab", JSON.stringify("/work/a")); });
+  await page.addInitScript((f) => Object.assign(window, f), { __gh: GHB });
+  await page.goto("/");
+  await page.waitForFunction(() => (window as any).__git);
+  await expect.poll(async () => (await callsOf(page, "gh_switch")).length).toBe(1);
+  await page.evaluate(() => { (window as any).__gh.accounts = [{ user: "me", active: true }, { user: "goldtagworks", active: false }]; });
+  await page.locator(".tab").nth(1).click();
+  await expect.poll(async () => (await callsOf(page, "gh_switch")).length).toBe(2);
+});
+test("gh 자동 전환: 원격 작업이 도는 동안(임시 전환 구간)에는 건너뛴다", async ({ page }) => {
+  await page.addInitScript(() => { localStorage.setItem("tabs", JSON.stringify(["/work/a", "/work/b"])); localStorage.setItem("activeTab", JSON.stringify("/work/a")); });
+  await page.addInitScript((f) => Object.assign(window, f), { __gh: GHB, __job: { ms: 4000 } });
+  await page.goto("/");
+  await page.waitForFunction(() => (window as any).__git);
+  await expect.poll(async () => (await callsOf(page, "gh_switch")).length).toBe(1);
+  await page.evaluate(() => { (window as any).__gh.accounts = [{ user: "me", active: true }, { user: "goldtagworks", active: false }]; });
+  await page.locator(".toolbar").getByRole("button", { name: "Pull", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Pull 취소" })).toBeVisible();
+  await page.locator(".tab").nth(1).click();
+  await expect(page.locator(".tab.active")).toHaveAttribute("data-path", "/work/b");
+  await page.waitForTimeout(300);
+  expect(await callsOf(page, "gh_switch")).toHaveLength(1);
 });

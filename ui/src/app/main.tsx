@@ -170,7 +170,7 @@ function App() {
       ops.flowLoad(path);
       if (opened) {
         ops.aiLoad(path);
-        gh.refresh(path);
+        gh.refresh(path, false, true);
         api.ensureCommitGraph(path).catch(() => {}); // 백그라운드. 없거나 오래됐을 때만 만든다
       }
       // 이슈 링크 규칙은 저장소를 열 때만 읽는다 (규칙 편집은 setIssues로 직접 갱신). 이전 저장소 규칙은 바로 비운다.

@@ -51,6 +51,7 @@ export function AccountsPanel() {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [restore, setRestore] = useState(pref("ghRestore"));
+  const [autoSw, setAutoSw] = useState(pref("ghAutoSwitch"));
   const refresh = () => api.accountsList().then(setList, (e) => ctx.error(String(e)));
   useEffect(() => void refresh(), []);
 
@@ -114,6 +115,9 @@ export function AccountsPanel() {
         <SettingsGroup>
           <SettingsRow name={t("settings.ghRestore")}>
             <input type="checkbox" checked={restore} onChange={(e) => (setRestore(e.target.checked), ops.setPref("ghRestore", e.target.checked))} />
+          </SettingsRow>
+          <SettingsRow name={t("gh.autoSwitch")}>
+            <input type="checkbox" checked={autoSw} onChange={(e) => (setAutoSw(e.target.checked), ops.setPref("ghAutoSwitch", e.target.checked))} />
           </SettingsRow>
         </SettingsGroup>
       </form>

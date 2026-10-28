@@ -11,7 +11,7 @@ import { prompt, type Field } from "../ui/prompt";
 import { toast, toastError, type ToastOpts } from "../lib/toast";
 import type { MenuEntry } from "../ui/menu";
 import { autoRule, jiraCfg, jiraEffective, jiraRule, jiraSuggest, parseRules, type IssueRule, type JiraSuggestion } from "../lib/issues";
-import { GIT_SETTINGS_RE, JIRA_RE, parseConfig, pref, setPref, type Prefs } from "../lib/settings";
+import { GIT_SETTINGS_RE, JIRA_RE, parseConfig, pref, setPref, validEmail, type Prefs } from "../lib/settings";
 import { aiProvider } from "./aiProviders";
 import type { AiEffort, AiPart, AiResults, AiStatus, AiTask, Commit, HostAccount, Ref, RemoteInfo, Status } from "../api/types";
 import { guide } from "./guide";
@@ -414,6 +414,17 @@ async function prBase(remote: string, bases: string[]) {
 
 const customList = () => stored<CustomCommand[]>("customCommands", []);
 
+/** 저장소 작성자 두 키를 쓴다. 중간에 실패하면 이전 값으로 되돌려 이름·이메일이 섞이지 않게 한다 */
+async function writeAuthor(vals: Record<"user.name" | "user.email", string | null>) {
+  const prev = await ops.cfgRead("local", AUTHOR_RE);
+  try {
+    for (const [k, v] of Object.entries(vals)) await ops.cfgWrite("local", k, v);
+  } catch (e) {
+    for (const k of Object.keys(vals)) await ops.cfgWrite("local", k, prev[k] ?? null).catch(() => {});
+    throw e;
+  }
+}
+const AUTHOR_RE = "^(user\\.(name|email))$";
 export const ops = {
   // ---- 원격 ----
   fetch: () => ctx.job("Fetch", ["fetch", "--all", "--prune", "--tags", "--progress"], { remote: true }),
@@ -1609,6 +1620,31 @@ export const ops = {
     if (value === null) await api.git(cwd, ["config", `--${scope}`, "--unset", key], [5]);
     else await api.git(cwd, ["config", `--${scope}`, key, value]);
   },
+  /** 이 저장소의 커밋 작성자: 저장소(--local) 값이 하나라도 있으면 저장소 값 우선(빈 쪽은 전역), 없으면 전역. 값 없음(종료 1)이 아닌 읽기 실패는 던진다 */
+  authorRead: async () => {
+    const [l, g] = await Promise.all([ops.cfgRead("local", AUTHOR_RE), ops.cfgRead("global", AUTHOR_RE)]) as Record<string, string>[];
+    const local = !!(l["user.name"] || l["user.email"]);
+    return { name: l["user.name"] ?? g["user.name"] ?? "", email: l["user.email"] ?? g["user.email"] ?? "", local };
+  },
+  /** 이 저장소 작성자 설정(이름·이메일 → `config --local`). 성공하면 새 값, 취소·검증 실패면 null */
+  authorSet: async () => {
+    const cur = await ops.authorRead();
+    const r = await prompt({
+      title: t("ops.author.title"),
+      message: t("ops.author.msg"),
+      fields: [
+        { kind: "text", name: "name", label: t("ops.author.name"), value: cur.name },
+        { kind: "text", name: "email", label: t("ops.author.email"), value: cur.email },
+      ],
+      submit: t("ops.author.submit"),
+    });
+    if (!r) return;
+    const name = String(r.name ?? "").trim(), email = String(r.email ?? "").trim();
+    if (!name || !validEmail(email)) return void ctx.error(t("ops.author.bad"));
+    await writeAuthor({ "user.name": name, "user.email": email });
+  },
+  /** 저장소 작성자 해제(전역 값 사용). 없는 키 삭제(종료 5)는 무시 */
+  authorUnset: () => writeAuthor({ "user.name": null, "user.email": null }),
   /** UI 설정 저장. 그래프 커밋 상한이 바뀌면 현재 저장소를 다시 읽는다 */
   setPref: <K extends keyof Prefs>(key: K, value: Prefs[K]) => {
     setPref(key, value);

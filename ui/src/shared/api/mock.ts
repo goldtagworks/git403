@@ -814,6 +814,11 @@ function handle(cmd: string, args: any): any {
           return d;
         }
       }
+      if (a[0] === "config" && (a[1] === "--global" || a[1] === "--local") && a[2] === "--get") {
+        const v = cfg()[a[1] === "--global" ? "global" : "local"][a[3]?.toLowerCase()];
+        if (v === undefined) throw "git config 종료 코드 1";
+        return v + "\n";
+      }
       // 설정 창의 git config: 읽기(--get-regexp)는 기록 안 함, 쓰기·삭제(--global|--local)는 기록
       if (a[0] === "config" && a.includes("--get-regexp") && /^\^(\(user|user\\\.email|\(diff)/.test(a.at(-1)!)) {
         const re = new RegExp(a.at(-1)!, "i");
@@ -821,7 +826,7 @@ function handle(cmd: string, args: any): any {
         const tools: Record<string, string> = ((window as any).__tools ??= { "diff.tool": "meld", "merge.tool": "meld" });
         const merged = scope === "all" ? { ...cfg().global, ...cfg().local, ...tools } : cfg()[scope];
         const lines = Object.entries(merged).filter(([k]) => re.test(k)).map(([k, v]) => `${k} ${v}`);
-        if (!lines.length) throw "git config 종료 코드 1";
+        if (!lines.length) { if ((args as { ok?: number[] }).ok?.includes(1)) return ""; throw "git config 종료 코드 1"; }
         return lines.join("\n") + "\n";
       }
       if (a[0] === "config" && (a[1] === "--global" || a[1] === "--local") && CFG_KEYS.test(a[2] === "--unset" ? a[3] : a[2])) {
