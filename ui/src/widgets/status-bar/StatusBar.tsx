@@ -32,7 +32,8 @@ export const StatusBar = memo(function StatusBar({
 
   useEffect(() => {
     const un = listen<{ job: number; event: JobEvent }>("job", ({ payload: { event } }) => {
-      if (event.kind !== "finished") setProgress(event.line);
+      // 끝나면 비운다: 자동 fetch처럼 문구가 안 바뀌는 작업의 마지막 줄(오류)이 탭을 옮겨도 남지 않게
+      setProgress(event.kind === "finished" ? "" : event.line);
     });
     return () => void un.then((f) => f());
   }, []);

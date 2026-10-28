@@ -41,7 +41,11 @@ export const GhStatusItem = memo(function GhStatusItem() {
     ...s.accounts.map((a) => ({
       label: a.user, checked: a.active,
       hint: probe && a.user in probe ? t(probe[a.user] ? "gh.probeOk" : "gh.probeNo") : undefined,
-      action: act(() => gh.switchTo(s.host, a.user)),
+      // 자동 전환을 켜 두면 전환한 계정을 이 저장소에 연결해 다음에 열 때·탭을 옮길 때 다시 전환되게 한다
+      action: act(async () => {
+        await gh.switchTo(s.host, a.user);
+        if (pref("ghAutoSwitch") && a.user !== s.bound) await gh.bindTo(s.repo, a.user);
+      }),
     })),
     { separator: true as const },
     ...s.accounts.filter((a) => a.user !== s.bound).map((a) => ({ label: t("gh.bind", { user: a.user }), action: act(() => gh.bindTo(s.repo, a.user)) })),

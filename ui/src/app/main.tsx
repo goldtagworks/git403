@@ -310,6 +310,8 @@ function App() {
       else if (!quietFailed.current) {
         quietFailed.current = true;
         toast(t("app.jobFailed", { name: j.name }), { kind: "warning", detail: err.trim().split("\n").pop() });
+        // 연결 계정이 없어 다른 계정 저장소에 막힌 경우: 접근되는 계정에 연결하고 다시 받을지 묻는다 (연속 실패 중 한 번만)
+        if (/repository not found/i.test(err)) suggestOtherAccount(j.repo, () => ctx.job(j.name, j.args ?? [], { repo: j.repo, quiet: true }));
       }
       return;
     }

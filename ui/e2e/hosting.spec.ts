@@ -473,12 +473,14 @@ test("gh 계정 항목: 메뉴로 계정 전환, 연결·해제(연결 계정이
   await ghMenu(page).filter({ hasText: /^\s*goldtagworks\s*$/ }).click();
   await expect(ghItem(page)).toHaveText("GitHub 계정 goldtagworks");
   expect(await callsOf(page, "gh_switch")).toEqual([["gh_switch", "goldtagworks"]]);
+  // 자동 전환이 켜져 있으면 전환한 계정이 이 저장소에 연결된다
+  await expect.poll(() => callsOf(page, "gh_bind")).toEqual([["gh_bind", "goldtagworks"]]);
   // 연결: 활성(goldtagworks)과 다른 me에 연결 → "goldtagworks → me"
   await ghItem(page).click();
   await ghMenu(page).filter({ hasText: "이 저장소를 me에 연결" }).click();
   await expect(ghItem(page)).toHaveText("GitHub 계정 goldtagworks → me");
   await expect(ghItem(page)).toHaveAttribute("title", "연결: me / 현재 활성: goldtagworks — Push·Fetch 때 me로 전환 후 되돌림");
-  expect(await callsOf(page, "gh_bind")).toEqual([["gh_bind", "me"]]);
+  expect(await callsOf(page, "gh_bind")).toEqual([["gh_bind", "goldtagworks"], ["gh_bind", "me"]]);
   await page.screenshot({ path: `e2e/results/screens/statusbar-gh-${info.project.name}.png` });
   // 해제
   await ghItem(page).click();
