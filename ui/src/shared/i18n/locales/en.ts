@@ -88,6 +88,8 @@ export const en = {
   "ops.checkout.detachMsg": "Checking out a specific commit leaves the branch (detached HEAD). Continue?",
   "ops.checkout.commitTitle": "Check out commit",
   "ops.checkout.detached": "Commit {sha} (detached HEAD)",
+  "ops.checkout.autostash": "Local changes were stashed and restored",
+  "ops.checkout.stashKept": "Switched, but restoring local changes conflicted. Resolve the conflicts; the stash is kept.",
   "ops.branch.new": "New branch",
   "ops.branch.startCommit": "Start commit: {sha}",
   "ops.branch.startHead": "Start: current branch ({name})",

@@ -89,6 +89,8 @@ export const es: Record<Key, string> = {
   "ops.checkout.detachMsg": "Hacer checkout de un commit concreto te saca de la rama (HEAD desacoplado). ¿Continuar?",
   "ops.checkout.commitTitle": "Checkout de commit",
   "ops.checkout.detached": "Commit {sha} (HEAD desacoplado)",
+  "ops.checkout.autostash": "Cambios locales guardados en stash y restaurados",
+  "ops.checkout.stashKept": "Se cambió, pero restaurar los cambios locales generó conflictos. Resuélvelos; el stash se conserva.",
   "ops.branch.new": "Nueva rama",
   "ops.branch.startCommit": "Commit de inicio: {sha}",
   "ops.branch.startHead": "Inicio: rama actual ({name})",

@@ -89,6 +89,8 @@ export const tr: Record<Key, string> = {
   "ops.checkout.detachMsg": "Belirli bir commit'e geçmek daldan ayrılmanıza neden olur (detached HEAD). Devam edilsin mi?",
   "ops.checkout.commitTitle": "Commit'e geç",
   "ops.checkout.detached": "{sha} commit'i (detached HEAD)",
+  "ops.checkout.autostash": "Yerel değişiklikler stash'e alındı ve geri yüklendi",
+  "ops.checkout.stashKept": "Geçildi, ancak yerel değişiklikler geri yüklenirken çakışma oldu. Çakışmaları çözün; stash saklandı.",
   "ops.branch.new": "Yeni dal",
   "ops.branch.startCommit": "Başlangıç commit'i: {sha}",
   "ops.branch.startHead": "Başlangıç: geçerli dal ({name})",

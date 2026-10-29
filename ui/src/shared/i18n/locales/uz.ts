@@ -89,6 +89,8 @@ export const uz: Record<Key, string> = {
   "ops.checkout.detachMsg": "Muayyan kommitga checkout qilish tarmoqdan chiqaradi (detached HEAD). Davom etilsinmi?",
   "ops.checkout.commitTitle": "Kommitga checkout",
   "ops.checkout.detached": "{sha} kommiti (detached HEAD)",
+  "ops.checkout.autostash": "Mahalliy oʻzgarishlar stash qilinib, qayta tiklandi",
+  "ops.checkout.stashKept": "Oʻtildi, lekin mahalliy oʻzgarishlarni tiklashda ziddiyat chiqdi. Ziddiyatni hal qiling; stash saqlab qolindi.",
   "ops.branch.new": "Yangi tarmoq",
   "ops.branch.startCommit": "Boshlang'ich kommit: {sha}",
   "ops.branch.startHead": "Boshlanish: joriy tarmoq ({name})",

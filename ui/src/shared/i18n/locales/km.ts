@@ -89,6 +89,8 @@ export const km: Record<Key, string> = {
   "ops.checkout.detachMsg": "ការ checkout commit ជាក់លាក់នឹងចាកចេញពី branch (detached HEAD)។ បន្តទេ?",
   "ops.checkout.commitTitle": "Checkout commit",
   "ops.checkout.detached": "commit {sha} (HEAD áááá¶áá)",
+  "ops.checkout.autostash": "បាន stash ហើយស្ដារការផ្លាស់ប្ដូរមូលដ្ឋានវិញ",
+  "ops.checkout.stashKept": "បានប្ដូរ ប៉ុន្តែមានជម្លោះពេលស្ដារការផ្លាស់ប្ដូរ។ សូមដោះស្រាយជម្លោះ; stash ត្រូវបានរក្សាទុក។",
   "ops.branch.new": "Branch ថ្មី",
   "ops.branch.startCommit": "Commit ចាប់ផ្តើម៖ {sha}",
   "ops.branch.startHead": "ចាប់ផ្តើម៖ branch បច្ចុប្បន្ន ({name})",

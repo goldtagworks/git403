@@ -89,6 +89,8 @@ export const it: Record<Key, string> = {
   "ops.checkout.detachMsg": "Il checkout di un commit specifico lascia il branch (HEAD scollegato). Continuare?",
   "ops.checkout.commitTitle": "Checkout del commit",
   "ops.checkout.detached": "Commit {sha} (HEAD scollegato)",
+  "ops.checkout.autostash": "Modifiche locali messe in stash e ripristinate",
+  "ops.checkout.stashKept": "Passato, ma il ripristino delle modifiche locali ha generato conflitti. Risolvili; lo stash è conservato.",
   "ops.branch.new": "Nuovo branch",
   "ops.branch.startCommit": "Commit di partenza: {sha}",
   "ops.branch.startHead": "Partenza: branch corrente ({name})",

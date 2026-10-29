@@ -89,6 +89,8 @@ export const vi: Record<Key, string> = {
   "ops.checkout.detachMsg": "Checkout một commit cụ thể sẽ rời khỏi nhánh (detached HEAD). Tiếp tục?",
   "ops.checkout.commitTitle": "Checkout commit",
   "ops.checkout.detached": "Commit {sha} (HEAD tách rời)",
+  "ops.checkout.autostash": "Đã stash và khôi phục thay đổi cục bộ",
+  "ops.checkout.stashKept": "Đã chuyển nhánh nhưng khôi phục thay đổi cục bộ bị xung đột. Hãy giải quyết xung đột; stash vẫn được giữ.",
   "ops.branch.new": "Nhánh mới",
   "ops.branch.startCommit": "Commit bắt đầu: {sha}",
   "ops.branch.startHead": "Bắt đầu: nhánh hiện tại ({name})",

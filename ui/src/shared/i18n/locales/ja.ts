@@ -89,6 +89,8 @@ export const ja: Record<Key, string> = {
   "ops.checkout.detachMsg": "特定のコミットをチェックアウトするとブランチから離れます (detached HEAD)。続行しますか?",
   "ops.checkout.commitTitle": "コミットをチェックアウト",
   "ops.checkout.detached": "コミット {sha} (detached HEAD)",
+  "ops.checkout.autostash": "ローカルの変更を stash して元に戻しました",
+  "ops.checkout.stashKept": "切り替えましたが、ローカルの変更を戻す際に競合しました。競合を解決してください。stash は残してあります。",
   "ops.branch.new": "新しいブランチ",
   "ops.branch.startCommit": "開始コミット: {sha}",
   "ops.branch.startHead": "開始: 現在のブランチ ({name})",

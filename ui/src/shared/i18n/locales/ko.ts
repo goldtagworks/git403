@@ -89,6 +89,8 @@ export const ko: Record<Key, string> = {
   "ops.checkout.detachMsg": "특정 커밋으로 체크아웃하면 브랜치에서 벗어납니다(detached HEAD). 계속할까요?",
   "ops.checkout.commitTitle": "커밋 체크아웃",
   "ops.checkout.detached": "{sha} 커밋 (detached HEAD)",
+  "ops.checkout.autostash": "로컬 변경을 스태시에 넣었다가 다시 적용했습니다",
+  "ops.checkout.stashKept": "이동했지만 로컬 변경을 다시 적용하다 충돌했습니다. 충돌을 해결하세요. 스태시는 남겨 두었습니다.",
   "ops.branch.new": "새 브랜치",
   "ops.branch.startCommit": "시작 커밋: {sha}",
   "ops.branch.startHead": "시작: 현재 브랜치({name})",

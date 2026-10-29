@@ -89,6 +89,8 @@ export const fr: Record<Key, string> = {
   "ops.checkout.detachMsg": "Extraire un commit précis vous fait quitter la branche (HEAD détachée). Continuer ?",
   "ops.checkout.commitTitle": "Extraire le commit",
   "ops.checkout.detached": "Commit {sha} (HEAD détachée)",
+  "ops.checkout.autostash": "Modifications locales remisées puis réappliquées",
+  "ops.checkout.stashKept": "Basculé, mais la réapplication des modifications locales a créé des conflits. Résolvez-les ; la remise est conservée.",
   "ops.branch.new": "Nouvelle branche",
   "ops.branch.startCommit": "Commit de départ : {sha}",
   "ops.branch.startHead": "Départ : branche actuelle ({name})",

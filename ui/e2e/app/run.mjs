@@ -309,6 +309,34 @@ try {
     }
   });
 
+  await step("체크아웃이 로컬 변경 때문에 막히면 스태시에 넣고 이동한 뒤 다시 적용한다 (진짜 git switch·stash)", async () => {
+    const orig = git("rev-parse", "HEAD");
+    const lines = (a, z) => ["1", "2", "3", "4", "5", "6", "7", "8"].map((l, i) => (i === 0 ? a : i === 7 ? z : l)).join("\n") + "\n";
+    writeFileSync(join(repo, "as.txt"), lines("1", "8"));
+    git("add", "as.txt");
+    git("commit", "-qm", "autostash 기준");
+    git("branch", "auto/x");
+    git("checkout", "-q", "auto/x");
+    writeFileSync(join(repo, "as.txt"), lines("첫 줄 브랜치", "8"));
+    git("commit", "-qam", "autostash 브랜치 쪽");
+    git("checkout", "-q", "main");
+    writeFileSync(join(repo, "as.txt"), lines("1", "끝 줄 로컬"));
+    try {
+      await js(`
+        const badge = await waitFor(() => $('.row-refs .badge[title*="auto/x"]'), "auto/x 배지");
+        badge.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+        await waitFor(() => byText(".toast *", "로컬 변경을 스태시에 넣었다가 다시 적용했습니다"), "자동 스태시 토스트", 20000);
+      `);
+      eq(git("branch", "--show-current"), "auto/x", "브랜치 이동");
+      eq(readFileSync(join(repo, "as.txt"), "utf8"), lines("첫 줄 브랜치", "끝 줄 로컬"), "로컬 변경이 브랜치 위에 다시 적용됨");
+      eq(git("stash", "list"), "", "스태시는 비움");
+    } finally {
+      git("checkout", "-q", "-f", "main");
+      git("reset", "-q", "--hard", orig);
+      git("branch", "-D", "auto/x");
+    }
+  });
+
   await step("상세 오른쪽 배치(기본값): 그래프 | 상세 열, 파일을 누르면 진짜 diff가 그래프 자리에 열리고 Esc로 돌아온다", async () => {
     await js(`localStorage.removeItem("detailLayout"); setTimeout(() => location.reload(), 0);`);
     await new Promise((r) => setTimeout(r, 1000));

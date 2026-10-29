@@ -89,6 +89,8 @@ export const zhTW: Record<Key, string> = {
   "ops.checkout.detachMsg": "簽出特定提交會離開分支（detached HEAD）。要繼續嗎？",
   "ops.checkout.commitTitle": "簽出提交",
   "ops.checkout.detached": "提交 {sha}（detached HEAD）",
+  "ops.checkout.autostash": "已將本機變更暫存並還原",
+  "ops.checkout.stashKept": "已切換，但還原本機變更時發生衝突。請解決衝突，stash 已保留。",
   "ops.branch.new": "新增分支",
   "ops.branch.startCommit": "起始提交：{sha}",
   "ops.branch.startHead": "起點：目前分支（{name}）",

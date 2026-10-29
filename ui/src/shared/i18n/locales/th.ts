@@ -89,6 +89,8 @@ export const th: Record<Key, string> = {
   "ops.checkout.detachMsg": "การ checkout commit เฉพาะจะทำให้ออกจาก branch (detached HEAD) ดำเนินการต่อหรือไม่?",
   "ops.checkout.commitTitle": "Checkout commit",
   "ops.checkout.detached": "commit {sha} (detached HEAD)",
+  "ops.checkout.autostash": "stash แล้วคืนการเปลี่ยนแปลงในเครื่องให้แล้ว",
+  "ops.checkout.stashKept": "สลับแล้ว แต่เกิดข้อขัดแย้งตอนคืนการเปลี่ยนแปลง โปรดแก้ไข stash ยังเก็บไว้",
   "ops.branch.new": "Branch ใหม่",
   "ops.branch.startCommit": "Commit เริ่มต้น: {sha}",
   "ops.branch.startHead": "เริ่มจาก: branch ปัจจุบัน ({name})",

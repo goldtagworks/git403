@@ -89,6 +89,8 @@ export const uk: Record<Key, string> = {
   "ops.checkout.detachMsg": "Checkout окремого коміту виводить вас із гілки (відокремлений HEAD). Продовжити?",
   "ops.checkout.commitTitle": "Checkout коміту",
   "ops.checkout.detached": "Коміт {sha} (відокремлений HEAD)",
+  "ops.checkout.autostash": "Локальні зміни сховано в stash і відновлено",
+  "ops.checkout.stashKept": "Перемкнено, але під час відновлення локальних змін виник конфлікт. Розв’яжіть його; stash збережено.",
   "ops.branch.new": "Нова гілка",
   "ops.branch.startCommit": "Початковий коміт: {sha}",
   "ops.branch.startHead": "Початок: поточна гілка ({name})",

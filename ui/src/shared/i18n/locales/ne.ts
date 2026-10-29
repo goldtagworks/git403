@@ -89,6 +89,8 @@ export const ne: Record<Key, string> = {
   "ops.checkout.detachMsg": "कुनै खास कमिट चेकआउट गर्दा ब्रान्चबाट बाहिरिनुहुन्छ (detached HEAD)। जारी राख्ने?",
   "ops.checkout.commitTitle": "कमिट चेकआउट गर्नुहोस्",
   "ops.checkout.detached": "कमिट {sha} (detached HEAD)",
+  "ops.checkout.autostash": "स्थानीय परिवर्तनहरू stash गरी फर्काइयो",
+  "ops.checkout.stashKept": "स्विच भयो, तर स्थानीय परिवर्तन फर्काउँदा द्वन्द्व भयो। द्वन्द्व समाधान गर्नुहोस्; stash राखिएको छ।",
   "ops.branch.new": "नयाँ ब्रान्च",
   "ops.branch.startCommit": "सुरु कमिट: {sha}",
   "ops.branch.startHead": "सुरु: हालको ब्रान्च ({name})",

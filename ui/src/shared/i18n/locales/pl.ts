@@ -89,6 +89,8 @@ export const pl: Record<Key, string> = {
   "ops.checkout.detachMsg": "Checkout konkretnego commita opuszcza gałąź (detached HEAD). Kontynuować?",
   "ops.checkout.commitTitle": "Checkout commita",
   "ops.checkout.detached": "Commit {sha} (odłączony HEAD)",
+  "ops.checkout.autostash": "Lokalne zmiany schowano w stash i przywrócono",
+  "ops.checkout.stashKept": "Przełączono, ale przywracanie lokalnych zmian spowodowało konflikty. Rozwiąż je; stash zachowano.",
   "ops.branch.new": "Nowa gałąź",
   "ops.branch.startCommit": "Commit początkowy: {sha}",
   "ops.branch.startHead": "Początek: bieżąca gałąź ({name})",

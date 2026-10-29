@@ -89,6 +89,8 @@ export const ptBR: Record<Key, string> = {
   "ops.checkout.detachMsg": "Fazer checkout de um commit específico sai do branch (HEAD desanexado). Continuar?",
   "ops.checkout.commitTitle": "Checkout do commit",
   "ops.checkout.detached": "Commit {sha} (HEAD desanexado)",
+  "ops.checkout.autostash": "Alterações locais guardadas em stash e restauradas",
+  "ops.checkout.stashKept": "Trocado, mas restaurar as alterações locais gerou conflitos. Resolva-os; o stash foi mantido.",
   "ops.branch.new": "Novo branch",
   "ops.branch.startCommit": "Commit inicial: {sha}",
   "ops.branch.startHead": "Início: branch atual ({name})",

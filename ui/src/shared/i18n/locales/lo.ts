@@ -89,6 +89,8 @@ export const lo: Record<Key, string> = {
   "ops.checkout.detachMsg": "ການ checkout ຄອມມິດສະເພາະຈະອອກຈາກບຣານຊ໌ (detached HEAD). ສືບຕໍ່ບໍ?",
   "ops.checkout.commitTitle": "Checkout ຄອມມິດ",
   "ops.checkout.detached": "ຄອມມິດ {sha} (detached HEAD)",
+  "ops.checkout.autostash": "ໄດ້ stash ແລະ ກູ້ຄືນການປ່ຽນແປງໃນເຄື່ອງແລ້ວ",
+  "ops.checkout.stashKept": "ສະຫຼັບແລ້ວ ແຕ່ເກີດຂໍ້ຂັດແຍ່ງຕອນກູ້ຄືນການປ່ຽນແປງ. ກະລຸນາແກ້ໄຂ; stash ຍັງເກັບໄວ້.",
   "ops.branch.new": "ບຣານຊ໌ໃໝ່",
   "ops.branch.startCommit": "ຄອມມິດເລີ່ມຕົ້ນ: {sha}",
   "ops.branch.startHead": "ເລີ່ມຈາກ: ບຣານຊ໌ປັດຈຸບັນ ({name})",

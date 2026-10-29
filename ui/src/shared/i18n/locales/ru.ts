@@ -89,6 +89,8 @@ export const ru: Record<Key, string> = {
   "ops.checkout.detachMsg": "При checkout конкретного коммита вы покинете ветку (detached HEAD). Продолжить?",
   "ops.checkout.commitTitle": "Checkout коммита",
   "ops.checkout.detached": "Коммит {sha} (detached HEAD)",
+  "ops.checkout.autostash": "Локальные изменения спрятаны в stash и восстановлены",
+  "ops.checkout.stashKept": "Переключено, но при восстановлении локальных изменений возник конфликт. Разрешите его; stash сохранён.",
   "ops.branch.new": "Новая ветка",
   "ops.branch.startCommit": "Начальный коммит: {sha}",
   "ops.branch.startHead": "Начало: текущая ветка ({name})",

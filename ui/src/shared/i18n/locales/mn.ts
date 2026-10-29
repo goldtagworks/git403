@@ -89,6 +89,8 @@ export const mn: Record<Key, string> = {
   "ops.checkout.detachMsg": "Тодорхой коммитыг checkout хийвэл салбараас гарна (detached HEAD). Үргэлжлүүлэх үү?",
   "ops.checkout.commitTitle": "Коммит checkout хийх",
   "ops.checkout.detached": "{sha} коммит (detached HEAD)",
+  "ops.checkout.autostash": "Локал өөрчлөлтийг stash хийж, буцаан сэргээлээ",
+  "ops.checkout.stashKept": "Шилжсэн боловч локал өөрчлөлтийг сэргээхэд зөрчил гарлаа. Зөрчлийг шийдээрэй; stash хадгалагдсан.",
   "ops.branch.new": "Шинэ салбар",
   "ops.branch.startCommit": "Эхлэх коммит: {sha}",
   "ops.branch.startHead": "Эхлэл: одоогийн салбар ({name})",

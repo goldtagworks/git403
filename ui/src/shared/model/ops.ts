@@ -263,6 +263,36 @@ async function stashGit(args: string[], done: string) {
   ctx.reload();
 }
 
+/** 브랜치 이동. 로컬 변경이 덮어써진다며 막히면 변경을 스태시에 넣고 이동한 뒤 다시 꺼낸다(GitKraken식).
+ *  이동이 그래도 실패하면 스태시를 되돌리고, 꺼낼 때 충돌하면 스태시를 남겨 둔다. */
+async function switchKeep(args: string[], detail: string) {
+  try {
+    await api.git(ctx.repo, args);
+    return ctx.notify(t("ops.checkout.done"), { detail });
+  } catch (e) {
+    if (!/would be overwritten by checkout/.test(String(e))) return ctx.error(String(e));
+  }
+  try {
+    await api.git(ctx.repo, ["stash", "push", "--include-untracked", "-m", `autostash: ${head() ?? "HEAD"} → ${args.at(-1)}`]);
+  } catch (e) {
+    return ctx.error(String(e));
+  }
+  try {
+    await api.git(ctx.repo, args);
+  } catch (e) {
+    await api.git(ctx.repo, ["stash", "pop"]).catch(() => {});
+    ctx.reload();
+    return ctx.error(String(e));
+  }
+  try {
+    await api.git(ctx.repo, ["stash", "pop"]);
+    ctx.notify(t("ops.checkout.done"), { detail: `${detail} · ${t("ops.checkout.autostash")}` });
+  } catch {
+    ctx.notify(t("ops.checkout.stashKept"), { kind: "info", detail });
+  }
+  ctx.reload();
+}
+
 /** git 실행 뒤 저장소를 다시 읽는다 (서브모듈·worktree 변경은 refs 감시에 안 잡힌다) */
 async function gitReload(args: string[], done?: string) {
   const ok = await git(args, done);
@@ -515,16 +545,16 @@ export const ops = {
   // ---- 브랜치 ----
   checkout: async (name: string) => {
     if (name === head()) return;
-    git(["switch", name], t("ops.checkout.done"), t("ops.checkout.moved", { name }));
+    switchKeep(["switch", name], t("ops.checkout.moved", { name }));
   },
   checkoutRemote: async (remoteBranch: string) => {
     const local = remoteBranch.split("/").slice(1).join("/");
     if (locals().includes(local)) return ops.checkout(local);
-    git(["switch", "-c", local, "--track", remoteBranch], t("ops.checkout.done"), t("ops.checkout.tracking", { local, remote: remoteBranch }));
+    switchKeep(["switch", "-c", local, "--track", remoteBranch], t("ops.checkout.tracking", { local, remote: remoteBranch }));
   },
   checkoutCommit: async (sha: string) => {
     if (await confirm(t("ops.checkout.detachMsg"), t("ops.checkout.commitTitle")))
-      git(["switch", "--detach", sha], t("ops.checkout.done"), t("ops.checkout.detached", { sha: sha.slice(0, 7) }));
+      switchKeep(["switch", "--detach", sha], t("ops.checkout.detached", { sha: sha.slice(0, 7) }));
   },
   createBranch: async (at?: string) => {
     const r = await prompt({

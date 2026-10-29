@@ -89,6 +89,8 @@ export const tl: Record<Key, string> = {
   "ops.checkout.detachMsg": "Kapag nag-checkout ng partikular na commit, aalis ka sa branch (detached HEAD). Magpatuloy?",
   "ops.checkout.commitTitle": "I-checkout ang commit",
   "ops.checkout.detached": "Commit {sha} (hiwalay na HEAD)",
+  "ops.checkout.autostash": "Na-stash at naibalik ang mga lokal na pagbabago",
+  "ops.checkout.stashKept": "Nakalipat, pero nagka-conflict sa pagbalik ng mga lokal na pagbabago. Ayusin ang conflict; naiwan ang stash.",
   "ops.branch.new": "Bagong branch",
   "ops.branch.startCommit": "Panimulang commit: {sha}",
   "ops.branch.startHead": "Simula: kasalukuyang branch ({name})",

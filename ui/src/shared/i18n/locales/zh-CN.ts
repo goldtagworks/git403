@@ -89,6 +89,8 @@ export const zhCN: Record<Key, string> = {
   "ops.checkout.detachMsg": "检出特定提交将离开分支（分离 HEAD）。是否继续？",
   "ops.checkout.commitTitle": "检出提交",
   "ops.checkout.detached": "提交 {sha}（分离 HEAD）",
+  "ops.checkout.autostash": "已将本地更改暂存并恢复",
+  "ops.checkout.stashKept": "已切换，但恢复本地更改时发生冲突。请解决冲突，stash 已保留。",
   "ops.branch.new": "新建分支",
   "ops.branch.startCommit": "起始提交：{sha}",
   "ops.branch.startHead": "起点：当前分支（{name}）",
