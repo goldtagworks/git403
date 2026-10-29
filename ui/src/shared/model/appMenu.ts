@@ -158,6 +158,25 @@ let current: Awaited<ReturnType<typeof import("@tauri-apps/api/menu").Menu.new>>
 const sig = () => JSON.stringify(state) + t("menu.file") + ops.aiOn();
 let last = "";
 
+/* macOS는 창을 닫아도 숨기기만 한다. 그 상태에서 메뉴(설정·열기 등)를 고르면 숨은 창 안에서 열려 반응이 없어 보이므로
+   먼저 창을 보이고 실행한다. 탭 닫기(⌘W)만은 창을 다시 띄우지 않는다. */
+function withShow(items: MenuEntry[], skip: () => void): MenuEntry[] {
+  return items.map((e) => {
+    if ("submenu" in e) return { ...e, submenu: withShow(e.submenu, skip) };
+    if (!("action" in e) || e.action === skip) return e;
+    const run = e.action;
+    return {
+      ...e,
+      action: async () => {
+        const w = (await import("@tauri-apps/api/window")).getCurrentWindow();
+        if (!(await w.isVisible())) await w.show();
+        await w.setFocus();
+        run();
+      },
+    };
+  });
+}
+
 async function apply() {
   if (!deps) return;
   const my = ++seq;
@@ -166,7 +185,7 @@ async function apply() {
   if (IS_VSCODE || !(window as any).__TAURI_INTERNALS__) return;
   const { Menu } = await import("@tauri-apps/api/menu");
   const roles: Roles = {};
-  const menu = await Menu.new({ items: await nativeItems(model, roles) });
+  const menu = await Menu.new({ items: await nativeItems(withShow(model, deps.close), roles) });
   if (my !== seq) return void menu.close(); // 그사이 더 새 요청이 있었다
   await menu.setAsAppMenu();
   await roles.window?.setAsWindowsMenuForNSApp();

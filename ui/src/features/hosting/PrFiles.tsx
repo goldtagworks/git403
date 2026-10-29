@@ -283,7 +283,7 @@ export function PrFiles({ repo, remote, pr, d, range, setRange, active, onBack, 
     <div className="prr-files">
       <div className="prr-files-bar">
         {onBack && (
-          <button className="prr-back" onClick={onBack} title={`${backLabel ?? t("prr.files.back")} (${isMac ? "⌘[" : "Ctrl+["})`}>
+          <button className="prr-back back" onClick={onBack} title={`${backLabel ?? t("prr.files.back")} (${isMac ? "⌘[" : "Ctrl+["})`}>
             {backLabel ?? t("prr.files.back")}
           </button>
         )}
@@ -371,7 +371,7 @@ function ThreadCard({ th }: { th: PrThread }) {
   useLocale();
   const [open, setOpen] = useState(!th.resolved);
   const key = `th:${th.path}:${th.line}`;
-  const items = (): PopItem[] => th.comments.map((c, i) => ({ author: c.author, avatar: c.avatar, kind: t("prr.comment"), at: c.at, body: c.body, where: `${th.path}:${th.line ?? ""}`, ref: longBody(c.body) ? `${key}:${i}` : undefined }));
+  const items = (): PopItem[] => th.comments.map((c, i) => ({ author: c.author, avatar: c.avatar, kind: t("prr.comment"), cls: "info", at: c.at, body: c.body, where: `${th.path}:${th.line ?? ""}`, ref: longBody(c.body) ? `${key}:${i}` : undefined }));
   return (
     <div className={`prr-thread${th.resolved ? " resolved" : ""}`}>
       {th.resolved && (

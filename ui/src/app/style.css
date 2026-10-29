@@ -9,6 +9,8 @@
   --border: rgb(30 32 38 / 0.18);
   --hover: rgb(30 32 38 / 0.07);
   --accent: AccentColor; /* OS 강조색. 지원 안 하는 웹뷰는 아래 @supports 폴백 */
+  --accent-fg: color-mix(in srgb, var(--accent) 82%, #000); /* 강조색 틴트 위 글자(개수 알약·뒤로가기). 틴트와 같은 색이면 묻혀서 명도를 벌린다 */
+  --on-accent: #fff; /* 강조색 채움 위 글자(두 테마 모두 흰색: 다크에서 --surface 글자는 파란 바탕에 묻힌다) */
   --danger: #c93c3f;
   --ok: #2e8b57; --info: #3b6fd8; --warn: #b7791f; /* 토스트 종류색 */
   --nav-app: #3f6fc0; --nav-repo: #2c8660; --nav-link: #7b5dc2; /* 설정 창 왼쪽 탐색 아이콘(묶음별, 채도 낮춤) */
@@ -22,7 +24,7 @@
   --del: rgb(218 54 51 / 0.13);
   --add-hi: rgb(46 160 67 / 0.34); --del-hi: rgb(218 54 51 / 0.32); /* 줄 안에서 실제로 바뀐 글자 */
   --syn-keyword: #a626a4; --syn-string: #3b7d34; --syn-number: #b5651d; --syn-comment: #8a8f9c; --syn-type: #1f6fa8; --syn-fn: #3a62c4; --syn-attr: #b5651d; /* 구문 강조 */
-  --selected: rgb(59 111 216 / 0.14);
+  --selected: color-mix(in srgb, var(--accent) 20%, transparent); /* 선택 배경: 강조색을 따라가고, 바탕과 확실히 갈리는 농도 */
   --checker-a: #ffffff; --checker-b: #e3e5ea; /* 이미지 diff 투명 배경 체커보드 */
   --tint: 14%; --tint-hi: 19%; --tint-sel: 30%; /* 커밋 행 레인 색 틴트(기본·호버·선택) */
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
@@ -39,6 +41,7 @@
   --border: rgb(230 232 236 / 0.17);
   --hover: rgb(230 232 236 / 0.09);
   --danger: #e6676a;
+  --accent-fg: color-mix(in srgb, var(--accent) 45%, #fff);
   --ok: #4cb782; --info: #6b97ec; --warn: #d9a441;
   --nav-app: #7fa4ea; --nav-repo: #66bd90; --nav-link: #a794e4;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.25);
@@ -49,7 +52,7 @@
   --del: rgb(248 81 73 / 0.15);
   --add-hi: rgb(63 185 80 / 0.38); --del-hi: rgb(248 81 73 / 0.36);
   --syn-keyword: #c792ea; --syn-string: #8fc97a; --syn-number: #e8a16a; --syn-comment: #7c8394; --syn-type: #6cb6e8; --syn-fn: #82a8f5; --syn-attr: #e8a16a;
-  --selected: rgb(107 151 236 / 0.2);
+  --selected: color-mix(in srgb, var(--accent) 34%, transparent);
   --checker-a: #2a2e37; --checker-b: #353a45;
   --tint: 22%; --tint-hi: 30%; --tint-sel: 50%;
   color-scheme: dark;
@@ -68,6 +71,7 @@
     --border: rgb(230 232 236 / 0.17);
     --hover: rgb(230 232 236 / 0.09);
     --danger: #e6676a;
+    --accent-fg: color-mix(in srgb, var(--accent) 45%, #fff);
     --ok: #4cb782; --info: #6b97ec; --warn: #d9a441;
     --nav-app: #7fa4ea; --nav-repo: #66bd90; --nav-link: #a794e4;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.25);
@@ -78,7 +82,7 @@
     --del: rgb(248 81 73 / 0.15);
     --add-hi: rgb(63 185 80 / 0.38); --del-hi: rgb(248 81 73 / 0.36);
     --syn-keyword: #c792ea; --syn-string: #8fc97a; --syn-number: #e8a16a; --syn-comment: #7c8394; --syn-type: #6cb6e8; --syn-fn: #82a8f5; --syn-attr: #e8a16a;
-    --selected: rgb(107 151 236 / 0.2);
+    --selected: color-mix(in srgb, var(--accent) 34%, transparent);
     --checker-a: #2a2e37; --checker-b: #353a45;
     --tint: 22%; --tint-hi: 30%; --tint-sel: 50%;
     color-scheme: dark;
@@ -115,7 +119,7 @@ input, textarea, .selectable { user-select: text; -webkit-user-select: text; }
 .tool-sep { width: 1px; align-self: stretch; margin: 8px 6px; background: var(--border); }
 .badge-count {
   position: absolute; top: -5px; right: -10px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px;
-  font-size: 10px; line-height: 15px; text-align: center; font-weight: 600; background: var(--accent); color: var(--surface);
+  font-size: 10px; line-height: 15px; text-align: center; font-weight: 600; background: var(--accent); color: var(--on-accent);
 }
 input, button, select {
   font: inherit; color: inherit; background: var(--bg);
@@ -155,8 +159,17 @@ button:disabled { opacity: 0.45; }
 .banner.error { color: var(--danger); background: var(--del); }
 .banner.op { background: var(--selected); }
 .empty { margin: auto; color: var(--muted); word-break: keep-all; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-button.primary { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 button.danger { background: var(--danger); color: var(--surface); border-color: var(--danger); }
+/* 의미색 버튼(GitKraken처럼): 진행은 초록, 버리기·취소는 빨강. 옅은 채움 + 같은 색 테두리·글자 */
+button.go, button.stop, .hunk-btn { --k: var(--accent); color: var(--k); border-color: color-mix(in srgb, var(--k) 55%, transparent); background: color-mix(in srgb, var(--k) 14%, transparent); }
+.hunk-btn:not(.hunk-danger) { color: var(--accent-fg); }
+button.go { --k: var(--ok); } button.stop, .hunk-btn.hunk-danger { --k: var(--danger); }
+button.go:active:not(:disabled), button.stop:active:not(:disabled), .hunk-btn:active:not(:disabled) { background: color-mix(in srgb, var(--k) 26%, transparent); }
+/* 뒤로가기는 어디서나 같은 모양: 강조색 글자 + 옅은 강조색 채움 (회색 보조 버튼·크게 보기와 구분) */
+button.back { color: var(--accent-fg); border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: color-mix(in srgb, var(--accent) 24%, transparent); font-weight: 600; }
+button.back:active:not(:disabled) { background: color-mix(in srgb, var(--accent) 36%, transparent); }
+.up { color: var(--ok); } .down { color: var(--info); }
 
 /* 작업 영역: 사이드바 | (커밋 목록 / 상세) */
 .workspace { flex: 1; min-height: 0; display: flex; }
@@ -201,6 +214,9 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 .sidebar { overflow: hidden; }
 .sidebar > section { display: flex; flex-direction: column; min-height: 0; flex: none; }
 .sidebar > section:has(> .section-title[aria-expanded="true"]) { flex: 1 1 0; min-height: 84px; overflow: auto; }
+/* 펼친 섹션 사이에만 경계(접힌 섹션엔 없음): 맨 위 띠를 끌어 높이 조절(Sidebar.tsx onGrip). 섹션이 스크롤돼도 띠는 위에 붙어 있다 */
+.sidebar > section:has(> .section-title[aria-expanded="true"]) ~ section:has(> .section-title[aria-expanded="true"])::before { content: ""; position: sticky; top: 0; flex: none; height: 5px; margin-bottom: -5px; z-index: 2; cursor: row-resize; }
+.sidebar > section.grip-hot::before { background: linear-gradient(var(--accent), var(--accent)) 0 0 / 100% 2px no-repeat; }
 .sidebar > section > .section-title { flex: none; position: sticky; top: 0; z-index: 1; background: var(--surface); }
 .sidebar > section > .section-title:hover { background: linear-gradient(var(--hover), var(--hover)), var(--surface); }
 .sidebar > section > :not(.section-title) { flex: none; }
@@ -213,7 +229,7 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 .sidebar section { border-top: 1px solid transparent; padding-top: 2px; }
 .sidebar section + section { border-top-color: var(--border); margin-top: 2px; }
 .section-title { color: var(--muted); font-size: 11px; font-weight: 600 !important; letter-spacing: 0.02em; padding: 4px 12px !important; }
-.section-title .count { margin-left: auto; font-weight: 400; font-variant-numeric: tabular-nums; }
+.section-title .count { margin-left: auto; min-width: 18px; padding: 0 6px; border-radius: 9px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--accent-fg); background: color-mix(in srgb, var(--accent) 26%, transparent); }
 .sidebar .item { color: var(--fg); position: relative; }
 /* 그래프에서 숨기기: 호버하면 왼쪽에 눈, 숨긴 항목은 흐리게 + 눈 가림이 늘 보인다 */
 .sidebar .item .eye { position: absolute; left: 6px; top: 50%; transform: translateY(-50%); display: none; line-height: 0; padding: 1px; border-radius: 3px; color: var(--muted); }
@@ -320,7 +336,7 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
   font-size: 11px; line-height: 17px; border: 1px solid var(--border); background: var(--surface);
 }
 .badge.local { border-color: var(--accent); }
-.badge.head { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+.badge.head { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 .badge.remote { color: var(--muted); }
 .badge.tag { border-style: dashed; }
 
@@ -355,7 +371,7 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 .files-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 0 4px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
 .segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .segmented button { border: 0; border-radius: 0; padding: 1px 10px; font-size: 12px; background: none; }
-.segmented button[aria-checked="true"] { background: var(--selected); }
+.segmented button[aria-checked="true"] { background: var(--selected); color: var(--accent-fg); }
 .files { list-style: none; margin: 0; padding: 0; }
 .files li.dir { color: var(--muted); }
 .files li { display: flex; gap: 8px; padding: 2px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -443,7 +459,7 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 
 /* 커밋 목록 맨 위 "로컬 변경사항" 행 */
 .local-row { position: relative; height: 30px; flex: none; border-bottom: 1px solid var(--border); font-weight: 600; }
-.count-pill { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 6px; border-radius: 9px; background: var(--accent); color: var(--surface); font-size: 11px; text-align: center; }
+.count-pill { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 6px; border-radius: 9px; background: var(--accent); color: var(--on-accent); font-size: 11px; text-align: center; }
 
 /* 로컬 변경사항 화면 */
 .info.changes { display: flex; flex-direction: column; padding: 0; }
@@ -466,6 +482,8 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 .files li:hover .row-btn { visibility: visible; }
 .s-\? { color: #3c9c78; } .s-\! { color: var(--danger); }
 .commit-box { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--border); flex: none; }
+/* 커밋 입력은 스플리터로 정한 높이 안에서 설명 칸이 남는 높이를 채운다 */
+.commit-box textarea:last-of-type { flex: 1; min-height: 40px; resize: none; }
 .commit-box textarea { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; resize: vertical; }
 .commit-actions { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 12px; }
 .commit-actions label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block !important; }
@@ -639,7 +657,7 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 .seg button { border-radius: 0; margin-left: -1px; }
 .seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
 .seg button:last-child { border-radius: 0 6px 6px 0; }
-.seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); border-color: var(--accent); position: relative; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); position: relative; }
 .stats-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 14px; transition: opacity 0.15s var(--ease); }
 .stats h3 { margin: 0 0 6px; font-size: 12px; }
 .stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
@@ -676,7 +694,7 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 .settings-tabs [role="tab"] { display: flex; align-items: center; gap: 9px; min-height: 28px; text-align: left; border: 0; background: none; box-shadow: none; padding: 3px 9px; border-radius: 8px; color: var(--fg); font: inherit; }
 .settings-tabs [role="tab"] > .icon { flex: none; color: var(--nav); }
 .settings-tabs [role="tab"]:hover { background: var(--hover); }
-.settings-tabs [role="tab"][aria-selected="true"] { font-weight: 600; background: var(--selected); }
+.settings-tabs [role="tab"][aria-selected="true"] { font-weight: 600; background: var(--selected); color: var(--accent-fg); }
 .settings-panel { min-width: 0; min-height: 0; overflow: auto; padding: 12px 24px 28px 16px; }
 .sheet .settings-title { margin: 0; padding: 4px 0 6px; font-size: 20px; font-weight: 600; }
 .panel-form { display: flex; flex-direction: column; gap: 20px; }
@@ -836,7 +854,7 @@ mark.hl { background: color-mix(in srgb, var(--accent) 28%, transparent); color:
 .nr { box-shadow: inset 3px 0 0 var(--accent); background-image: linear-gradient(color-mix(in srgb, var(--accent) 9%, transparent), color-mix(in srgb, var(--accent) 9%, transparent)); }
 .nr.cur { background-image: linear-gradient(color-mix(in srgb, var(--accent) 20%, transparent), color-mix(in srgb, var(--accent) 20%, transparent)); }
 .diff.noted .dl::before, .diff.noted .sc::before { content: ""; flex: none; width: 22px; } /* 배지 자리: 줄 번호와 겹치지 않게 */
-.nb { position: absolute; left: 5px; top: 2px; z-index: 1; display: flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%; background: var(--accent); color: var(--surface); font: 600 10px/1 -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; font-variant-numeric: tabular-nums; user-select: none; -webkit-user-select: none; }
+.nb { position: absolute; left: 5px; top: 2px; z-index: 1; display: flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font: 600 10px/1 -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; font-variant-numeric: tabular-nums; user-select: none; -webkit-user-select: none; }
 .nb.dot { width: 7px; height: 7px; left: 9px; top: 6px; background: var(--warn); }
 .note-wrap { position: sticky; left: 0; width: 100cqw; box-sizing: border-box; padding: 4px 12px 6px 7ch; white-space: normal; font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", "Pretendard Variable", Pretendard, system-ui, sans-serif; }
 .diff.split .note-wrap { position: static; width: auto; padding-left: calc(50% + 6px); }
@@ -878,7 +896,7 @@ mark.hl { background: color-mix(in srgb, var(--accent) 28%, transparent); color:
 .guide-step:hover { background: var(--hover); }
 .guide-step.cur { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
 .gs-n { grid-row: 1 / span 3; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--hover); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.guide-step.cur .gs-n { background: var(--accent); color: var(--surface); }
+.guide-step.cur .gs-n { background: var(--accent); color: var(--on-accent); }
 .gs-title { font-weight: 600; }
 .gs-loc { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gs-detail { color: var(--muted); font-weight: 400; word-break: keep-all; }
@@ -902,7 +920,11 @@ mark.hl { background: color-mix(in srgb, var(--accent) 28%, transparent); color:
 .tool-ico:hover:not(:disabled), .tool-txt:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
 .tool-txt[aria-pressed="true"] { background: var(--selected); color: var(--fg); }
 .big-wrap { position: relative; display: inline-flex; margin-left: 4px; padding-left: 8px; border-left: 1px solid var(--border); flex: none; }
-.big-btn { display: inline-flex; align-items: center; gap: 5px; color: var(--fg); border: 1px solid var(--border); background: var(--surface); line-height: 20px; } /* 크게 보기·닫기: 테두리 있는 버튼(눈에 띄게) */
+/* 크게 보기: 보라(--nav-link) 틴트로 뒤로가기(강조색)·회색 보기 전환과 구분. 켜진 상태(원래대로·닫기)는 같은 보라 채움 + 흰 글자 */
+.big-btn { display: inline-flex; align-items: center; gap: 5px; line-height: 20px; font-weight: 500; color: color-mix(in srgb, var(--nav-link) 80%, var(--fg)); border: 1px solid color-mix(in srgb, var(--nav-link) 55%, transparent); background: color-mix(in srgb, var(--nav-link) 16%, transparent); }
+.big-btn:hover:not(:disabled) { color: color-mix(in srgb, var(--nav-link) 80%, var(--fg)); background: color-mix(in srgb, var(--nav-link) 26%, transparent); }
+.big-btn.on, .big-btn.on:hover:not(:disabled) { color: var(--on-accent); background: var(--nav-link); border-color: var(--nav-link); }
+.big-btn.on .big-kbd { color: var(--on-accent); border-color: rgb(255 255 255 / 0.5); }
 .big-kbd { font: 10px/14px ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
 .big-hint { position: absolute; top: calc(100% + 6px); right: 0; z-index: 5; display: flex; align-items: center; gap: 6px; width: max-content; max-width: 260px; padding: 6px 6px 6px 10px; white-space: normal; word-break: keep-all; line-height: 1.4; background: var(--surface); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-float); }
 .big-hint::before { content: ""; position: absolute; top: -5px; right: 22px; width: 8px; height: 8px; background: var(--surface); border-left: 1px solid var(--border); border-top: 1px solid var(--border); transform: rotate(45deg); }
@@ -954,7 +976,7 @@ html[data-big] .ib-canvases { grid-template-columns: repeat(auto-fit, minmax(min
 .prr-tabs { display: flex; gap: 2px; flex: 1; min-width: 0; }
 .prr-tabs button { border: 0; background: transparent; color: var(--muted); padding: 3px 8px; border-radius: 6px; font-weight: 500; white-space: nowrap; }
 .prr-tabs button:hover:not(:disabled) { background: var(--hover); }
-.prr-tabs button.on { background: var(--selected); color: var(--fg); }
+.prr-tabs button.on { background: var(--selected); color: var(--accent-fg); box-shadow: inset 0 -2px 0 var(--accent); }
 .prr-tabs button:disabled { opacity: 0.5; }
 .prr-tabs .count { margin-left: 5px; font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums; color: var(--muted); }
 .prr-icon { border: 0; background: transparent; color: var(--muted); padding: 4px; border-radius: 6px; display: inline-flex; }
@@ -983,6 +1005,10 @@ html[data-big] .ib-canvases { grid-template-columns: repeat(auto-fit, minmax(min
 .prr-badge.rereq, .prr-badge.warn { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
 .prr-badge.ok { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
 .prr-badge.info { background: color-mix(in srgb, var(--info) 16%, transparent); color: var(--info); }
+.prr-badge.accent { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent-fg); }
+.prr-badge.danger { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+/* 타임라인 종류 라벨(코멘트·승인·변경 요청): 배지와 같은 의미색 글자 */
+.prr-k { color: var(--muted); font-weight: 500; } .prr-k.info { color: var(--info); } .prr-k.ok { color: var(--ok); } .prr-k.danger { color: var(--danger); }
 .prr-detail { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
 .prr-empty { margin: auto; color: var(--muted); }
 .prr-head { flex: none; padding: 12px 20px 0; background: var(--surface); border-bottom: 1px solid var(--border); }
@@ -997,7 +1023,8 @@ html[data-big] .ib-canvases { grid-template-columns: repeat(auto-fit, minmax(min
 .prr-hint { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-radius: 6px; border-left: 3px solid var(--info); background: color-mix(in srgb, var(--info) 12%, transparent); word-break: keep-all; }
 .prr-hint.is-warn { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
 .prr-hint > span { flex: 1; min-width: 0; }
-.prr-hint button { flex: none; }
+.prr-hint button { flex: none; --k: var(--info); color: var(--k); border-color: color-mix(in srgb, var(--k) 55%, transparent); background: color-mix(in srgb, var(--k) 16%, transparent); }
+.prr-hint.is-warn button { --k: var(--warn); }
 .prr-mine { margin: 0 0 6px; padding: 2px 0 6px; border-bottom: 1px solid var(--border); }
 .prr-mine-head { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: transparent; color: var(--fg); font: inherit; padding: 4px 8px; border-radius: 6px; text-align: left; }
 .prr-mine-head:hover { background: var(--hover); }
@@ -1274,5 +1301,5 @@ html[data-big] .detail-col .details > .info { width: var(--detail-w) !important;
 /* 오른쪽 열: 열 전체가 아니라 변경 파일 목록(·가이드)만 스크롤한다 — 메시지 상자·프로필은 고정 */
 .detail-col .details > .info { display: flex; flex-direction: column; overflow: hidden; }
 .detail-col .details > .info > * { flex: none; }
-.detail-col .details > .info > .files, .detail-col .details > .info > .guide { flex: 1 1 0; min-height: 60px; overflow: auto; }
+.detail-col .details > .info > .files, .detail-col .details > .info > .guide, .detail-col .details > .info > .change-list { flex: 1 1 0; min-height: 60px; overflow: auto; }
 .detail-col .details > .info > .msg-box { flex: 0 1 auto; } /* 창이 낮으면 메시지 상자가 먼저 줄어(최소 60px) 파일 목록 자리를 남긴다 */

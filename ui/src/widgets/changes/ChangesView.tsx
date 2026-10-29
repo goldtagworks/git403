@@ -37,6 +37,8 @@ export const ChangesView = memo(function ChangesView({
   const touched = useTouched();
   const loc = useLocale();
   const [infoW, infoSplit] = useSplit("changes", 440, 220, 900, "x");
+  // 파일 목록 ↔ 커밋 입력 경계: 입력 상자 높이(바닥에 붙고, 목록이 나머지를 채운다)
+  const [boxH, boxSplit] = useSplit("commit-box", 190, 130, 600, "y", undefined, true);
   const [sel, setSel] = useState<{ side: Side; path: string } | null>(null);
   // 읽어 온 diff와 "어떤 무시 옵션으로 만든 diff인지": 옵션을 끈 직후 새 diff가 오기 전의 옛 diff로 hunk를 스테이지하지 못하게
   const [dstate, setD] = useState({ text: "", eol: false, ws: false });
@@ -117,7 +119,7 @@ export const ChangesView = memo(function ChangesView({
           <span className="head-actions">
             {side === "unstaged" && <button className="secondary" onClick={() => ops.snapshot()} title={t("changes.snapshotTip")}>{t("changes.snapshot")}</button>}
             <button className="secondary" onClick={() => ops.savePatchChanges(side === "staged" ? "staged" : "unstaged")}>{t("changes.savePatch")}</button>
-            {side === "unstaged" && <button className="secondary" onClick={() => discard(files)}>{t("changes.discardAll")}</button>}
+            {side === "unstaged" && <button className="secondary stop" onClick={() => discard(files)}>{t("changes.discardAll")}</button>}
             {/* 좁을 때만 보인다: 위 보조 버튼들을 메뉴로 */}
             <button
               className="more"
@@ -132,7 +134,7 @@ export const ChangesView = memo(function ChangesView({
             >
               ⋯
             </button>
-            <button onClick={() => run(side === "staged" ? api.unstage(repo, files.map((f) => f.path)) : api.stage(repo, files.map((f) => f.path)))}>
+            <button className={side === "staged" ? undefined : "go"} onClick={() => run(side === "staged" ? api.unstage(repo, files.map((f) => f.path)) : api.stage(repo, files.map((f) => f.path)))}>
               {side === "staged" ? t("changes.unstageAll") : t("changes.stageAll")}
             </button>
           </span>
@@ -194,7 +196,8 @@ export const ChangesView = memo(function ChangesView({
             {list("staged", staged)}
           </>
         )}
-        <CommitBox repo={repo} canCommit={staged.length > 0} onError={onError} />
+        {boxSplit}
+        <CommitBox repo={repo} canCommit={staged.length > 0} onError={onError} height={boxH} />
       </div>
       }
     >
@@ -221,7 +224,7 @@ export const ChangesView = memo(function ChangesView({
   );
 });
 
-const CommitBox = memo(function CommitBox({ repo, canCommit, onError }: { repo: string; canCommit: boolean; onError: (e: string) => void }) {
+const CommitBox = memo(function CommitBox({ repo, canCommit, onError, height }: { repo: string; canCommit: boolean; onError: (e: string) => void; height: number }) {
   useLocale();
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -285,6 +288,7 @@ const CommitBox = memo(function CommitBox({ repo, canCommit, onError }: { repo: 
   return (
     <form
       className="commit-box"
+      style={{ height }}
       onSubmit={(e) => {
         e.preventDefault();
         submit();

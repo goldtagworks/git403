@@ -524,7 +524,7 @@ function App() {
             {!COMPACT && !DETAIL && (right ? colSplit : listSplit)}
             {!COMPACT && !DETAIL && selected === WORKTREE && status && wide && (
               <div className="wide-bar">
-                <button onClick={() => setWide(false)}>← {t("app.backToGraph")}</button>
+                <button className="back" onClick={() => setWide(false)}>← {t("app.backToGraph")}</button>
                 <span>{t("graph.localChanges")}</span>
               </div>
             )}

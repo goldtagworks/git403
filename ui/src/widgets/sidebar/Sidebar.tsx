@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { memo, useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
 import { t, useLocale, type Key } from "../../shared/i18n/i18n";
 import { Highlight } from "../../shared/ui/Highlight";
 import { countRender } from "../../shared/lib/profile";
@@ -69,7 +69,7 @@ const RefItem = memo(function RefItem({ repo, r, nodeKey, label, pad, leafIcon, 
       <span className="label"><Highlight text={label} q={q} /></span>
       {(r.ahead > 0 || r.behind > 0) && (
         <span className="state track" title={t("sidebar.track", { ahead: r.ahead, behind: r.behind })}>
-          {r.behind > 0 && `↓${r.behind}`}{r.ahead > 0 && r.behind > 0 && " "}{r.ahead > 0 && `↑${r.ahead}`}
+          {r.behind > 0 && <span className="down">↓{r.behind}</span>}{r.ahead > 0 && r.behind > 0 && " "}{r.ahead > 0 && <span className="up">↑{r.ahead}</span>}
         </span>
       )}
     </button>
@@ -247,6 +247,76 @@ function buildTree(refs: Ref[], kind: RefKind): Node[] {
   return root.children;
 }
 
+/* 펼친 섹션 사이 경계 끌기(VS Code 아코디언처럼). 접힌 섹션엔 경계가 없다.
+   펼친 섹션 맨 위 띠(::before, CSS)를 잡으면 바로 위 펼친 섹션과 높이를 주고받는다. 드래그 중엔 style만 고치고 놓을 때 저장(리렌더 없음). */
+const GROW_KEY = "side:grow";
+const MIN_SEC = 84;
+const isOpen = (el: Element | null) => !!el?.querySelector(':scope > .section-title[aria-expanded="true"]');
+function readGrow(): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(GROW_KEY) || "{}"); } catch { return {}; }
+}
+function applyGrow(nav: HTMLElement | null) {
+  const g = readGrow();
+  nav?.querySelectorAll<HTMLElement>(":scope > section[data-sec]").forEach((s) => (s.style.flexGrow = isOpen(s) && g[s.dataset.sec!] ? String(g[s.dataset.sec!]) : ""));
+}
+function gripOf(e: React.MouseEvent<HTMLElement>): [HTMLElement, HTMLElement] | null {
+  const sec = e.target as HTMLElement;
+  if (sec.tagName !== "SECTION" || !sec.dataset.sec || !isOpen(sec) || e.clientY - sec.getBoundingClientRect().top > 5) return null;
+  let prev = sec.previousElementSibling;
+  while (prev && !(prev.tagName === "SECTION" && isOpen(prev))) prev = prev.previousElementSibling;
+  return prev ? [prev as HTMLElement, sec] : null;
+}
+function onGrip(e: React.PointerEvent<HTMLElement>) {
+  const pair = e.button === 0 && gripOf(e);
+  if (!pair) return;
+  e.preventDefault();
+  dragging = true;
+  setHot(pair[1]);
+  const open = [...e.currentTarget.querySelectorAll<HTMLElement>(":scope > section[data-sec]")].filter(isOpen);
+  // 시작할 때 펼친 섹션 모두의 grow를 지금 높이(px, flex-basis 0이라 패딩·테두리는 뺀다)로 맞춰 두면, 두 섹션만 바꿔도 나머지는 그대로다
+  const grow = (s: HTMLElement) => {
+    const c = getComputedStyle(s);
+    return s.getBoundingClientRect().height - parseFloat(c.paddingTop) - parseFloat(c.paddingBottom) - parseFloat(c.borderTopWidth) - parseFloat(c.borderBottomWidth);
+  };
+  const gs = open.map(grow);
+  open.forEach((s, i) => (s.style.flexGrow = String(gs[i])));
+  const [a, b] = pair, y0 = e.clientY, ga = grow(a), gb = grow(b), ha = a.getBoundingClientRect().height, hb = b.getBoundingClientRect().height;
+  const move = (m: PointerEvent) => {
+    const d = Math.max(MIN_SEC - ha, Math.min(hb - MIN_SEC, m.clientY - y0));
+    a.style.flexGrow = String(ga + d);
+    b.style.flexGrow = String(gb - d);
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    dragging = false;
+    setHot(null);
+    const g = readGrow();
+    open.forEach((s) => (g[s.dataset.sec!] = Math.round(Number(s.style.flexGrow))));
+    try { localStorage.setItem(GROW_KEY, JSON.stringify(g)); } catch { /* 저장 못 해도 이번 크기는 유지 */ }
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+}
+// 경계 위에 있을 때만 그 섹션에 .grip-hot (VS Code처럼 강조색 선). 드래그 중엔 끝날 때까지 유지
+let hot: HTMLElement | null = null;
+let dragging = false;
+function setHot(el: HTMLElement | null) {
+  if (hot === el) return;
+  hot?.classList.remove("grip-hot");
+  el?.classList.add("grip-hot");
+  hot = el;
+}
+function onGripHover(e: React.PointerEvent<HTMLElement>) {
+  if (!dragging) setHot(e.type === "pointerleave" ? null : gripOf(e)?.[1] ?? null);
+}
+// 경계 더블클릭: 다시 똑같이 나눈다
+function onGripReset(e: React.MouseEvent<HTMLElement>) {
+  if (!gripOf(e)) return;
+  try { localStorage.removeItem(GROW_KEY); } catch { /* 무시 */ }
+  applyGrow(e.currentTarget);
+}
+
 export const Sidebar = memo(function Sidebar({ repo, refs, submodules, worktrees, onSelect }: { repo: string; refs: Ref[]; submodules: Submodule[]; worktrees: Worktree[]; onSelect: (commit: string) => void }) {
   countRender("Sidebar");
   useLocale();
@@ -255,6 +325,9 @@ export const Sidebar = memo(function Sidebar({ repo, refs, submodules, worktrees
   // 필터: 입력 상태는 Sidebar 안에만 둔다 (그래프·상세는 다시 그려지지 않는다)
   const [q, setQ] = useState("");
   const filterRef = useRef<HTMLInputElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+  // 섹션이 접히고 펼쳐져도(PrSection 등 자식 렌더 포함) 저장한 높이 비율을 다시 입힌다
+  useLayoutEffect(() => applyGrow(navRef.current));
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.altKey && e.code === "KeyF") {
@@ -313,7 +386,7 @@ export const Sidebar = memo(function Sidebar({ repo, refs, submodules, worktrees
   const none = !!needle && shownKind.every((rs) => rs.length === 0);
 
   return (
-    <nav className="sidebar">
+    <nav className="sidebar" ref={navRef} onPointerDown={onGrip} onPointerMove={onGripHover} onPointerLeave={onGripHover} onDoubleClick={onGripReset}>
       <label className="side-filter">
         <Icon name="search" size={13} />
         <input
@@ -333,7 +406,7 @@ export const Sidebar = memo(function Sidebar({ repo, refs, submodules, worktrees
         const open = !!needle || !closed.has(kind);
         if (needle && shownKind[i].length === 0) return null;
         return (
-          <section key={kind}>
+          <section key={kind} data-sec={kind}>
             <button
               className="section-title"
               aria-expanded={open}
@@ -350,7 +423,7 @@ export const Sidebar = memo(function Sidebar({ repo, refs, submodules, worktrees
       })}
       <PrSection repo={repo} />
       {submodules.length > 0 && (
-        <section>
+        <section data-sec="submodule">
           <button className="section-title" aria-expanded={!closed.has("submodule")} onClick={() => toggle("submodule")} onContextMenu={contextMenu(submoduleSectionMenu)}>
             <Icon name={closed.has("submodule") ? "chevronRight" : "chevronDown"} size={12} />
             {t("sidebar.submodules")}
@@ -374,7 +447,7 @@ export const Sidebar = memo(function Sidebar({ repo, refs, submodules, worktrees
         </section>
       )}
       {worktrees.length > 1 && (
-        <section>
+        <section data-sec="worktree">
           <button className="section-title" aria-expanded={!closed.has("worktree")} onClick={() => toggle("worktree")} onContextMenu={contextMenu(worktreeSectionMenu)}>
             <Icon name={closed.has("worktree") ? "chevronRight" : "chevronDown"} size={12} />
             Worktree

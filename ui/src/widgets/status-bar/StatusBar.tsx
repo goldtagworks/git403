@@ -48,7 +48,7 @@ export const StatusBar = memo(function StatusBar({
           {status.branch}
           {status.upstream && (
             <span className="ab" title={t("status.upstream", { upstream: status.upstream })}>
-              ↑{status.ahead} ↓{status.behind}
+              <span className={status.ahead ? "up" : undefined}>↑{status.ahead}</span> <span className={status.behind ? "down" : undefined}>↓{status.behind}</span>
             </span>
           )}
         </span>

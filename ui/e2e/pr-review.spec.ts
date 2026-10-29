@@ -343,7 +343,7 @@ test("팝업: 제목줄(작성자·종류 배지·시각), 이전/다음, Esc �
   const d = pop(page);
   await expect(d.locator(":scope > .sheet-head")).toContainText("you");
   await expect(d.locator(":scope > .sheet-head .prr-badge")).toHaveText("변경 요청함");
-  await expect(d.locator(":scope > .sheet-head .prr-badge")).toHaveClass(/warn/);
+  await expect(d.locator(":scope > .sheet-head .prr-badge")).toHaveClass(/danger/);
   await expect(d.locator(":scope > .sheet-head time")).toBeVisible();
   await expect(d.locator(":scope > .sheet-head")).toContainText("1/3"); // 커밋은 건너뛴다
   const prev = d.getByRole("button", { name: "이전 항목" });

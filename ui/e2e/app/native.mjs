@@ -227,6 +227,20 @@ try {
     front();
   });
 
+  await step("창을 닫은 뒤 메뉴 막대 Settings…: 숨은 창을 다시 띄우고 설정을 연다", async () => {
+    const wins = () => Number(osa('tell application "System Events" to count windows of process "git403"'));
+    front();
+    osa('tell application "System Events" to tell process "git403" to click (first button of window 1 whose subrole is "AXCloseButton")');
+    await until(() => wins() === 0, "창 숨김");
+    osa('tell application "System Events" to tell process "git403" to click (first menu item of menu 1 of menu bar item 2 of menu bar 1 whose name starts with "Settings")');
+    await until(() => wins() >= 1, "메뉴로 창 다시 보임");
+    await js(`
+      await waitFor(() => $$('[role=dialog]').length > 0, "설정 시트");
+      document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+      await waitFor(() => $$('[role=dialog]').length === 0, "설정 닫힘");
+    `);
+  });
+
   await step("외부 diff 도구: 커밋 상세 파일 우클릭(네이티브 메뉴) → 커밋 전후 파일로 difftool 실행", async () => {
     await js(`
       press(byText(".commits .subject", "a를 바꿈"));

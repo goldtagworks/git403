@@ -510,7 +510,9 @@ const MERGE = { MERGEABLE: "prr.merge.ok", CONFLICTING: "prr.merge.conflict", UN
 const CI = { SUCCESS: "prr.ci.success", FAILURE: "prr.ci.failure", PENDING: "prr.ci.pending" } as const;
 const REVIEW = { APPROVED: "prr.st.approved", CHANGES_REQUESTED: "prr.st.changes", COMMENTED: "prr.st.commented" } as const;
 
-const KIND_CLS = { APPROVED: "ok", CHANGES_REQUESTED: "warn", COMMENTED: "info" } as const;
+const KIND_CLS = { APPROVED: "ok", CHANGES_REQUESTED: "danger", COMMENTED: "info" } as const;
+/** 타임라인·팝업 종류 라벨 색: 승인 ok · 변경 요청 danger · 코멘트 info */
+const kindCls = (it: PrTimelineItem) => (it.kind === "review" ? KIND_CLS[(it.state ?? "") as keyof typeof KIND_CLS] ?? "" : "info");
 const kindOf = (it: PrTimelineItem) => (it.kind === "review" ? (it.state && it.state in REVIEW ? t(REVIEW[it.state as keyof typeof REVIEW]) : t("prr.review")) : t("prr.comment"));
 
 /** 개요 맨 위 안내줄: 내 리뷰 상태와 다음 할 일 한 문장. 해당 없으면 null */
@@ -536,11 +538,11 @@ function Overview({ pr, d, me, k, onCommit, onNew, onAi }: { pr: InboxPr; d: PrD
     tl.forEach((it, i) => {
       if (it.kind === "commit" || !it.body) return;
       at.set(i, list.length);
-      list.push({ author: it.author, avatar: it.avatar, kind: kindOf(it), cls: it.kind === "review" ? KIND_CLS[(it.state ?? "") as keyof typeof KIND_CLS] ?? "" : "", at: it.at, body: it.body, ref: `tl${i}` });
+      list.push({ author: it.author, avatar: it.avatar, kind: kindOf(it), cls: kindCls(it), at: it.at, body: it.body, ref: `tl${i}` });
     });
     return { list, at };
   }, [tl, intlTag()]); // eslint-disable-line react-hooks/exhaustive-deps
-  const openBody = useCallback(() => prPopup.open([{ author: pr.author, avatar: pr.authorAvatar, kind: t("prr.body"), at: pr.createdAt, body: d.body, ref: "body" }]), [pr, d.body]);
+  const openBody = useCallback(() => prPopup.open([{ author: pr.author, avatar: pr.authorAvatar, kind: t("prr.body"), cls: "accent", at: pr.createdAt, body: d.body, ref: "body" }]), [pr, d.body]);
   return (
     <>
       {hint && (
@@ -627,7 +629,7 @@ function Entry({ it, idx, pop, list, head, pr, onCommit }: { it: PrTimelineItem;
       </li>
     );
   const kind = kindOf(it);
-  const meta = <><strong>{it.author}</strong> <span className="hint">{kind}</span> {when}</>;
+  const meta = <><strong>{it.author}</strong> <span className={`prr-k ${kindCls(it)}`}>{kind}</span> {when}</>;
   return (
     <li className={`prr-entry ${it.kind}${pop >= 0 ? " prr-click prr-peek" : ""}`} {...(pop >= 0 ? peek(() => prPopup.open(list, pop), `tl${idx}`) : {})}>
       <span className="prr-dot" />

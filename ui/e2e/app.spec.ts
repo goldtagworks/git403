@@ -533,6 +533,43 @@ test("사이드바: 펼친 섹션들이 높이를 똑같이 나누고 안에서 
   await expect(page.locator(".sidebar .splitter")).toHaveCount(0);
 });
 
+test("사이드바: 펼친 섹션 사이 경계를 끌면 두 섹션 높이만 바뀌고 저장, 더블클릭은 똑같이, 접힌 섹션 위엔 경계 없음", async ({ page }) => {
+  await openRepo(page);
+  const open = page.locator(".sidebar > section:has(> .section-title[aria-expanded=true])");
+  const heights = () => open.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
+  const before = await heights();
+  const b = (await open.nth(1).boundingBox())!;
+  await page.mouse.move(b.x + 40, b.y + 30);
+  await expect(page.locator(".sidebar .grip-hot")).toHaveCount(0); // 섹션 안쪽은 선 없음
+  await page.mouse.move(b.x + 40, b.y + 2);
+  await expect(open.nth(1)).toHaveClass(/grip-hot/); // 경계 위에선 강조색 선
+  await page.mouse.down();
+  await page.mouse.move(b.x + 40, b.y + 42, { steps: 4 });
+  await page.mouse.up();
+  const after = await heights();
+  // 아래 섹션은 최소 높이(84)까지 줄고, 두 섹션 높이 합은 그대로
+  expect(after[0]).toBeGreaterThan(before[0]);
+  expect(after[1]).toBeGreaterThanOrEqual(83);
+  expect(Math.abs(after[0] + after[1] - before[0] - before[1])).toBeLessThanOrEqual(2);
+  expect(after.slice(2)).toEqual(before.slice(2));
+  expect(await page.evaluate(() => localStorage.getItem("side:grow"))).toBeTruthy();
+  // 다시 그려도(섹션 접고 펴기) 유지
+  await page.reload();
+  await expect(open.nth(1)).toBeVisible();
+  await expect.poll(async () => (await heights())[0]).toBeGreaterThan(before[0]);
+  const b2 = (await open.nth(1).boundingBox())!;
+  await page.mouse.dblclick(b2.x + 40, b2.y + 2);
+  const reset = await heights();
+  expect(Math.max(...reset) - Math.min(...reset)).toBeLessThanOrEqual(2);
+  // 접힌 섹션 위 가장자리는 아무 일도 하지 않는다
+  const closed = (await page.locator(".sidebar > section:has(> .section-title[aria-expanded=false])").first().boundingBox())!;
+  await page.mouse.move(closed.x + 40, closed.y + 2);
+  await page.mouse.down();
+  await page.mouse.move(closed.x + 40, closed.y + 42, { steps: 4 });
+  await page.mouse.up();
+  expect(await heights()).toEqual(reset);
+});
+
 test("커밋 상세: 제목 아래 본문 첫 줄 미리보기, 누르면 넓은 영역에 전체 메시지", async ({ page }) => {
   await openRepo(page);
   await page.locator(".commits").getByText("NUL 구분자").first().click();

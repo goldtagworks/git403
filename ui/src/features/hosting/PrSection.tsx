@@ -71,7 +71,7 @@ export const PrSection = memo(function PrSection({ repo }: { repo: string }) {
 
   if (!infos.length && !failed.length) return null;
   return (
-    <section>
+    <section data-sec="pr">
       <button
         className="section-title"
         aria-expanded={open}

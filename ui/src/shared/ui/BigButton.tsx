@@ -41,7 +41,7 @@ export function BigButton({ ctl }: { ctl?: BigCtl }) {
   const tip = plain ? t(big ? "diff.bigRestore" : "diff.big") : big ? t(restore ? "diff.bigRestoreTip" : "diff.bigClose") : t("diff.bigTip", { key: BIG_KEYS });
   return (
     <span className="big-wrap">
-      <button className="tool-txt big-btn" title={tip} aria-label={plain ? tip : big ? t(restore ? "diff.bigRestoreTip" : "diff.bigClose") : t("diff.big")} onClick={() => (markSeen(), toggle())}>
+      <button className={"tool-txt big-btn" + (big ? " on" : "")} title={tip} aria-label={plain ? tip : big ? t(restore ? "diff.bigRestoreTip" : "diff.bigClose") : t("diff.big")} onClick={() => (markSeen(), toggle())}>
         <Icon name={big ? (restore ? "shrink" : "dismiss") : "expand"} size={14} />
         <span className="big-label">{big ? t(restore ? "diff.bigRestore" : "diff.bigCloseLabel") : t("diff.big")}</span>
         {big && !plain && <kbd className="big-kbd">Esc</kbd>}

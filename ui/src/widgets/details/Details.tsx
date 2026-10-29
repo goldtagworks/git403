@@ -170,14 +170,14 @@ export const Details = memo(function Details({ repo, commit, rules, right }: { r
           {msgSplit}
           {edit && (
             <div className="msg-actions">
-              <button className="primary" disabled={saving || !edit[0].trim() || joinMessage(...edit) === joinMessage(...splitSubject(body || commit.subject))} onClick={async () => {
+              <button className="go" disabled={saving || !edit[0].trim() || joinMessage(...edit) === joinMessage(...splitSubject(body || commit.subject))} onClick={async () => {
                 const plan = rewordPlan(commit.id);
                 if (!plan) return;
                 setSaving(true);
                 if (await applyReword(plan, joinMessage(...edit))) setEdit(null);
                 setSaving(false);
               }}>{t("reword.run")}</button>
-              <button onClick={() => setEdit(null)}>{t("common.cancel")}</button>
+              <button className="stop" onClick={() => setEdit(null)}>{t("common.cancel")}</button>
             </div>
           )}
           <div className="people">
