@@ -128,7 +128,9 @@ update = {
 
 // ---- System Events ----
 const osa = (...lines) => execFileSync("osascript", lines.flatMap((l) => ["-e", l]), { encoding: "utf8" }).trim();
-const front = () => osa('tell application "System Events" to set frontmost of process "git403" to true');
+/** 테스트가 띄운 앱만 집는다(평소 쓰는 git403이 켜져 있으면 이름으로는 그쪽이 잡힌다) */
+const PROC = () => `(first process whose unix id is ${app.proc.pid})`;
+const front = () => osa(`tell application "System Events" to set frontmost of ${PROC()} to true`);
 /** 열린 네이티브 메뉴에서 이름을 쳐서 고르고 Enter (NSMenu 타입 선택) */
 const pickMenu = async (label) => {
   await sleep(1000);
@@ -194,8 +196,8 @@ try {
   });
 
   await step("네이티브 메뉴 막대: UI가 만든 막대(App/File/Edit/Repository/View/Window/Help)로 바뀌고, 저장소 항목이 켜져 있고, Help > Quick launch가 팔레트를 연다", async () => {
-    const bar = () => osa('tell application "System Events" to tell process "git403" to get name of every menu bar item of menu bar 1').trim().split(", ");
-    const items = (m) => osa(`tell application "System Events" to tell process "git403" to get name of every menu item of menu 1 of menu bar item "${m}" of menu bar 1`).trim().split(", ").filter((x) => x !== "missing value");
+    const bar = () => osa(`tell application "System Events" to tell ${PROC()} to get name of every menu bar item of menu bar 1`).trim().split(", ");
+    const items = (m) => osa(`tell application "System Events" to tell ${PROC()} to get name of every menu item of menu 1 of menu bar item "${m}" of menu bar 1`).trim().split(", ").filter((x) => x !== "missing value");
     front();
     await until(() => bar().includes("Repository"), "메뉴 막대가 UI 메뉴로 교체", 15000); // 시작 직후엔 Rust 기본 메뉴
     eq(bar().slice(1), ["git403", "File", "Edit", "Repository", "View", "Window", "Help"], "최상위 메뉴 순서");
@@ -204,8 +206,8 @@ try {
       "Create pull request…", "Add remote…", "Apply patch…", "Repository statistics…", "Add submodule…", "Add worktree…",
     ], "Repository 항목");
     eq(items("File").slice(0, 4), ["Open repository…", "Clone repository…", "New repository…", "Find repositories in folder…"], "File 앞부분");
-    eq(osa('tell application "System Events" to tell process "git403" to get enabled of menu item "Fetch" of menu 1 of menu bar item "Repository" of menu bar 1'), "true", "저장소가 열려 있으면 Fetch 활성");
-    osa('tell application "System Events" to tell process "git403" to click menu item "Quick launch" of menu 1 of menu bar item "Help" of menu bar 1');
+    eq(osa(`tell application "System Events" to tell ${PROC()} to get enabled of menu item "Fetch" of menu 1 of menu bar item "Repository" of menu bar 1`), "true", "저장소가 열려 있으면 Fetch 활성");
+    osa(`tell application "System Events" to tell ${PROC()} to click menu item "Quick launch" of menu 1 of menu bar item "Help" of menu bar 1`);
     await js(`
       const d = await waitFor(() => $$('[role=dialog]').find((d) => d.getAttribute("aria-label") === "Quick launch"), "빠른 실행 팔레트");
       d.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
@@ -214,25 +216,25 @@ try {
   });
 
   await step("창 닫기: 닫기 버튼은 앱을 끝내지 않고 창만 숨긴다(탭 유지), Dock 아이콘(reopen)으로 다시 보인다", async () => {
-    const wins = () => Number(osa('tell application "System Events" to count windows of process "git403"'));
+    const wins = () => Number(osa(`tell application "System Events" to count windows of ${PROC()}`));
     front();
     await until(() => wins() === 1, "창 1개");
     // ⌘W는 저장소 탭부터 닫는다(main.tsx closeKey) → 창 숨기기는 빨간 닫기 버튼으로 본다
-    osa('tell application "System Events" to tell process "git403" to click (first button of window 1 whose subrole is "AXCloseButton")');
+    osa(`tell application "System Events" to tell ${PROC()} to click (first button of window 1 whose subrole is "AXCloseButton")`);
     await until(() => wins() === 0, "닫기 버튼 뒤 창 숨김");
     eq(await js(`return 1 + 1;`), 2, "앱 프로세스는 살아 있어 응답한다");
-    osa('tell application "System Events" to tell process "Dock" to click UI element "git403" of list 1'); // Dock 아이콘 클릭 = reopen
+    osa('tell application "System Events" to tell process "Dock" to click last UI element of list 1 whose name is "git403"'); // Dock 아이콘 클릭 = reopen. 평소 쓰는 git403이 켜져 있어도 나중에 뜬 테스트 앱이 마지막
     await until(() => wins() === 1, "reopen 뒤 창 다시 보임");
     await js(`await waitFor(() => byText(".commits .subject", "a를 바꿈"), "창을 다시 띄워도 그래프 그대로");`);
     front();
   });
 
   await step("창을 닫은 뒤 메뉴 막대 Settings…: 숨은 창을 다시 띄우고 설정을 연다", async () => {
-    const wins = () => Number(osa('tell application "System Events" to count windows of process "git403"'));
+    const wins = () => Number(osa(`tell application "System Events" to count windows of ${PROC()}`));
     front();
-    osa('tell application "System Events" to tell process "git403" to click (first button of window 1 whose subrole is "AXCloseButton")');
+    osa(`tell application "System Events" to tell ${PROC()} to click (first button of window 1 whose subrole is "AXCloseButton")`);
     await until(() => wins() === 0, "창 숨김");
-    osa('tell application "System Events" to tell process "git403" to click (first menu item of menu 1 of menu bar item 2 of menu bar 1 whose name starts with "Settings")');
+    osa(`tell application "System Events" to tell ${PROC()} to click (first menu item of menu 1 of menu bar item 2 of menu bar 1 whose name starts with "Settings")`);
     await until(() => wins() >= 1, "메뉴로 창 다시 보임");
     await js(`
       await waitFor(() => $$('[role=dialog]').length > 0, "설정 시트");

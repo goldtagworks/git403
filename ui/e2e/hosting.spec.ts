@@ -507,6 +507,7 @@ test("gh 계정 항목: 창이 포커스를 받으면 외부에서 바뀐 활성
 });
 
 test("gh 계정: 설정 '작업 후 되돌리기'를 끄면 start_job에 ghRestore:false, 기본은 생략. PR 조회는 localRepo를 넘긴다", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("autoFetch", "0")); // start_job 개수에 자동 Fetch가 섞이지 않게
   await open(page, { __gh: GH });
   const local = () => page.evaluate(() => (window as any).__prLocal as string[][]);
   await expect.poll(async () => (await local())?.length).toBeGreaterThan(0);

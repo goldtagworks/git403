@@ -64,7 +64,7 @@ test("창 크기를 바꾸면 그래프·상세가 같은 비율로 함께 늘�
   expect(Math.abs((await ratio()) - r0)).toBeLessThan(0.01);
 });
 
-test("사이드바: 뒤쪽에 접힌 섹션들은 아래쪽에 붙고, 펼치면 다시 위로 올라온다", async ({ page }) => {
+test("사이드바: 뒤쪽에 접힌 섹션들은 아래쪽에 붙고, 펼치면 다시 위로 올라온다", async ({ page }, info) => {
   await page.setViewportSize({ width: 1200, height: 900 });
   const titles = page.locator(".sidebar > section > .section-title");
   const n = await titles.count();
@@ -74,7 +74,7 @@ test("사이드바: 뒤쪽에 접힌 섹션들은 아래쪽에 붙고, 펼치면
   expect(side.y + side.height - (last.y + last.height)).toBeLessThan(40);
   const second = (await titles.nth(1).boundingBox())!;
   expect(second.y - (await titles.nth(0).boundingBox())!.y).toBeGreaterThan(60); // 첫 섹션 목록 아래로 떨어져 있다
-  await page.screenshot({ path: `e2e/results/screens/sidebar-dock.png`, clip: side });
+  await page.screenshot({ path: `e2e/results/screens/sidebar-dock-${info.project.name}.png`, clip: side });
 });
 
 test("사이드바: 첫 섹션 뒤 섹션들은 펼쳐져 있어도 아래쪽에 붙고, 접은 상태는 다시 열어도 유지된다", async ({ page }) => {

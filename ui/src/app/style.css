@@ -514,6 +514,15 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 .sheet-actions { flex: none; display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 12px 16px 14px; }
 .sheet-aside { margin-right: auto; display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 12px; }
 .sheet-reason { color: var(--muted); word-break: keep-all; }
+/* 폼 컨트롤(설정·대화상자·커밋 입력): 기본(24px)보다 넉넉한 28px. 머리줄·아이콘 버튼처럼 작게 쓰는 곳은 각자 덮어쓴다 */
+.sheet :where(select, input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"])), .commit-box input { min-height: 28px; padding-top: 4px; padding-bottom: 4px; }
+/* 콤보박스: macOS WebKit의 기본 select는 padding-left를 무시해 글자가 테두리에 붙는다 → 모양을 직접 그린다(위아래 화살표 = macOS 팝업 버튼).
+   화살표는 data URI라 토큰을 못 써서 두 테마의 --muted 사이 회색 하나로 둔다 */
+select { -webkit-appearance: none; appearance: none; padding-left: 10px; padding-right: 26px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='14' fill='none' stroke='%23858a99' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 5l3-3 3 3M2 9l3 3 3-3'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 9px center; background-size: 10px 14px; }
+.sheet textarea, .commit-box textarea { padding: 6px 10px; line-height: 1.45; }
+:where(.sheet-actions, .commit-btns) button, .sheet-body > form :where(button:not(.tool-ico, .tool-txt)) { min-height: 28px; padding: 4px 14px; }
 .sheet p { margin: 0; color: var(--muted); word-break: keep-all; }
 /* 키 큰 팝업은 머리줄·버튼줄을 선으로 구분 */
 .sheet.settings .sheet-head, .sheet.inspector .sheet-head, .sheet.reader .sheet-head { padding: 10px 10px 10px 16px; border-bottom: 1px solid var(--border); }
@@ -983,7 +992,7 @@ html[data-big] .ib-canvases { grid-template-columns: repeat(auto-fit, minmax(min
 .prr-icon:hover { background: var(--hover); color: var(--fg); }
 .prr-search { display: flex; align-items: center; gap: 6px; margin: 4px 10px 8px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--muted); }
 .prr-search input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 5px 0; outline: none; }
-.prr-search select { border: 0; border-left: 1px solid var(--border); background: transparent; color: var(--text); padding: 2px 0 2px 6px; font: inherit; }
+.prr-search select { border: 0; border-left: 1px solid var(--border); background-color: transparent; color: var(--text); padding: 2px 24px 2px 8px; font: inherit; }
 .prr-items { flex: 1; min-height: 0; overflow: auto; padding: 0 6px 8px; }
 .prr-note { color: var(--muted); padding: 14px 10px; word-break: keep-all; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 0; }
 .prr-note p { margin: 0; }
@@ -1302,4 +1311,4 @@ html[data-big] .detail-col .details > .info { width: var(--detail-w) !important;
 .detail-col .details > .info { display: flex; flex-direction: column; overflow: hidden; }
 .detail-col .details > .info > * { flex: none; }
 .detail-col .details > .info > .files, .detail-col .details > .info > .guide, .detail-col .details > .info > .change-list { flex: 1 1 0; min-height: 60px; overflow: auto; }
-.detail-col .details > .info > .msg-box { flex: 0 1 auto; } /* 창이 낮으면 메시지 상자가 먼저 줄어(최소 60px) 파일 목록 자리를 남긴다 */
+.detail-col .details > .info > .msg-box { flex: 0 1 auto; min-height: 60px; } /* 창이 낮으면 메시지 상자가 먼저 줄어(최소 60px) 파일 목록 자리를 남긴다 */

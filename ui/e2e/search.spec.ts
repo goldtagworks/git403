@@ -22,7 +22,7 @@ test("그래프 검색: 카드·순번·흐림·본문 검색", async ({ page },
   await expect(bar.locator(".search-count")).toHaveText("1 / 2");
   await bar.getByRole("button", { name: "다음 결과" }).click();
   await expect(bar.locator(".search-count")).toHaveText("2 / 2");
-  await page.screenshot({ path: `e2e/results/screens/${info.project.name}-search.png` });
+  await page.screenshot({ path: `e2e/results/screens/search-${info.project.name}.png` });
   // 본문(body)까지 검색, 설명 열에 본문 앞부분이 흐리게 붙는다
   await page.getByLabel("커밋 검색").fill("sidebar-body-hit");
   await expect(page.locator(".row.match")).toHaveCount(1);
@@ -37,7 +37,7 @@ test("브랜치 팝오버: 필터·↑↓·Enter 체크아웃·Esc", async ({ pa
   await page.locator(".branch-pop-wrap .picker").click();
   await expect(pop.locator("li.head")).toContainText("main"); // 현재 브랜치 강조
   await expect(pop.locator(".group")).toHaveText(["로컬", "원격"]);
-  await page.screenshot({ path: `e2e/results/screens/${info.project.name}-branchpop.png` });
+  await page.screenshot({ path: `e2e/results/screens/branchpop-${info.project.name}.png` });
   await page.getByLabel("브랜치 검색").fill("graph");
   await expect(pop.locator("li[data-i]")).toHaveCount(2); // feature/graph + origin/feature/graph
   await page.keyboard.press("ArrowDown"); // 원격으로
@@ -58,7 +58,7 @@ test("사이드바 필터: 폴더 펼침·강조, 단축키, 보는 중·모두 
   await expect(page.locator(".sidebar .item.folder", { hasText: "feature" }).first()).toHaveAttribute("aria-expanded", "true");
   await expect(page.locator(".sidebar .section-body .item", { hasText: "hotfix" })).toHaveCount(0);
   await expect(page.locator(".sidebar .item .label", { hasText: "v0.1.0" })).toHaveCount(0);
-  await page.screenshot({ path: `e2e/results/screens/${info.project.name}-sidefilter.png` });
+  await page.screenshot({ path: `e2e/results/screens/sidefilter-${info.project.name}.png` });
   await page.getByLabel("사이드바 필터").fill("zzz");
   await expect(page.getByText("일치하는 항목이 없습니다")).toBeVisible();
   await page.getByLabel("사이드바 필터").press("Escape");

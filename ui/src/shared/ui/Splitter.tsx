@@ -21,6 +21,12 @@ export function useRatioSplit(key: string, initial: number, minPx: number, restP
   return useSplitImpl(key, initial, minPx, restPx, axis, undefined, true);
 }
 
+function contentSize(el: HTMLElement | null, axis: "x" | "y") {
+  if (!el) return 1;
+  const c = getComputedStyle(el);
+  return axis === "x" ? el.clientWidth - parseFloat(c.paddingLeft) - parseFloat(c.paddingRight) : el.clientHeight - parseFloat(c.paddingTop) - parseFloat(c.paddingBottom);
+}
+
 function useSplitImpl(key: string, initial: number, min: number, max: number, axis: "x" | "y", onMove: ((size: number) => void) | undefined, ratio: boolean, rev = false) {
   const [size, setSize] = useState(() => {
     try {
@@ -45,7 +51,8 @@ function useSplitImpl(key: string, initial: number, min: number, max: number, ax
     const prop = axis === "x" ? "width" : "height";
     const start = axis === "x" ? e.clientX : e.clientY;
     // CSS max-*로 줄어 보이면 보이는 크기에서 시작한다. onMove를 쓰는 곳은 패널 크기가 곧 분할 크기가 아니라서 제외.
-    const total = ratio ? (pane.parentElement?.getBoundingClientRect()[prop] ?? 1) : 0;
+    // ratio: CSS %는 부모의 패딩을 뺀 안쪽 크기 기준이라 같은 기준으로 나눈다(부모에 패딩이 있으면 끌기 시작할 때 튄다)
+    const total = ratio ? contentSize(pane.parentElement, axis) : 0;
     const from = onMove && size > 0 ? size : pane.getBoundingClientRect()[prop];
     let last = ratio ? size : from;
     let moved = false;

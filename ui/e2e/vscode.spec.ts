@@ -182,7 +182,7 @@ for (const theme of ["vscode-light", "vscode-dark"]) {
     expect([limits[0], limits.at(-1), Math.max(...limits)]).toEqual([5000, 10000, 10000]); // 한 번만 두 배로
     expect(await page.locator(".graph-scroll").evaluate((el) => el.scrollTop)).toBeGreaterThan(8000 * 26);
     await expect.poll(async () => (await ofType(page, "selected")).map((m) => m.sha)).toEqual([sha(9000)]);
-    await page.screenshot({ path: `e2e/results/vscode-select-${theme}.png` });
+    await page.screenshot({ path: `e2e/results/screens/vscode-select-${theme}.png` });
   });
 }
 
@@ -303,7 +303,7 @@ for (const theme of ["vscode-light", "vscode-dark"]) {
     expect((await ofType(page, "openFile"))[1]).toMatchObject({ path: "src/a.ts", line: 21 });
     await sim(".nothing", "", ["dblclick"]);
     await expect.poll(async () => (await ofType(page, "simulated")).map((x) => x.found)).toEqual([true, true, false]);
-    await page.screenshot({ path: `e2e/results/vscode-diff-line-${theme}.png` });
+    await page.screenshot({ path: `e2e/results/screens/vscode-diff-line-${theme}.png` });
   });
 }
 

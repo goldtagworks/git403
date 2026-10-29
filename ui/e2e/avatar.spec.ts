@@ -63,7 +63,7 @@ test("스플래시: 처음에 보였다가 짧게 보이고 사라지고 클릭�
   await expect(splash).toBeAttached();
   await expect(splash.getByText("git403")).toBeVisible();
   expect(await splash.evaluate((e) => getComputedStyle(e).pointerEvents)).toBe("none");
-  await page.screenshot({ path: `e2e/results/screens/${info.project.name}-splash.png` });
+  await page.screenshot({ path: `e2e/results/screens/splash-${info.project.name}.png` });
   await expect(splash).toHaveCount(0, { timeout: 2000 });
   await expect(page.getByRole("button", { name: "저장소 열기" })).toBeVisible();
 });
@@ -71,5 +71,5 @@ test("스플래시: 처음에 보였다가 짧게 보이고 사라지고 클릭�
 test("작성자 사진 스크린샷", async ({ page }, info) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await open(page);
-  await page.screenshot({ path: `e2e/results/screens/${info.project.name}-avatars.png` });
+  await page.screenshot({ path: `e2e/results/screens/avatars-${info.project.name}.png` });
 });

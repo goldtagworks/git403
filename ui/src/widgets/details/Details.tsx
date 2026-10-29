@@ -7,7 +7,7 @@ import { api } from "../../shared/api/api";
 import { compile, linkify, type Compiled, type IssueRule } from "../../shared/lib/issues";
 import type { ChangedFile, Commit } from "../../shared/api/types";
 import { toTree, type FileRow } from "../../shared/lib/fileTree";
-import { useSplit } from "../../shared/ui/Splitter";
+import { useSplit, useRatioSplit } from "../../shared/ui/Splitter";
 import { DiffView } from "../../entities/diff/DiffView";
 import { inspect } from "../../features/inspect/Inspector";
 import { fileMenu } from "../../features/inspect/fileMenu";
@@ -42,7 +42,8 @@ export const Details = memo(function Details({ repo, commit, rules, right }: { r
   const [picked, setFile] = useState<string | null>(null);
   const [diff, setDiff] = useState("");
   const [infoW, infoSplit] = useSplit("details", 340, 200, 900, "x");
-  const [msgH, msgSplit] = useSplit("detail-msg", 240, 60, 900, "y");
+  // 메시지 ↔ 프로필·파일 경계: 상세 열 높이에 대한 비율(기본 중앙). 움직이면 저장, 더블클릭은 기본값
+  const [msgH, msgSplit] = useRatioSplit("detail-msg-ratio", 0.5, 60, 160, "y");
   // 오른쪽 열에서 메시지를 바로 고치는 중이면 [제목, 본문]
   const [edit, setEdit] = useState<[string, string] | null>(null);
   const [saving, setSaving] = useState(false);
@@ -148,7 +149,7 @@ export const Details = memo(function Details({ repo, commit, rules, right }: { r
         {!gv.open && right && (
           <>
           <div className="info-head muted">{t("details.commit")} <Sha id={commit.id} /></div>
-          <div className={"msg-box" + (edit ? " editing" : "")} style={{ height: msgH }} onClick={(e) => !edit && !(e.target as HTMLElement).closest("a") && !getSelection()?.toString() && setEdit(splitSubject(body || commit.subject))}>
+          <div className={"msg-box" + (edit ? " editing" : "")} style={{ height: `${msgH * 100}%` }} onClick={(e) => !edit && !(e.target as HTMLElement).closest("a") && !getSelection()?.toString() && setEdit(splitSubject(body || commit.subject))}>
             {edit ? (
               <>
                 <div className="msg-box-subject">

@@ -62,6 +62,13 @@ test("설정에서 아래로 바꾸면 바로 그래프 아래 배치가 된다"
   expect(d.y).toBeGreaterThan(g.y + g.height - 2);
 });
 
+test("메시지 상자: 기본은 상세 열 가운데", async ({ page }) => {
+  await page.locator(".commits").getByText("NUL 구분자").first().click();
+  const info = (await page.locator(".detail-col .info").boundingBox())!;
+  const sp = (await page.locator(".detail-col .info > .splitter.y").boundingBox())!;
+  expect(Math.abs(sp.y + sp.height / 2 - (info.y + info.height / 2))).toBeLessThan(info.height * 0.12);
+});
+
 test("메시지 상자: 가로 분할선으로 높이 조절(저장), 누르면 그 자리에서 고치고 메시지 수정·취소", async ({ page }) => {
   await page.locator(".commits").getByText("NUL 구분자").first().click();
   const msgBox = page.locator(".msg-box");
@@ -71,8 +78,9 @@ test("메시지 상자: 가로 분할선으로 높이 조절(저장), 누르면 
   await page.mouse.down();
   await page.mouse.move(sp.x + sp.width / 2, sp.y + 82, { steps: 5 });
   await page.mouse.up();
-  expect(Math.round((await msgBox.boundingBox())!.height - h)).toBe(80);
-  expect(await page.evaluate(() => Number(localStorage.getItem("split:detail-msg")))).toBe(Math.round(h + 80));
+  expect(Math.abs((await msgBox.boundingBox())!.height - h - 80)).toBeLessThanOrEqual(2);
+  // 상세 열 높이에 대한 비율로 저장(기본 중앙 0.5보다 커짐)
+  expect(await page.evaluate(() => Number(localStorage.getItem("split:detail-msg-ratio")))).toBeGreaterThan(0.5);
   // 누르면 편집: 제목 입력·글자 수·본문, 바꾸지 않으면 수정 버튼 비활성, Esc·취소로 원래대로
   await msgBox.click();
   const subj = page.getByRole("textbox", { name: "제목" });

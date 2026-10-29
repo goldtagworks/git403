@@ -6,6 +6,8 @@ import { cellXib, textDiff } from "./ib";
 const renders = (page: Page) => page.evaluate(() => ({ ...(window as any).__renders }) as Record<string, number>);
 
 test.beforeEach(async ({ page }) => {
+  // 열 때 도는 자동 Fetch가 느린 실행에서 측정 구간 안에 끝나 StatusBar(job prop)를 다시 그리지 않게
+  await page.addInitScript(() => localStorage.setItem("autoFetch", "0"));
   await page.goto("/");
   await page.getByRole("button", { name: "저장소 열기" }).click();
   await expect(page.locator(".diff .add").first()).toBeVisible(); // 첫 로드가 다 끝날 때까지

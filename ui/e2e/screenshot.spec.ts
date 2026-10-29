@@ -10,11 +10,11 @@ test("화면 캡처", async ({ page }, info) => {
   await page.locator(".commits").getByText("Merge branch 'feature/graph'").click();
   await page.getByRole("option", { name: /lib.rs/ }).click();
   await expect(page.getByRole("button", { name: "다음 파일" })).toBeVisible(); // 이전/다음 파일 버튼 포함
-  await page.screenshot({ path: `e2e/results/screens/${info.project.name}.png` });
+  await page.screenshot({ path: `e2e/results/screens/main-${info.project.name}.png` });
   await page.getByText("로컬 변경사항").click();
   await page.getByRole("listbox", { name: "스테이지 안 됨" }).getByRole("option").first().click();
   await expect(page.getByRole("button", { name: "다음 파일" })).toBeVisible();
-  await page.screenshot({ path: `e2e/results/screens/${info.project.name}-changes.png` });
+  await page.screenshot({ path: `e2e/results/screens/changes-${info.project.name}.png` });
 });
 
 // diff 확인용 캡처: 한 줄·나란히, 라이트·다크 (결과: e2e/results/screens/diff-*.png)
