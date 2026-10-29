@@ -108,3 +108,11 @@ test("경로 해석: 개발 후보(../target, ../ui/dist)는 dev에서만", () =
   assert.equal(serverPath(ext, "", false), path.join(bundled, exe));
   assert.equal(serverPath(ext, "", true), path.join(ext, "..", "target", "debug", exe));
 });
+
+test("웹뷰 HTML: storage는 UI 스크립트보다 먼저 localStorage를 채우고 </script>를 이스케이프한다", () => {
+  const html = `<html><head><script type="module" src="./a.js"></script></head></html>`;
+  const out = webviewHtml(html, { toUri: (r) => r, cspSource: "vsc:", nonce: "N", storage: { sideClosed: '["remote"]', x: "</script>" } });
+  assert.match(out, /<script nonce="N">for \(const \[k, v\] of Object\.entries\(\{"sideClosed":"\[\\"remote\\"\]","x":"\\u003c\/script>"\}\)\)/);
+  assert.ok(out.indexOf("localStorage.setItem") < out.indexOf('src="a.js"'), "UI 스크립트보다 먼저");
+  assert.doesNotMatch(webviewHtml(html, { toUri: (r) => r, cspSource: "vsc:", nonce: "N" }), /localStorage/);
+});

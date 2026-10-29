@@ -21,6 +21,7 @@ type FromWebview =
   | { type: "openUrl"; id: number; url: string }
   // 답이 없는 알림
   | { type: "ready"; id?: undefined }
+  | { type: "storage"; id?: undefined; key: string; value: string | null }
   | { type: "selected"; id?: undefined; sha: string }
   | { type: "openFile"; id?: undefined; repo: string; path: string; sha?: string; line?: number }
   // compact 뷰: 커밋 클릭(편집기 영역의 커밋 상세 탭, sha가 WORKTREE면 소스 제어 뷰), 전체 화면(편집기 탭에 전체 앱)
@@ -33,6 +34,8 @@ type FromWebview =
 const state: { initialRepo: string | null; responses: Record<string, { ok: boolean; commits?: number; err?: string }>; events: Record<string, number>; eventRepos: Record<string, number>; server?: boolean; selected: string | null; graphRepo: string | null; openRepos: number } = { initialRepo: null, responses: {}, events: {}, eventRepos: {}, selected: null, graphRepo: null, openRepos: 0 };
 
 let relay: Relay | null = null;
+/** 웹뷰 localStorage 사본 (globalState 키) */
+const STORAGE_KEY = "ui.localStorage";
 /**
  * 그래프를 띄운 곳: 활동 바 뷰(sidebar)·아래 패널 뷰(panel)는 좁은 커밋 목록(compact), 편집기 탭(editor)은 전체 앱,
  * detail은 compact에서 커밋을 클릭하면 편집기 영역에 열리는 "커밋 상세" 탭(상세 + diff만, 하나를 재사용).
@@ -126,7 +129,7 @@ function filters(list?: { name: string; extensions: string[] }[]) {
   return Object.keys(out).length ? out : undefined;
 }
 
-async function handle(ctx: vscode.ExtensionContext, m: Exclude<FromWebview, { type: "ready" | "selected" | "openFile" }>): Promise<unknown> {
+async function handle(ctx: vscode.ExtensionContext, m: Exclude<FromWebview, { type: "ready" | "selected" | "openFile" | "storage" }>): Promise<unknown> {
   switch (m.type) {
     case "invoke": {
       // 시작 저장소(서버는 항상 null): 그래프에서 보기로 요청된 저장소 → 활성 편집기 파일의 저장소 → 마지막/첫 저장소 → 첫 폴더
@@ -199,6 +202,13 @@ function notification(ctx: vscode.ExtensionContext, m: FromWebview, g: Graph): b
   else if (m.type === "selected") state.selected = String(m.sha);
   else if (m.type === "openFile") void openFile(ctx, m);
   else if (m.type === "simulated") simulating?.(m.found);
+  else if (m.type === "storage") {
+    // 웹뷰 localStorage 쓰기를 globalState에 따라 적는다 (value가 null이면 지움)
+    const all = { ...ctx.globalState.get<Record<string, string>>(STORAGE_KEY, {}) };
+    if (typeof m.value === "string") all[m.key] = m.value;
+    else delete all[m.key];
+    void ctx.globalState.update(STORAGE_KEY, all);
+  }
   else return false;
   return true;
 }
@@ -301,6 +311,7 @@ function attachGraph(ctx: vscode.ExtensionContext, w: vscode.Webview, dir: strin
     detail: kind === "detail",
     lang: vscode.env.language,
     version: ctx.extension.packageJSON.version,
+    storage: ctx.globalState.get<Record<string, string>>(STORAGE_KEY, {}),
   });
   w.onDidReceiveMessage(async (m: FromWebview) => {
     if (notification(ctx, m, g)) return;

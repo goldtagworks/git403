@@ -38,6 +38,17 @@ if (IS_VSCODE) {
     else if (m?.type === "select" && typeof m.sha === "string") selectHandler ? selectHandler(m.sha) : (queuedSelect = m.sha);
     else if (m?.type === "openRepo" && typeof m.repo === "string") repoHandler ? repoHandler(m.repo) : (queuedRepo = m.repo);
   });
+  // 웹뷰 localStorage는 다시 열면 비므로 쓰기를 확장에 보내 globalState에 남긴다 (다음에 열 때 vscode/src/shared/html.ts가 채운다)
+  const set = Storage.prototype.setItem;
+  const del = Storage.prototype.removeItem;
+  Storage.prototype.setItem = function (k, v) {
+    set.call(this, k, v);
+    if (this === localStorage) vscode!.postMessage({ type: "storage", key: k, value: String(v) });
+  };
+  Storage.prototype.removeItem = function (k) {
+    del.call(this, k);
+    if (this === localStorage) vscode!.postMessage({ type: "storage", key: k, value: null });
+  };
   vscode!.postMessage({ type: "ready" }); // 확장이 패널 준비 전에 보낼 메시지(select)를 이때부터 전달한다
 }
 

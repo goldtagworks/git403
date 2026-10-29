@@ -1,7 +1,7 @@
 // ui/dist/index.html을 웹뷰용으로 바꾼다: 상대 경로 → webview URI, 인라인 스크립트에 nonce, CSP.
 // vscode API 비의존(단위 테스트 가능): URI 변환은 호출 측이 함수로 준다.
-export function webviewHtml(html: string, opts: { toUri: (rel: string) => string; cspSource: string; nonce: string; compact?: boolean; detail?: boolean; lang?: string; version?: string }): string {
-  const { toUri, cspSource, nonce, compact, detail, lang, version } = opts;
+export function webviewHtml(html: string, opts: { toUri: (rel: string) => string; cspSource: string; nonce: string; compact?: boolean; detail?: boolean; lang?: string; version?: string; storage?: Record<string, string> }): string {
+  const { toUri, cspSource, nonce, compact, detail, lang, version, storage } = opts;
   const out = html
     .replace(/\b(src|href)="\.\/([^"]+)"/g, (_m, attr, rel) => `${attr}="${toUri(rel)}"`)
     .replace(/<script(?![^>]*\bnonce=)/g, `<script nonce="${nonce}"`);
@@ -19,5 +19,7 @@ export function webviewHtml(html: string, opts: { toUri: (rel: string) => string
   // lang: VS Code 표시 언어(`vscode.env.language`). UI 언어가 system일 때 OS 언어 대신 이걸 따른다 (i18n.ts detect)
   const props = [compact ? "compact: true" : "", detail ? "detail: true" : "", lang ? `lang: ${JSON.stringify(lang)}` : "", version ? `version: ${JSON.stringify(version)}` : ""].filter(Boolean).join(", ");
   const mode = props ? `\n    <script nonce="${nonce}">window.__git403 = { ${props} };</script>` : "";
-  return out.replace("<head>", `<head>\n    <meta http-equiv="Content-Security-Policy" content="${csp}" />${mode}`);
+  // storage: 웹뷰 localStorage는 다시 열면 비므로(출처가 매번 바뀜) 확장 globalState에 둔 값을 모듈보다 먼저 채운다. 쓰기는 bridge.ts가 확장으로 보낸다
+  const seed = storage ? `\n    <script nonce="${nonce}">for (const [k, v] of Object.entries(${JSON.stringify(storage).replace(/</g, "\\u003c")})) try { localStorage.setItem(k, v); } catch {}</script>` : "";
+  return out.replace("<head>", `<head>\n    <meta http-equiv="Content-Security-Policy" content="${csp}" />${mode}${seed}`);
 }
