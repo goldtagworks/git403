@@ -892,3 +892,51 @@ test("지원 작업이 제한된 백엔드(capabilities)도 진행률 이벤트 
   const during = await renders(page);
   for (const id of ["CommitGraph", "Sidebar", "Details", "Toolbar"]) expect(during[id], id).toBe(before[id]);
 });
+
+// 모바일 셸(widgets/mobile): 화면 이동·시트·스크롤이 다른 화면을 다시 그리지 않는다. 데스크탑 beforeEach는 쓰지 않고 Android UA 컨텍스트를 따로 연다.
+test("모바일: 상세·diff·파일 이동·뒤로·브랜치 시트는 커밋 목록을 다시 그리지 않고, 목록 스크롤은 셸·상세를 다시 그리지 않는다", async ({ browser }) => {
+  const ctx = await browser.newContext({
+    userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36",
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    locale: "ko-KR",
+  });
+  const page = await ctx.newPage();
+  await page.addInitScript(() => {
+    localStorage.setItem("autoFetch", "0");
+    (window as any).__reposRoot = "/data/repos";
+    (window as any).__bigGraph = 400;
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /^api-server/ }).tap();
+  await expect(page.locator(".commits .row").first()).toBeVisible();
+  await page.locator(".commits .row").nth(3).tap(); // 선택이 바뀌므로 이 한 번은 목록이 다시 그려진다
+  const pane = page.locator(".m-pane");
+  await expect(pane.locator(".m-subject")).toBeVisible();
+  const before = await renders(page);
+  await pane.getByRole("button", { name: /lib\.rs/ }).tap();
+  await expect(pane.locator("pre.diff")).toBeVisible();
+  await pane.getByRole("button", { name: "다음 파일" }).tap();
+  await pane.getByRole("button", { name: "이전 파일" }).tap();
+  await page.goBack();
+  await expect(pane.locator(".m-subject")).toBeVisible();
+  await page.goBack();
+  await expect(pane).toHaveCount(0);
+  await page.getByRole("button", { name: "브랜치 선택" }).tap();
+  await expect(page.getByRole("dialog", { name: "브랜치 선택" })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("dialog", { name: "브랜치 선택" })).toHaveCount(0);
+  const after = await renders(page);
+  expect(after.CommitGraph, "CommitGraph").toBe(before.CommitGraph);
+  expect(after.CommitRow ?? 0, "CommitRow").toBe(before.CommitRow ?? 0);
+  // 목록 스크롤(보이는 행 구간이 바뀔 때만 목록 자신이 다시 그린다)은 셸·상세 화면을 건드리지 않는다
+  await page.locator(".commits .row").nth(3).tap();
+  await expect(pane.locator(".m-subject")).toBeVisible();
+  await page.goBack();
+  const still = await renders(page);
+  await page.locator(".graph-scroll").evaluate((el) => (el.scrollTop = 3000));
+  await expect(page.locator(".commits .row").first()).toBeVisible();
+  const scrolled = await renders(page);
+  for (const id of ["MobileShell", "MobilePane"]) expect(scrolled[id], id).toBe(still[id]);
+  await ctx.close();
+});

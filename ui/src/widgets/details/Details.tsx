@@ -310,7 +310,7 @@ export const Details = memo(function Details({ repo, commit, rules, right }: { r
 });
 
 /** 전체 메시지 → 본문(제목 다음 문단부터)과 끝의 트레일러(`키: 값`만 있는 문단들). 공동 작성자는 사진으로 따로 보인다. */
-function splitMessage(msg: string) {
+export function splitMessage(msg: string) {
   const paras = msg.split(/\n\s*\n/).slice(1);
   const trailers: [string, string][] = [];
   while (paras.length) {
@@ -349,7 +349,7 @@ function MessageView({ message, rules }: { message: string; rules: Compiled[] })
 }
 
 /** 본문(머리말·목록 구분) + 트레일러 표. 메시지 화면과 오른쪽 상세 열(.info-body)이 같이 쓴다 */
-function MessageBody({ body, trailers, rules }: { body: string; trailers: [string, string][]; rules: Compiled[] }) {
+export function MessageBody({ body, trailers, rules }: { body: string; trailers: [string, string][]; rules: Compiled[] }) {
   return (
     <>
       {body.split("\n").map((l, i) => (
@@ -371,7 +371,7 @@ function MessageBody({ body, trailers, rules }: { body: string; trailers: [strin
 const asListRow = (f: ChangedFile): FileRow => ({ kind: "file", name: f.path, depth: 0, file: f });
 
 /** `이름 <이메일>` 줄들 → 이메일 기준 중복 제거 */
-function parseCoAuthors(lines: string[]): { name: string; email: string }[] {
+export function parseCoAuthors(lines: string[]): { name: string; email: string }[] {
   const seen = new Map<string, { name: string; email: string }>();
   for (const l of lines) {
     const m = /^(.*?)\s*<([^>]+)>/.exec(l);

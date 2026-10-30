@@ -2,6 +2,7 @@
 // ops·api 어느 쪽도 import하지 않는다 (api가 prefs를 읽는다).
 
 import type { Key } from "../i18n/locales/en";
+import { isMobile } from "./platform";
 
 // ---- UI 설정 (localStorage, 앱 전체 공통) ----
 export interface Prefs {
@@ -35,7 +36,7 @@ export interface Prefs {
 /** 지원 언어 목록의 원본 (i18n.ts의 DICTS·LANGS, Rust `gc_i18n::SUPPORTED_LOCALES`와 같아야 한다) */
 export const LOCALES = ["en", "ko", "zh-CN", "zh-TW", "vi", "ja", "tl", "km", "uz", "lo", "ru", "th", "mn", "ne", "de", "fr", "es", "pt-BR", "it", "pl", "tr", "uk", "nl"] as const;
 export type Locale = (typeof LOCALES)[number];
-export const DEFAULT_PREFS: Prefs = { restoreTabs: true, graphLimit: 20000, autoFetch: 5, autoUpdate: true, ignoreEol: false, ignoreWs: false, diffWrap: false, diffFull: false, diffWs: false, ghRestore: true, ghAutoSwitch: true, detailLayout: "right", language: "system" };
+export const DEFAULT_PREFS: Prefs = { restoreTabs: true, graphLimit: 20000, autoFetch: 5, autoUpdate: true, ignoreEol: false, ignoreWs: false, diffWrap: isMobile, diffFull: false, diffWs: false, ghRestore: true, ghAutoSwitch: true, detailLayout: "right", language: "system" };
 /** 그래프를 처음 읽는 커밋 수(한 페이지). 아래로 스크롤하면 두 배씩 더 읽는다(상한 `graphLimit`까지). */
 export const GRAPH_PAGE = 5000;
 export const GRAPH_LIMIT_RANGE = [100, 200000] as const;

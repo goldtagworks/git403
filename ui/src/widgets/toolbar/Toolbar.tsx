@@ -7,7 +7,7 @@ import { showMenu, type MenuEntry } from "../../shared/ui/menu";
 import { FLOW_OPS, ops } from "../../shared/model/ops";
 import { pref, setPref } from "../../shared/lib/settings";
 import { supports, useCaps } from "../../shared/lib/caps";
-import { isMobile, toggleSide, useSideOpen } from "../../shared/lib/platform";
+import { isMobile } from "../../shared/lib/platform";
 import { countRender } from "../../shared/lib/profile";
 import type { ThemeMode } from "../../shared/lib/theme";
 import type { Ref, Status } from "../../shared/api/types";
@@ -55,13 +55,6 @@ function Tool({ icon, label, onClick, menu, badge, disabled, why, op }: {
       )}
     </div>
   );
-}
-
-/** 모바일 서랍 버튼. 열림 상태는 platform.ts 외부 스토어를 이 버튼만 구독한다(Toolbar는 다시 그려지지 않음) */
-function SideToggle() {
-  useLocale();
-  const open = useSideOpen();
-  return <button className="side-toggle" aria-label={t("sidebar.toggle")} aria-expanded={open} onClick={() => toggleSide()}><Icon name="branch" size={20} /></button>;
 }
 
 /** 브랜치 선택 팝오버: 입력하면 바로 거르고 ↑↓·Enter로 체크아웃. 열림·검색어 상태는 여기만 가진다(Toolbar는 다시 그려지지 않는다). */
@@ -169,7 +162,6 @@ export const Toolbar = memo(function Toolbar(p: Props) {
   const busyWhy = t("toolbar.busy");
   return (
     <header className="toolbar" data-tauri-drag-region>
-      {isMobile && <SideToggle />}
       <button className="picker" onClick={() => showMenu(repoMenu())}>
         <span className="picker-label">{t("toolbar.repo")}</span>
         <span className="picker-value">{name}<Icon name="dropdown" size={11} /></span>

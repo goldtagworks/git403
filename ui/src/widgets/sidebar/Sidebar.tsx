@@ -317,7 +317,8 @@ function onGripReset(e: React.MouseEvent<HTMLElement>) {
   applyGrow(e.currentTarget);
 }
 
-export const Sidebar = memo(function Sidebar({ repo, refs, submodules, worktrees, onSelect }: { repo: string; refs: Ref[]; submodules: Submodule[]; worktrees: Worktree[]; onSelect: (commit: string) => void }) {
+/** lite: 모바일 서랍·시트용 — 브랜치·원격·태그·스태시만 (보기 막대·PR 없음, 서브모듈·worktree는 부르는 쪽이 빈 배열로) */
+export const Sidebar = memo(function Sidebar({ repo, refs, submodules, worktrees, onSelect, lite }: { repo: string; refs: Ref[]; submodules: Submodule[]; worktrees: Worktree[]; onSelect: (commit: string) => void; lite?: boolean }) {
   countRender("Sidebar");
   useLocale();
   // 접은 섹션·폴더는 저장해 다음 실행에도 접힌 채로 (기본은 태그만 접힘)
@@ -399,7 +400,7 @@ export const Sidebar = memo(function Sidebar({ repo, refs, submodules, worktrees
         />
         {q && <button className="clear" aria-label={t("sidebar.clearFilter")} onClick={() => (setQ(""), filterRef.current?.focus())}><Icon name="dismiss" size={12} /></button>}
       </label>
-      <ViewBar repo={repo} refs={refs} />
+      {!lite && <ViewBar repo={repo} refs={refs} />}
       {none && <div className="side-empty">{t("sidebar.noMatch")}</div>}
       {SECTIONS.map(({ kind, label, icon }, i) => {
         const tree = trees[i];
@@ -421,7 +422,7 @@ export const Sidebar = memo(function Sidebar({ repo, refs, submodules, worktrees
           </section>
         );
       })}
-      <PrSection repo={repo} />
+      {!lite && <PrSection repo={repo} />}
       {submodules.length > 0 && (
         <section data-sec="submodule">
           <button className="section-title" aria-expanded={!closed.has("submodule")} onClick={() => toggle("submodule")} onContextMenu={contextMenu(submoduleSectionMenu)}>

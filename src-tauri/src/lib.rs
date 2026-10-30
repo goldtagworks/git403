@@ -73,6 +73,15 @@ pub fn run() {
             // Android: 앱 전용 내부 저장소(`repos_root`·복제 대상의 기준)라 대체 경로 없이 실패시킨다
             #[cfg(target_os = "android")]
             let config_dir = app.path().app_config_dir()?;
+            // Android엔 HOME이 없다. git·gix는 `$HOME/.gitconfig`를 전역 설정으로 읽고 home_dir()·전역 gitignore도 HOME을 쓰니,
+            // 앱 전용 폴더를 HOME으로 둔다(다른 스레드가 환경을 읽기 전인 setup 초기).
+            #[cfg(target_os = "android")]
+            {
+                let _ = std::fs::create_dir_all(&config_dir);
+                if std::env::var_os("HOME").is_none_or(|v| v.is_empty()) {
+                    std::env::set_var("HOME", &config_dir);
+                }
+            }
             #[cfg(not(target_os = "android"))]
             let config_dir = app.path().app_config_dir().unwrap_or_else(|_| gc_backend::default_config_dir());
             let backend = Backend::new(std::sync::Arc::new(TauriEmit(handle.clone())), config_dir, std::env::args().nth(1));

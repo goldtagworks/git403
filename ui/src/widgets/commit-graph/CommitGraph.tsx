@@ -22,7 +22,8 @@ import { useSplit } from "../../shared/ui/Splitter";
 import { pick, useFocusRef } from "../../shared/model/selection";
 import { Avatar, avatarImage, avatarUrl, onAvatarChange, requestAvatars } from "../../shared/ui/avatar";
 
-const ROW_H = COMPACT ? 44 : isMobile ? 40 : 28; // compact(VS Code 사이드바·패널): 두 줄 행, 모바일: 터치 타깃
+const LITE = COMPACT || isMobile; // 두 줄 행·열 머리글 없음·브랜치 열 없음: VS Code 사이드바·패널과 모바일(widgets/mobile)이 같이 쓴다
+const ROW_H = COMPACT ? 44 : isMobile ? 56 : 28; // 모바일: 두 줄 행(터치 타깃 44px 이상)
 const COMPACT_GRAPH_MAX = 72; // compact 그래프 열 상한 (넘는 레인은 페이드로 잘린다)
 const LANE_W = 22;
 const AUTO_MAX = 120; // 자동 폭 상한 (더 넓게는 사용자가 끌어서)
@@ -166,7 +167,7 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
   const [authorW, authorSplit, authorReset] = useSplit("graph-author", 110, 60, 400, "x", onAuthorMove, true);
   const [dateW, dateSplit, dateReset] = useSplit("graph-date", 150, 80, 400, "x", onDateMove, true);
   const [shaW, shaSplit, shaReset] = useSplit("graph-sha", 60, 48, 200, "x", onShaMove, true);
-  const [hide, setHide] = useState<Set<Col>>(() => (COMPACT ? new Set<Col>(["refs"]) : readHidden())); // compact: 배지는 행 안(1줄)에
+  const [hide, setHide] = useState<Set<Col>>(() => (LITE ? new Set<Col>(["refs"]) : readHidden())); // compact·모바일: 배지는 행 안(1줄)에
   const toggleCol = (c: Col) =>
     setHide((h) => {
       const n = new Set(h);
@@ -256,7 +257,7 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
   }, [layout]);
   const maxLanesRef = useRef(1);
   maxLanesRef.current = Math.max(lanes, layout.max_lanes);
-  const graphW = hide.has("graph") ? 0 : COMPACT ? Math.min(COMPACT_GRAPH_MAX, PAD * 2 + lanes * LANE_W) : graphSize > 0 ? graphSize : Math.min(AUTO_MAX, PAD * 2 + lanes * LANE_W); // 자동 = 레인이 다 들어가는 폭(상한 AUTO_MAX)
+  const graphW = hide.has("graph") ? 0 : LITE ? Math.min(COMPACT_GRAPH_MAX, PAD * 2 + lanes * LANE_W) : graphSize > 0 ? graphSize : Math.min(AUTO_MAX, PAD * 2 + lanes * LANE_W); // 자동 = 레인이 다 들어가는 폭(상한 AUTO_MAX)
   const effRefW = hide.has("refs") ? 0 : refW;
   refWRef.current = effRefW;
   graphWRef.current = graphW;
@@ -602,22 +603,22 @@ const Row = memo(function Row({ c, top, lane, color, chip, selected, match, dim,
       onMouseLeave={COMPACT ? tip.leave : undefined}
       onContextMenu={contextMenu(() => commitMenu(c, refs))}
     >
-      {COMPACT ? (
+      {LITE ? (
         <span className="c-main">
           <span className="c-l1">
             {chip && <span className="row-refs">{badgeEl}</span>}
             <span className="subject">{c.subject}</span>
           </span>
-          <span className="c-l2">{c.id.slice(0, 7)} · {relTime(c.time)} · {c.author}</span>
+          <span className="c-l2">{COMPACT ? `${c.id.slice(0, 7)} · ${relTime(c.time)} · ${c.author}` : `${c.author} · ${relTime(c.time)}`}</span>
         </span>
       ) : null}
-      {!COMPACT && chip && (
+      {!LITE && chip && (
         <span className="row-refs" style={{ width: "var(--ref-w)" }}>
           {badgeEl}
           <span className="ref-line" />
         </span>
       )}
-      {!COMPACT && (
+      {!LITE && (
         <>
           <span className="subject">{c.subject}{c.body && <span className="body"> {c.body}</span>}</span>
           <span className="author"><Avatar name={c.author} email={c.email} /><span>{c.author}</span></span>

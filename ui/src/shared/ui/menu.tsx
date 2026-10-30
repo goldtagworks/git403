@@ -82,7 +82,7 @@ export function DomMenuHost() {
   // 화면을 넘으면 위로 당기고, 그래도 넘치면 스크롤
   useLayoutEffect(() => {
     const el = box.current;
-    if (!el || !state) return;
+    if (!el || !state || isMobile) return; // 모바일은 바닥 액션 시트(CSS)
     const max = window.innerHeight - 16;
     el.style.maxHeight = `${max}px`;
     el.style.overflowY = "auto";
@@ -95,7 +95,7 @@ export function DomMenuHost() {
   const flat = (list: MenuEntry[]): (MenuEntry | { group: string })[] => list.flatMap((e) => ("submenu" in e ? [{ group: e.label }, ...e.submenu] : [e]));
   return (
     <div className="dom-menu-backdrop" onMouseDown={() => !(isMobile && performance.now() - openedAt < 400) && setState(null)}>
-      <div ref={box} role="menu" className="dom-menu" style={{ left: state.at.x, top: state.at.y }} onMouseDown={(e) => e.stopPropagation()}>
+      <div ref={box} role="menu" className="dom-menu" style={isMobile ? undefined : { left: state.at.x, top: state.at.y }} onMouseDown={(e) => e.stopPropagation()}>
         {flat(state.items).map((e, i) =>
           "separator" in e ? (
             <hr key={i} />

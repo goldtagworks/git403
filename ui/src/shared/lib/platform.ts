@@ -2,25 +2,19 @@ import { useSyncExternalStore } from "react";
 
 export const isWin = /Windows/i.test(navigator.userAgent), isMac = /Mac/i.test(navigator.userAgent);
 
-// ---- 모바일(Android 태블릿) ----
+// ---- 모바일(Android 폰·태블릿) ----
 // 판정은 여기 한 곳: WebView의 User-Agent에 Android가 있으면 모바일. 동기 값이라 첫 렌더부터 쓰고(IPC 응답을 기다리지 않는다),
 // 데스크탑·VS Code 웹뷰는 항상 false라서 아래 코드는 아무것도 구독·설치하지 않는다. 목업 E2E는 Playwright `userAgent`로 켠다.
 export const isMobile = /Android/i.test(navigator.userAgent);
-/** 이 폭(px) 아래의 모바일은 사이드바를 서랍으로, 상세를 그래프 아래로 둔다 (style.css `html[data-mobile]` 규칙과 같은 값) */
-export const NARROW = 1000;
+/** 이 폭(px) 이상이면 태블릿(두 칸), 아래면 폰(한 화면에 한 가지) — widgets/mobile/MobileShell.tsx */
+export const TABLET = 600;
 
-const narrowQuery = isMobile ? matchMedia(`(max-width: ${NARROW - 1}px)`) : null;
-const onNarrow = (f: () => void) => (narrowQuery?.addEventListener("change", f), () => narrowQuery?.removeEventListener("change", f));
-/** 모바일의 좁은 폭 여부. 폭이 경계를 넘을 때만 바뀐다 (데스크탑은 항상 false, 구독 없음) */
-export const useNarrow = () => useSyncExternalStore(onNarrow, () => !!narrowQuery?.matches);
+const wideQuery = isMobile ? matchMedia(`(min-width: ${TABLET}px)`) : null;
+const onWide = (f: () => void) => (wideQuery?.addEventListener("change", f), () => wideQuery?.removeEventListener("change", f));
+/** 모바일의 태블릿 폭 여부. 폭이 경계를 넘을 때만 바뀐다 (데스크탑은 항상 false, 구독 없음) */
+export const useTablet = () => useSyncExternalStore(onWide, () => !!wideQuery?.matches);
 
-const SIDE = "data-side";
-const sideListeners = new Set<() => void>();
-/** 서랍 사이드바 열기·닫기 (`<html data-side>`; CSS가 읽고, 버튼만 `useSideOpen`으로 구독) */
-export const toggleSide = (open?: boolean) => (document.documentElement.toggleAttribute(SIDE, open), sideListeners.forEach((f) => f()));
-export const useSideOpen = () => useSyncExternalStore((f) => (sideListeners.add(f), () => void sideListeners.delete(f)), () => document.documentElement.hasAttribute(SIDE));
-
-/** 모바일 시작 때 한 번: `<html data-mobile>`(CSS 범위), 길게 누르기 → 우클릭 메뉴, 서랍 바깥 탭으로 닫기 */
+/** 모바일 시작 때 한 번: `<html data-mobile>`(CSS 범위), 길게 누르기 → 우클릭 메뉴 */
 export function initMobile() {
   if (!isMobile) return;
   const html = document.documentElement;
@@ -50,6 +44,4 @@ export function initMobile() {
   addEventListener("contextmenu", (e) => { if (e.isTrusted && touching && !native(e)) (e.preventDefault(), e.stopImmediatePropagation()); }, true);
   // 길게 누른 뒤 손을 뗄 때의 클릭은 삼킨다
   addEventListener("click", (e) => { if (fired) (fired = false, e.preventDefault(), e.stopPropagation()); }, true);
-  // 서랍 바깥을 탭하면 닫는다 (서랍 안·여는 버튼은 제외)
-  addEventListener("pointerdown", (e) => e.pointerType !== "mouse" && html.hasAttribute(SIDE) && !(e.target as Element).closest(".pane.side, .side-toggle, .dom-menu, .dom-menu-backdrop") && toggleSide(false), true);
 }

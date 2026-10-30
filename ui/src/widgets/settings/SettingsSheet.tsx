@@ -34,6 +34,8 @@ const TABS = [
   { id: "ai", label: "AI", icon: "sparkle", group: "link" },
 ] as const satisfies readonly { id: string; label: string; icon: IconName; group: string }[];
 const GROUPS = ["app", "repo", "link"] as const;
+/** 모바일에서 뺄 탭: 외부 도구·터미널(tools), ssh 키, gh 계정, AI CLI — Android엔 없는 것들 */
+const NO_MOBILE: readonly string[] = ["tools", "ssh", "accounts", "ai"];
 /** 탭 이름: 문구 키면 번역하고 아니면(Git·AI·gitignore) 그대로 */
 const tabName = (label: string) => (label.startsWith("settings.") ? t(label as Key) : label);
 type TabId = "general" | "git" | "accounts" | "ai" | "tools" | "ignore" | "ssh" | "issues";
@@ -89,26 +91,26 @@ function GeneralTab({ theme, onTheme }: { theme: ThemeMode; onTheme: (m: ThemeMo
         </SettingsRow>
       </SettingsGroup>
       <SettingsGroup title={t("settings.group.startup")}>
-        <SettingsRow name={t("settings.restoreTabs")}>
+        {!isMobile && <SettingsRow name={t("settings.restoreTabs")}>
           <input type="checkbox" checked={restore} onChange={(e) => (setRestore(e.target.checked), ops.setPref("restoreTabs", e.target.checked))} />
-        </SettingsRow>
-        <SettingsRow name={t("settings.detailLayout")} desc={t("settings.detailLayoutHelp")}>
+        </SettingsRow>}
+        {!isMobile && <SettingsRow name={t("settings.detailLayout")} desc={t("settings.detailLayoutHelp")}>
           <select value={layout} onChange={(e) => { ops.setPref("detailLayout", e.target.value as "right" | "bottom"); }}>
             <option value="right">{t("settings.layoutRight")}</option>
             <option value="bottom">{t("settings.layoutBottom")}</option>
           </select>
-        </SettingsRow>
+        </SettingsRow>}
         <SettingsRow name={t("settings.graphLimit", { min: GRAPH_LIMIT_RANGE[0].toLocaleString(), max: GRAPH_LIMIT_RANGE[1].toLocaleString() })} desc={t("settings.graphLimitHelp")}>
           <span className="folder-field">
             <input type="number" inputMode="numeric" aria-label={t("settings.graphLimitLabel")} min={GRAPH_LIMIT_RANGE[0]} max={GRAPH_LIMIT_RANGE[1]} step={100} value={limit} onChange={(e) => setLimit(e.target.value)} />
             <button type="submit">{t("common.apply")}</button>
           </span>
         </SettingsRow>
-        <SettingsRow name={t("settings.autoFetch")} desc={t("settings.autoFetchHelp")}>
+        {!isMobile && <SettingsRow name={t("settings.autoFetch")} desc={t("settings.autoFetchHelp")}>
           <select value={auto} onChange={(e) => { const n = Number(e.target.value); setAuto(n); ops.setPref("autoFetch", n); }}>
             {AUTO_FETCH_MINUTES.map((m) => <option key={m} value={m}>{m ? t("settings.autoEvery", { m }) : t("settings.autoOff")}</option>)}
           </select>
-        </SettingsRow>
+        </SettingsRow>}
       </SettingsGroup>
       <SettingsGroup title={t("settings.group.diff")}>
         <SettingsRow name={t("settings.ignoreEol")} desc={t("settings.ignoreEolHelp")}>
@@ -128,7 +130,7 @@ function GeneralTab({ theme, onTheme }: { theme: ThemeMode; onTheme: (m: ThemeMo
           </SettingsRow>
         </SettingsGroup>
       )}
-      <SettingsTransfer onTheme={onTheme} />
+      {!isMobile && <SettingsTransfer onTheme={onTheme} />}
     </form>
   );
 }
@@ -568,16 +570,32 @@ export const SettingsHost = memo(function SettingsHost({ theme, onTheme }: { the
   useLocale();
   const [tab, setTab] = useState<TabId | null>(null);
   const [query, setQuery] = useState("");
+  const [listing, setListing] = useState(false); // 모바일: 그룹 목록 화면(true) ↔ 그룹 상세(false)
+  const pushed = useRef(false);
   const last = useRef<TabId>("general");
   const dialog = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    ctx.showSettings = (t) => (setQuery(""), setTab((TABS.find((x) => x.id === t)?.id as TabId | undefined) ?? last.current));
+    ctx.showSettings = (t) => {
+      setQuery("");
+      const id = TABS.find((x) => x.id === t && !(isMobile && NO_MOBILE.includes(x.id)))?.id as TabId | undefined;
+      setTab(id ?? last.current);
+      if (isMobile) {
+        setListing(!id);
+        if (!pushed.current) (pushed.current = true, history.pushState(history.state, "")); // Android 뒤로 = 설정 닫기(nav.ts의 기록은 건드리지 않는다)
+      }
+    };
+  }, []);
+  useEffect(() => {
+    if (!isMobile) return;
+    const onPop = () => (pushed.current = false, setTab(null));
+    addEventListener("popstate", onPop);
+    return () => removeEventListener("popstate", onPop);
   }, []);
   useEffect(() => void (tab && (last.current = tab)), [tab]);
   const ref = useCallback((el: HTMLElement | null) => void (dialog.current = el as HTMLDivElement | null), []);
   const refocus = useCallback(() => dialog.current?.focus(), []);
   if (!tab) return null;
-  const close = () => setTab(null);
+  const close = () => (pushed.current ? history.back() : setTab(null));
   const move = (d: number) => setTab(TABS[(TABS.findIndex((x) => x.id === tab) + d + TABS.length) % TABS.length].id as TabId);
   const searching = query.trim() !== "";
   const body = (id: TabId) => (
@@ -592,6 +610,31 @@ export const SettingsHost = memo(function SettingsHost({ theme, onTheme }: { the
       {id === "issues" && <IssuesTab refocus={refocus} />}
     </>
   );
+
+  if (isMobile)
+    return (
+      <div className="m-settings" role="dialog" aria-label={t("settings.dialog")}>
+        <header className="m-bar">
+          <button className="m-ico" aria-label={t("m.back")} onClick={() => (listing ? close() : setListing(true))}><Icon name="chevronLeft" size={22} /></button>
+          <h1 className="m-bar-title">{listing ? t("settings.dialog") : tabName(TABS.find((x) => x.id === tab)?.label ?? "")}</h1>
+        </header>
+        {listing ? (
+          <ul className="m-settings-list">
+            {TABS.filter((x) => !NO_MOBILE.includes(x.id)).map((x) => (
+              <li key={x.id}>
+                <button onClick={() => (setTab(x.id as TabId), setListing(false))}>
+                  <Icon name={x.icon} size={20} />
+                  <span>{tabName(x.label)}</span>
+                  <Icon name="chevronRight" size={16} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="m-settings-body">{body(tab)}</div>
+        )}
+      </div>
+    );
 
   return (
     <Sheet label={t("settings.dialog")} size="settings" onClose={close} dialogRef={ref}>

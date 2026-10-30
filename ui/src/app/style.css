@@ -1233,23 +1233,23 @@ html[data-big] .prr-list, html[data-big] .prr > .splitter, html[data-big] .prr-h
 .wide-bar button { font-weight: normal; }
 html[data-big] .wide-bar { display: none; }
 
-/* compact(VS Code 사이드바·아래 패널 뷰): 위 검색칸 + 전체 화면 버튼, 두 줄 행. 색은 토큰만 */
-.compact .commits-head { display: none; }
+/* compact(VS Code 사이드바·아래 패널 뷰)와 모바일 셸(.m-root)의 두 줄 행. compact는 위 검색칸 + 전체 화면 버튼도. 색은 토큰만 */
+:is(.compact, .m-root) .commits-head { display: none; }
 .compact .workspace, .compact .main { min-width: 0; }
 .compact .search-bar { position: static; margin: 6px; padding: 3px 4px 3px 8px; border-color: var(--border); box-shadow: none; flex: none; }
 .compact .search-bar:focus-within { border-color: var(--accent); }
 .compact .search-bar input:not([type]) { flex: 1; min-width: 0; width: auto; color: var(--fg); }
 .compact .search-bar label, .compact .search-count, .compact .search-list-btn, .compact .search-bar .icon-btn[aria-label]:not([title]) { display: none; }
-.compact .row { gap: 0; padding-right: 8px; }
+:is(.compact, .m-root) .row { gap: 0; padding-right: 8px; }
 .compact .main > .pane { max-height: none; min-height: 0; } /* 위아래 분할용 상한 해제: 목록이 뷰 높이를 다 쓴다 */
-.compact .row::before { display: none; } /* 레인 색 띠·틴트는 두지 않는다: 호버·선택만 배경으로 */
-.compact .row:not(.selected):hover { background: var(--hover); }
-.compact .row.selected { background: var(--selected); }
-.compact .row > .c-main { flex: 1; min-width: 0; align-self: stretch; display: flex; flex-direction: column; justify-content: center; gap: 1px; padding-left: 8px; }
-.compact .c-l1 { display: flex; align-items: center; gap: 6px; min-width: 0; line-height: 18px; }
-.compact .c-l1 .subject { min-width: 0; }
-.compact .c-l1 .row-refs { position: static; width: auto; max-width: 45%; flex: none; padding: 0; }
-.compact .c-l2 { color: var(--muted); font-size: 11px; line-height: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+:is(.compact, .m-root) .row::before { display: none; } /* 레인 색 띠·틴트는 두지 않는다: 호버·선택만 배경으로 */
+:is(.compact, .m-root) .row:not(.selected):hover { background: var(--hover); }
+:is(.compact, .m-root) .row.selected { background: var(--selected); }
+:is(.compact, .m-root) .row > .c-main { flex: 1; min-width: 0; align-self: stretch; display: flex; flex-direction: column; justify-content: center; gap: 1px; padding-left: 8px; }
+:is(.compact, .m-root) .c-l1 { display: flex; align-items: center; gap: 6px; min-width: 0; line-height: 18px; }
+:is(.compact, .m-root) .c-l1 .subject { min-width: 0; }
+:is(.compact, .m-root) .c-l1 .row-refs { position: static; width: auto; max-width: 45%; flex: none; padding: 0; }
+:is(.compact, .m-root) .c-l2 { color: var(--muted); font-size: 11px; line-height: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .compact .local-row { padding-right: 8px; }
 .compact .local-row > .subject { padding-left: 8px; min-width: 0; }
 .compact .empty { padding: 12px; }
@@ -1313,47 +1313,107 @@ html[data-big] .detail-col .details > .info { width: var(--detail-w) !important;
 .detail-col .details > .info > .files, .detail-col .details > .info > .guide, .detail-col .details > .info > .change-list { flex: 1 1 0; min-height: 60px; overflow: auto; }
 .detail-col .details > .info > .msg-box { flex: 0 1 auto; min-height: 60px; } /* 창이 낮으면 메시지 상자가 먼저 줄어(최소 60px) 파일 목록 자리를 남긴다 */
 
-/* 모바일(Android 태블릿): <html data-mobile>은 platform.ts initMobile이 켠다. 데스크탑·VS Code에는 속성이 없어 아래 규칙이 하나도 적용되지 않는다.
-   터치 타깃은 최소 44px, hover로만 보이던 버튼은 항상 보이게, 좁은 폭(<1000px = platform.ts NARROW)에서는 사이드바를 서랍으로 둔다. */
-html[data-mobile] .app { box-sizing: border-box; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); } /* 상태 표시줄·내비게이션 막대 뒤로 그리지 않는다 */
+/* 모바일(Android 폰·태블릿): <html data-mobile>은 platform.ts initMobile이 켠다. 데스크탑·VS Code에는 속성이 없어 아래 규칙이 하나도 적용되지 않는다.
+   데스크탑 셸(툴바·탭·상태바)은 모바일에서 마운트되지 않고, 화면은 widgets/mobile(.m-*)이 그린다. 터치 타깃은 최소 44px. 색은 토큰만. */
+html[data-mobile] .app { box-sizing: border-box; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); } /* 네이티브 inset(MainActivity)이 이미 비웠으면 0 */
 html[data-mobile] { touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
 html[data-mobile] :where(button, select, input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"])) { min-height: 44px; }
-html[data-mobile] :where(.sheet :where(select, input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"])), .commit-box input) { min-height: 44px; }
 html[data-mobile] :where(.sheet-actions, .commit-btns) button, html[data-mobile] .sheet-body > form :where(button:not(.tool-ico, .tool-txt)) { min-height: 44px; }
 html[data-mobile] input[type="checkbox"], html[data-mobile] input[type="radio"] { width: 22px; height: 22px; }
-html[data-mobile] .tool-btn, html[data-mobile] .tool-more { min-width: 44px; }
-html[data-mobile] .tool-more { padding: 0 8px; }
-html[data-mobile] .tabs { height: 44px; }
-html[data-mobile] .statusbar { height: 32px; }
-html[data-mobile] .statusbar button { min-height: 32px; }
+html[data-mobile] .sidebar { font-size: 15px; }
 html[data-mobile] .sidebar button { padding-top: 10px; padding-bottom: 10px; }
-html[data-mobile] .dom-menu button, html[data-mobile] .palette li, html[data-mobile] .empty-repos button, html[data-mobile] .files li { min-height: 44px; }
-html[data-mobile] .dom-menu button { align-items: center; }
-html[data-mobile] .dom-menu { min-width: 240px; }
-html[data-mobile] .splitter.x::after { left: -12px; right: -12px; }
-html[data-mobile] .splitter.y::after { top: -12px; bottom: -12px; }
+html[data-mobile] .palette li, html[data-mobile] .files li { min-height: 44px; }
 /* 터치에는 hover가 없고 손을 뗀 뒤에도 :hover가 남는다(sticky hover): hover 배경은 끄고 눌림(:active)만 보인다 */
-html[data-mobile] :is(.tool-btn:hover:not(:disabled), .tool-more:hover:not(:disabled), .picker:hover:not(:disabled), .sidebar button:hover, .tab:hover, .empty-repos button:hover, .dom-menu button:hover:not(:disabled), .palette li:hover) { background: none; }
-html[data-mobile] :is(.tool-btn:active:not(:disabled), .tool-more:active:not(:disabled), .picker:active:not(:disabled), .sidebar button:active, .tab:active, .empty-repos button:active, .dom-menu button:active:not(:disabled), .palette li:active) { background: var(--hover); }
-html[data-mobile] .dom-menu button:active:not(:disabled) { background: var(--selected); }
-/* hover가 없는 입력: hover로만 나타나던 버튼을 항상 보인다 */
-html[data-mobile] .sidebar .item .eye { display: block; }
-html[data-mobile] .files li .row-btn, html[data-mobile] .empty-repos .forget { visibility: visible; }
-html[data-mobile] .info-edit, html[data-mobile] .prr-go, html[data-mobile] .tab-close { opacity: 1; }
-html[data-mobile] .tab:not(.active) .tab-close { display: flex; }
-html[data-mobile] .empty-actions { flex-wrap: wrap; justify-content: center; }
+html[data-mobile] :is(.sidebar button:hover, .palette li:hover, .m-ico:hover, .m-title:hover, .m-repos button:hover, .m-files button:hover) { background: none; }
+html[data-mobile] :is(.sidebar button:active, .palette li:active, .m-ico:active:not(:disabled), .m-title:active, .m-repos button:active, .m-files button:active) { background: var(--hover); }
+html[data-mobile] .sidebar .item .eye { display: block; } /* hover로만 나타나던 버튼은 항상 보인다 */
+html[data-mobile] .files li .row-btn { visibility: visible; }
+html[data-mobile] .info-edit, html[data-mobile] .prr-go { opacity: 1; }
 html[data-mobile] .selectable { -webkit-touch-callout: default; }
-html[data-mobile] .side-toggle { display: none; border: 0; background: none; padding: 0 8px; border-radius: 6px; }
-@media (max-width: 999px) {
-  html[data-mobile] .side-toggle { display: inline-flex; align-items: center; justify-content: center; }
-  html[data-mobile] .workspace { position: relative; }
-  html[data-mobile] .workspace > .splitter { display: none; }
-  html[data-mobile] .workspace > .pane.side {
-    position: absolute; z-index: 15; top: 0; bottom: 0; left: 0; width: min(320px, 85%) !important; max-width: none;
-    background: var(--surface); border-right: 1px solid var(--border); box-shadow: var(--shadow-modal);
-    transform: translateX(-100%); visibility: hidden; transition: transform 200ms var(--ease), visibility 0s linear 200ms;
-  }
-  html[data-mobile][data-side] .workspace > .pane.side { transform: none; visibility: visible; transition: transform 200ms var(--ease); }
-  html[data-mobile] .picker-value { max-width: 140px; }
-}
-@media (prefers-reduced-motion: reduce) { html[data-mobile] .workspace > .pane.side { transition: none; } }
+/* 우클릭(길게 누르기) 메뉴는 바닥 액션 시트: 큰 항목, 바깥을 누르면 닫힘 */
+html[data-mobile] .dom-menu-backdrop { background: rgb(0 0 0 / 0.35); }
+html[data-mobile] .dom-menu { left: 0; right: 0; bottom: 0; top: auto; max-width: none; max-height: 75vh; overflow-y: auto; padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); border-radius: 16px 16px 0 0; border-width: 1px 0 0; box-shadow: var(--shadow-modal); }
+html[data-mobile] .dom-menu button { min-height: 52px; align-items: center; padding: 0 16px; font-size: 16px; border-radius: 10px; white-space: normal; }
+html[data-mobile] .dom-menu button:hover:not(:disabled) { background: none; }
+html[data-mobile] .dom-menu button:active:not(:disabled) { background: var(--selected); }
+html[data-mobile] .dom-menu .menu-group { padding: 12px 16px 4px; font-size: 13px; }
+/* 화면: 폰은 쌓인 화면이 아래를 덮고, 태블릿은 두 칸 */
+.m-root { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; font-size: 16px; background: var(--bg); }
+.m-screen { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
+.m-screen.over { position: absolute; inset: 0; z-index: 5; }
+.m-bar { flex: none; display: flex; align-items: center; gap: 2px; height: 56px; padding: 0 6px; background: var(--surface); border-bottom: 1px solid var(--border); box-shadow: var(--shadow); }
+.m-bar-title { flex: 1; min-width: 0; margin: 0; padding: 0 8px; font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-spacer { flex: 1 1 0; }
+.m-ico { flex: none; width: 44px; height: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 22px; background: none; color: var(--fg); }
+.m-ico:disabled { opacity: 0.35; }
+.m-title, .m-branch { flex: 0 1 auto; min-width: 0; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 0; border-radius: 10px; background: none; font-size: 17px; font-weight: 600; }
+.m-branch { font-size: 15px; font-weight: 500; background: var(--hover); }
+.m-title span, .m-branch span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-list { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.m-list > .commits { flex: 1; }
+.m-cols { flex: 1; min-height: 0; display: flex; }
+.m-cols > .m-list { flex: 0 0 42%; min-width: 0; border-right: 1px solid var(--border); }
+.m-detail-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.m-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
+.m-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 14px; }
+.m-empty { margin: auto; padding: 24px; color: var(--muted); text-align: center; word-break: keep-all; }
+.m-subject { margin: 0; font-size: 20px; line-height: 1.35; font-weight: 600; word-break: break-word; }
+.m-body { color: var(--fg); line-height: 1.5; word-break: break-word; }
+.m-who { display: flex; align-items: center; gap: 12px; }
+.m-name { font-weight: 600; font-size: 16px; }
+.m-co, .m-shas { font-size: 14px; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.m-shas .sha { font-size: 14px; }
+.m-files-head { margin: 8px 0 -6px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.m-files, .m-repos { list-style: none; margin: 0; padding: 0; }
+.m-files li { border-top: 1px solid var(--border); }
+.m-files button, .m-repos li > button:first-child { width: 100%; min-height: 56px; display: flex; align-items: center; gap: 10px; padding: 6px 4px; border: 0; background: none; text-align: left; font-size: 16px; }
+.m-files .status { flex: none; width: 18px; text-align: center; font-weight: 700; }
+.m-fname { flex: none; max-width: 60%; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-fdir { flex: 1; min-width: 0; color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-diff { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--surface); }
+.m-diff > .diff { flex: 1; padding-bottom: env(safe-area-inset-bottom); }
+.m-diff .diff-file { display: none; } /* 파일 이름은 상단바에 있다. 한 줄·나란히 전환, 크게 보기, 도구 막대는 두지 않는다 */
+.m-diff .diff { font-size: 13px; }
+.m-repos { flex: 1; overflow-y: auto; }
+.m-repos li { display: flex; align-items: center; border-bottom: 1px solid var(--border); padding-left: 12px; }
+.m-repos li > button:first-child { flex: 1; min-width: 0; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; }
+.m-repos .m-hint { max-width: 100%; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-repos li > button[aria-busy] .m-name { opacity: 0.55; }
+.m-foot { flex: none; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); }
+.m-foot button { width: 100%; min-height: 52px; font-size: 17px; font-weight: 600; border-radius: 12px; }
+.m-screen > .m-empty { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 17px; line-height: 1.5; }
+/* 브랜치 시트(폰: 바닥, 태블릿: 왼쪽 서랍) — 안은 사이드바(lite) */
+.m-panel-backdrop { position: fixed; inset: 0; z-index: 15; background: rgb(0 0 0 / 0.35); }
+.m-panel { position: absolute; display: flex; flex-direction: column; background: var(--surface); box-shadow: var(--shadow-modal); overflow: hidden; }
+.m-panel > .sidebar { flex: 1; min-height: 0; }
+.m-panel.bottom { left: 0; right: 0; bottom: 0; height: 75%; border-radius: 16px 16px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+.m-panel.drawer { top: 0; bottom: 0; left: 0; width: min(340px, 85%); padding-top: env(safe-area-inset-top); border-right: 1px solid var(--border); }
+@media (prefers-reduced-motion: no-preference) { .m-panel.bottom { animation: m-up 200ms var(--ease); } .m-panel.drawer { animation: m-in 200ms var(--ease); } }
+@keyframes m-up { from { transform: translateY(100%); } }
+@keyframes m-in { from { transform: translateX(-100%); } }
+.m-root .row > .c-main { padding-left: 10px; gap: 3px; }
+.m-root .c-l1 { font-size: 16px; line-height: 22px; }
+.m-root .c-l1 .row-refs .badge { font-size: 12px; line-height: 20px; }
+.m-root .c-l2 { font-size: 13px; line-height: 18px; }
+.m-screen[inert] { visibility: hidden; } /* 위에 쌓인 화면이 덮은 아래 화면: 그리지 않되 스크롤 위치는 유지 */
+html[data-mobile] .row:not(.selected):hover { background: none; }
+/* 모바일 설정: 전체 화면 페이지, 그룹 목록 → 그룹 상세. 항목은 라벨 위·컨트롤 아래 한 줄, 컨트롤은 터치 크기. 저장 로직·pref는 데스크탑 설정과 같다 */
+.m-settings { position: fixed; inset: 0; z-index: 9; display: flex; flex-direction: column; background: var(--bg); padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); font-size: 16px; }
+.m-settings-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
+.m-settings-list li { border-bottom: 1px solid var(--border); background: var(--surface); }
+.m-settings-list button { width: 100%; min-height: 60px; display: flex; align-items: center; gap: 14px; padding: 0 16px; border: 0; background: none; text-align: left; font-size: 17px; }
+.m-settings-list button > span { flex: 1; }
+.m-settings-list .icon { color: var(--muted); }
+.m-settings-body { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 16px 32px; }
+.m-settings-body .sgroup-title { font-size: 14px; color: var(--muted); margin: 20px 0 6px; }
+.m-settings-body .sitem { padding: 12px 0; gap: 8px; border-left: 0; margin-left: 0; }
+.m-settings-body .sitem-name { font-size: 16px; }
+.m-settings-body .sitem-desc { font-size: 14px; }
+.m-settings-body .sitem-ctl select, .m-settings-body .sitem-ctl input:not([type="checkbox"]):not([type="radio"]) { width: 100%; font-size: 16px; }
+.m-settings-body .sitem-ctl input[type="number"] { width: 100% !important; }
+.m-settings-body .sitem-ctl .folder-field { width: 100%; }
+.m-settings-body .sitem-ctl .folder-field input:not([type="checkbox"]) { flex: 1; width: auto; min-width: 0; }
+.m-settings-body .sitem.check { align-items: center; }
+.m-settings-body button { min-height: 44px; }
+.m-settings-body .swatch { width: 40px; height: 40px; min-height: 40px; }
+.m-settings-body .accents { flex-wrap: wrap; gap: 10px; }

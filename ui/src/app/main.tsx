@@ -27,6 +27,7 @@ import { gh, suggestOtherAccount } from "../shared/model/gh";
 import { StatusBar } from "../widgets/status-bar/StatusBar";
 import { toast, toastError } from "../shared/lib/toast";
 import { Toasts } from "../shared/ui/Toasts";
+import { MobileShell } from "../widgets/mobile/MobileShell";
 import { Tabs } from "../widgets/tabs/Tabs";
 import { Toolbar } from "../widgets/toolbar/Toolbar";
 import { WORKTREE, type GraphView, type Ref, type RepoChange, type Status, type Submodule, type Worktree } from "../shared/api/types";
@@ -37,7 +38,7 @@ import { bigView } from "../shared/model/bigview";
 import { dismissTop } from "../shared/lib/dismiss";
 import { appMenu } from "../shared/model/appMenu";
 import { loadCaps } from "../shared/lib/caps";
-import { initMobile, isMobile, useNarrow } from "../shared/lib/platform";
+import { initMobile, isMobile } from "../shared/lib/platform";
 import "./style.css";
 
 /** 새로 받은 값이 이전과 내용이 같으면 이전 참조를 돌려준다 (memo된 화면을 다시 그리지 않게) */
@@ -98,8 +99,7 @@ function App() {
   const [sideW, sideSplit] = useSplit("sidebar", 240, 160, 480, "x");
   const [listH, listSplit] = useRatioSplit("commits-ratio", 0.55, 120, 140, "y"); // 창 크기가 바뀌면 그래프·상세가 같은 비율로
   // 상세 위치(설정): right면 그래프 | 오른쪽 상세 열(px, 왼쪽 경계를 끈다). 파일 diff는 크게 보기(그래프 자리)로 연다
-  const narrow = useNarrow(); // 모바일의 좁은 폭(<1000px)에서는 상세를 그래프 아래에 둔다 (데스크탑은 항상 false)
-  const right = useSyncExternalStore(onPrefs, () => pref("detailLayout")) === "right" && !COMPACT && !DETAIL && !narrow;
+  const right = useSyncExternalStore(onPrefs, () => pref("detailLayout")) === "right" && !COMPACT && !DETAIL;
   const [colW, colSplit] = useSplit("detail-col", 420, 280, 900, "x", undefined, true);
   const repoRef = useRef("");
   const loadSeq = useRef(0);
@@ -486,6 +486,10 @@ function App() {
 
   return (
     <div className={COMPACT ? "app compact" : DETAIL ? "app detail-mode" : "app"}>
+      {isMobile ? (
+        <MobileShell repo={repo} view={view} refs={refs} status={status} selected={selected} commit={commit} rules={issueRules} theme={theme.resolved} repos={repos} pending={pending} onPick={pick} onMore={loadMore} onOpenRepo={loadAll} onClose={clear} onForget={forget} />
+      ) : (
+        <>
       {!COMPACT && !DETAIL && <Toolbar
         repo={repo}
         refs={refs}
@@ -580,7 +584,9 @@ function App() {
         )
       )}
       {!COMPACT && !DETAIL && (view || job) && <StatusBar status={status} message={message} job={job} />}
-      {palette && <QuickLaunch recent={repos} onOpen={open} onClose={() => setPalette(false)} />}
+        </>
+      )}
+      {!isMobile && palette && <QuickLaunch recent={repos} onOpen={open} onClose={() => setPalette(false)} />}
       <SettingsHost theme={theme.mode} onTheme={theme.setMode} />
       <PromptHost />
       <Toasts />

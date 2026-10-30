@@ -363,6 +363,7 @@ function handle(cmd: string, args: any): any {
     }
     if (cmd === "patch_is_mail") return /\.mbox$|\/0001-/.test((args as { path: string }).path);
     // /demo 아래 저장소는 모두 같은 가짜 기록을 보여 준다 (복제·init 결과도 열 수 있게)
+    if (cmd === "find_repos" && (window as any).__noRepos) return []; // E2E: 앱 폴더가 비어 있음
     if (cmd === "find_repos") return ["api-server", "design-system", "git403"].map((n) => `${(args as { root: string }).root}/${n}`);
     // E2E가 느린 저장소를 흉내 낼 때: window.__slow = [경로]
     // E2E가 열 수 없는 저장소를 흉내 낼 때: window.__broken = [경로]

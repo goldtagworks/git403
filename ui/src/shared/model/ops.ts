@@ -924,7 +924,7 @@ export const ops = {
       title: t("ops.clone.title"),
       message: root ?? undefined,
       fields: [
-        { kind: "text", name: "url", label: "URL", placeholder: t("ops.f.urlPh") },
+        { kind: "text", name: "url", label: "URL", placeholder: root ? "https://github.com/…" : t("ops.f.urlPh") }, // 모바일(앱 폴더 고정)은 ssh 키가 없어 https만
         ...(root ? [] : [{ kind: "folder" as const, name: "dir", label: t("ops.f.location"), value: stored("cloneDir", "") }]),
         { kind: "text", name: "name", label: t("ops.f.name") },
         ...(users.length > 1 ? [{ kind: "select" as const, name: "account", label: t("ops.clone.account"), options: [t("ops.clone.accountActive"), ...users.map(label)] }] : []),

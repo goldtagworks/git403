@@ -1,6 +1,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Theme.git403" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
+        <!-- 시스템 막대 뒤에 보이는 창 배경: 앱 배경색(bg 토큰)과 같은 값 -->
+        <item name="android:windowBackground">@color/app_bg</item>
     </style>
 </resources>

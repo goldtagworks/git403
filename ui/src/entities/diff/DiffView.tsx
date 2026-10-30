@@ -2,6 +2,7 @@ import { Fragment, memo, type ReactNode, useCallback, useEffect, useMemo, useRef
 import { t, useLocale } from "../../shared/i18n/i18n";
 import { ops, store, stored } from "../../shared/model/ops";
 import { IS_VSCODE } from "../../shared/api/bridge";
+import { isMobile } from "../../shared/lib/platform";
 import { onPrefs, pref, setPref } from "../../shared/lib/settings";
 import { bigView } from "../../shared/model/bigview";
 import { BigButton, type BigCtl } from "../../shared/ui/BigButton";
@@ -154,7 +155,7 @@ function pairRows(lines: Line[]) {
 
 // 보기 방식(한 줄/나란히)은 저장하고, 쓰는 DiffView들이 같이 따른다.
 type Mode = "unified" | "split";
-let mode: Mode = stored<Mode>("diffMode", "unified");
+let mode: Mode = isMobile ? "unified" : stored<Mode>("diffMode", "unified"); // 모바일은 한 줄 모드 고정(보기 전환 없음)
 const subs = new Set<() => void>();
 const setMode = (m: Mode) => {
   mode = m;
