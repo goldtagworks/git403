@@ -1,10 +1,13 @@
 //! `git submodule status --recursive` + `.gitmodules`의 url.
 
+#[cfg(feature = "cli")]
 use std::collections::HashMap;
+#[cfg(feature = "cli")]
 use std::path::Path;
 
 use serde::Serialize;
 
+#[cfg(feature = "cli")]
 use crate::{GitRunner, Result};
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -30,6 +33,7 @@ pub struct Submodule {
     pub status: SubmoduleStatus,
 }
 
+#[cfg(feature = "cli")]
 /// `.gitmodules`가 없으면 빈 목록.
 pub async fn read_submodules(git: &GitRunner, repo: &Path) -> Result<Vec<Submodule>> {
     if !repo.join(".gitmodules").is_file() {
@@ -44,6 +48,7 @@ pub async fn read_submodules(git: &GitRunner, repo: &Path) -> Result<Vec<Submodu
     Ok(parse_status(&String::from_utf8_lossy(&status), &urls))
 }
 
+#[cfg(feature = "cli")]
 /// `submodule.<name>.path <p>` / `.url <u>` 줄에서 path → url 표를 만든다.
 fn parse_urls(text: &str) -> HashMap<String, String> {
     let mut paths: HashMap<&str, &str> = HashMap::new();
@@ -63,6 +68,7 @@ fn parse_urls(text: &str) -> HashMap<String, String> {
         .collect()
 }
 
+#[cfg(feature = "cli")]
 fn parse_status(text: &str, urls: &HashMap<String, String>) -> Vec<Submodule> {
     text.lines()
         .filter_map(|line| {
@@ -85,7 +91,7 @@ fn parse_status(text: &str, urls: &HashMap<String, String>) -> Vec<Submodule> {
         .collect()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "cli"))]
 mod tests {
     use super::*;
 

@@ -1,9 +1,11 @@
 //! `git worktree list --porcelain`.
 
+#[cfg(feature = "cli")]
 use std::path::Path;
 
 use serde::Serialize;
 
+#[cfg(feature = "cli")]
 use crate::{GitRunner, Result};
 
 #[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
@@ -21,11 +23,13 @@ pub struct Worktree {
     pub main: bool,
 }
 
+#[cfg(feature = "cli")]
 pub async fn read_worktrees(git: &GitRunner, repo: &Path) -> Result<Vec<Worktree>> {
     let out = git.output(repo, &["worktree", "list", "--porcelain"]).await?;
     Ok(parse(&String::from_utf8_lossy(&out)))
 }
 
+#[cfg(feature = "cli")]
 /// 항목은 빈 줄로 구분, 줄은 `키 [값]`.
 fn parse(text: &str) -> Vec<Worktree> {
     let mut list: Vec<Worktree> = Vec::new();
@@ -52,7 +56,7 @@ fn parse(text: &str) -> Vec<Worktree> {
     list
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "cli"))]
 mod tests {
     use super::*;
 

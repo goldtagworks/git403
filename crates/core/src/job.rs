@@ -1,13 +1,21 @@
-//! 긴 작업 하나의 프로세스 수명: 출력을 줄 단위 이벤트로 펌프, 취소, 프로세스 트리 종료.
+//! 긴 작업 하나의 수명: 이벤트(`JobEvent`)·취소 핸들(`JobHandle`)은 공용이고,
+//! 프로세스 출력을 줄 단위로 펌프하고 프로세스 트리를 종료하는 부분은 feature `cli`에서만 컴파일된다.
 
+#[cfg(feature = "cli")]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(feature = "cli")]
 use std::sync::Arc;
 
 use serde::Serialize;
+#[cfg(feature = "cli")]
 use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
+#[cfg(feature = "cli")]
 use tokio::process::Command;
-use tokio::sync::{mpsc, watch};
+#[cfg(feature = "cli")]
+use tokio::sync::mpsc;
+use tokio::sync::watch;
 
+#[cfg(feature = "cli")]
 use crate::{Error, Result};
 
 /// 실행 중인 작업에서 나오는 이벤트. UI로 그대로 전달된다.
@@ -24,8 +32,10 @@ pub enum JobEvent {
 #[derive(Clone)]
 pub struct JobHandle {
     cancel: watch::Sender<bool>,
+    #[cfg(feature = "cli")]
     pid: Option<u32>,
     /// 자식이 끝났으면 true (끝난 pid의 프로세스 그룹을 건드리지 않기 위해)
+    #[cfg(feature = "cli")]
     done: Arc<AtomicBool>,
 }
 
@@ -37,6 +47,7 @@ impl JobHandle {
     /// 비동기 런타임 없이 지금 바로 프로세스 트리를 끝낸다 (앱 종료 정리용). 결과는 `Cancelled`로 보고된다.
     pub fn kill_now(&self) {
         let _ = self.cancel.send(true);
+        #[cfg(feature = "cli")]
         if !self.done.load(Ordering::SeqCst) {
             kill_tree(self.pid);
         }
@@ -48,10 +59,11 @@ impl JobHandle {
     /// 프로세스가 없는 작업(순수 Rust 백엔드)용 핸들. 돌려주는 수신기가 `true`가 되거나(취소) 모든 복제본이 drop되면 취소다.
     pub(crate) fn detached() -> (JobHandle, watch::Receiver<bool>) {
         let (tx, rx) = watch::channel(false);
-        (JobHandle { cancel: tx, pid: None, done: Arc::new(AtomicBool::new(false)) }, rx)
+        (JobHandle { cancel: tx, #[cfg(feature = "cli")] pid: None, #[cfg(feature = "cli")] done: Arc::new(AtomicBool::new(false)) }, rx)
     }
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn run_job(
     mut cmd: Command,
     events: mpsc::UnboundedSender<JobEvent>,
@@ -97,6 +109,7 @@ pub(crate) fn run_job(
     Ok((JobHandle { cancel: cancel_tx, pid, done }, task))
 }
 
+#[cfg(feature = "cli")]
 /// 프로세스와 그 자손을 모두 끝낸다 (Unix: 프로세스 그룹에 SIGKILL, Windows: `taskkill /T /F`).
 fn kill_tree(pid: Option<u32>) {
     let Some(pid) = pid else { return };
@@ -112,6 +125,7 @@ fn kill_tree(pid: Option<u32>) {
     }
 }
 
+#[cfg(feature = "cli")]
 /// 스트림을 `\n`과 `\r` 기준으로 잘라 이벤트로 보낸다. 오류 요약(`summarize`)을 돌려준다.
 async fn pump(
     stream: impl AsyncRead + Unpin,
@@ -149,6 +163,7 @@ async fn pump(
     summarize(recent.make_contiguous())
 }
 
+#[cfg(feature = "cli")]
 /// 실패 메시지용 stderr 요약: 원인 줄(`error:`·`fatal:`·` ! [rejected]` 등, 최대 4개). 없으면 마지막 줄.
 /// 마지막 줄만 쓰면 push 거부가 `hint: …` 한 줄로 끝나 원인이 빠진다.
 fn summarize(lines: &[String]) -> String {
@@ -163,6 +178,7 @@ fn summarize(lines: &[String]) -> String {
     picked[picked.len().saturating_sub(4)..].join("\n")
 }
 
+#[cfg(feature = "cli")]
 async fn read_until_any<R: AsyncBufReadExt + Unpin>(r: &mut R, buf: &mut Vec<u8>) -> std::io::Result<usize> {
     let mut total = 0;
     loop {
@@ -182,7 +198,7 @@ async fn read_until_any<R: AsyncBufReadExt + Unpin>(r: &mut R, buf: &mut Vec<u8>
     }
 }
 
-#[cfg(all(test, unix))]
+#[cfg(all(test, unix, feature = "cli"))]
 mod tests {
     use super::*;
     use crate::GitRunner;
@@ -257,7 +273,7 @@ mod tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "cli"))]
 mod summary_tests {
     use super::summarize;
 

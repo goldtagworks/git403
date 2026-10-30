@@ -6,9 +6,41 @@ edition.workspace = true
 [features]
 default = ["cli"]
 # git 실행 파일을 띄우는 백엔드(`CliBackend`)
-cli = []
+cli = ["dep:ssh-key", "dep:libc"]
 # 순수 Rust(gitoxide) 백엔드 `GixBackend`. 켜면 gix 의존성이 컴파일된다(기본 빌드는 아님)
 gix = ["dep:gix", "dep:reqwest", "dep:rustls"]
+
+[[test]]
+name = "commit_graph"
+required-features = ["cli"]
+
+[[test]]
+name = "diff_syntax"
+required-features = ["cli"]
+
+[[test]]
+name = "eol"
+required-features = ["cli"]
+
+[[test]]
+name = "git"
+required-features = ["cli"]
+
+[[test]]
+name = "modules"
+required-features = ["cli"]
+
+[[test]]
+name = "patch"
+required-features = ["cli"]
+
+[[test]]
+name = "worktree"
+required-features = ["cli"]
+
+[[test]]
+name = "gix_cross"
+required-features = ["cli", "gix"]
 
 [dependencies]
 async-trait = "0.1"
@@ -16,7 +48,7 @@ gc-i18n = { path = "../i18n" }
 tokio.workspace = true
 serde.workspace = true
 trash = "5"
-ssh-key = { version = "0.6.7", default-features = false, features = ["ed25519", "encryption", "getrandom"] }
+ssh-key = { optional = true, version = "0.6.7", default-features = false, features = ["ed25519", "encryption", "getrandom"] }
 
 # 필요한 기능만: sha1, 리비전·인덱스·status·blob diff, 네트워크는 blocking + reqwest(rustls)
 gix = { version = "0.90", optional = true, default-features = false, features = ["sha1", "revision", "index", "status", "blob-diff", "blocking-http-transport-reqwest"] }
@@ -25,7 +57,7 @@ reqwest = { version = "0.13", optional = true, default-features = false, feature
 rustls = { version = "0.23", optional = true, default-features = false, features = ["ring", "std", "tls12"] }
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2"
+libc = { version = "0.2", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

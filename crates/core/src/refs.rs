@@ -1,7 +1,9 @@
+#[cfg(feature = "cli")]
 use std::path::Path;
 
 use serde::Serialize;
 
+#[cfg(feature = "cli")]
 use crate::{GitRunner, Result};
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -29,6 +31,7 @@ pub struct Ref {
     pub behind: u32,
 }
 
+#[cfg(feature = "cli")]
 /// 사이드바와 그래프 배지에 쓰는 참조 전체.
 pub async fn read_refs(git: &GitRunner, repo: &Path) -> Result<Vec<Ref>> {
     let refs = git
@@ -41,6 +44,7 @@ pub async fn read_refs(git: &GitRunner, repo: &Path) -> Result<Vec<Ref>> {
         .collect())
 }
 
+#[cfg(feature = "cli")]
 fn parse_refs(text: &str) -> impl Iterator<Item = Ref> + '_ {
     text.lines().filter_map(|line| {
         let f: Vec<&str> = line.split('\u{1f}').collect();
@@ -61,12 +65,14 @@ fn parse_refs(text: &str) -> impl Iterator<Item = Ref> + '_ {
     })
 }
 
+#[cfg(feature = "cli")]
 /// `ahead 2, behind 6` / `behind 6` / `gone` / `` → (앞섬, 뒤처짐)
 fn parse_track(t: &str) -> (u32, u32) {
     let n = |k: &str| t.split(", ").find_map(|p| p.strip_prefix(k)?.trim().parse().ok()).unwrap_or(0);
     (n("ahead "), n("behind "))
 }
 
+#[cfg(feature = "cli")]
 fn parse_stashes(text: &str) -> impl Iterator<Item = Ref> + '_ {
     text.lines().filter_map(|line| {
         let mut f = line.splitn(3, '\u{1f}');
@@ -82,7 +88,7 @@ fn parse_stashes(text: &str) -> impl Iterator<Item = Ref> + '_ {
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "cli"))]
 mod tests {
     use super::*;
 

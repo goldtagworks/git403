@@ -6,6 +6,7 @@
 pub mod backend;
 pub mod blame;
 pub mod blob;
+#[cfg(feature = "cli")]
 pub mod commit_graph;
 pub mod conflict;
 pub mod eol;
@@ -18,50 +19,99 @@ pub mod patch;
 pub mod patchfile;
 pub mod rebase;
 pub mod refs;
+#[cfg(feature = "cli")]
 pub mod runner;
 pub mod scan;
+#[cfg(feature = "cli")]
 pub mod shellenv;
 pub mod settings;
 pub mod show;
+#[cfg(feature = "cli")]
 pub mod ssh;
+#[cfg(feature = "cli")]
 pub mod restore;
 pub mod stage;
 pub mod stats;
 pub mod status;
 pub mod submodules;
 pub mod trash_files;
+#[cfg(feature = "cli")]
 pub mod version;
 pub mod worktree;
 pub mod lfs;
 
+#[cfg(feature = "cli")]
 pub use commit_graph::ensure_commit_graph;
-pub use eol::{fix_crlf, root_has_eol_rule, staged_crlf};
-pub use conflict::{conflict_blobs, ConflictBlobs};
-pub use blame::{blame, BlameLine};
-pub use blob::{base64, file_blob, BLOB_LIMIT};
-pub use log::{file_log, head_commit, read_log, search_content, Commit};
+pub use eol::root_has_eol_rule;
+#[cfg(feature = "cli")]
+pub use eol::{fix_crlf, staged_crlf};
+pub use conflict::ConflictBlobs;
+#[cfg(feature = "cli")]
+pub use conflict::conflict_blobs;
+pub use blame::BlameLine;
+#[cfg(feature = "cli")]
+pub use blame::blame;
+pub use blob::{base64, BLOB_LIMIT};
+#[cfg(feature = "cli")]
+pub use blob::file_blob;
+pub use log::Commit;
+#[cfg(feature = "cli")]
+pub use log::{file_log, head_commit, read_log, search_content};
 pub use open::{canonical_in_repo, open_command, path_in_repo, OpenCmd};
 pub use patchfile::is_mailbox_patch;
-pub use rebase::{rebase_interactive, RebaseStep};
-pub use refs::{read_refs, Ref, RefKind};
+pub use rebase::RebaseStep;
+#[cfg(feature = "cli")]
+pub use rebase::rebase_interactive;
+pub use refs::{Ref, RefKind};
+#[cfg(feature = "cli")]
+pub use refs::read_refs;
 pub use settings::{ensure_global_ignore, home_dir, home_ignore_path, ignore_path, read_text, write_in_repo, write_text};
+#[cfg(feature = "cli")]
 pub use ssh::{generate_key, list_keys, SshKey};
-pub use show::{changed_files, file_diff, ChangedFile};
+pub use show::ChangedFile;
+#[cfg(feature = "cli")]
+pub use show::{changed_files, file_diff};
+#[cfg(feature = "cli")]
 pub use restore::restore_file;
 pub use trash_files::trash_files;
-pub use stage::{apply_partial, co_authors, commit, committer, commit_message, discard, last_message, stage, unstage, PatchTarget};
-pub use stats::{repo_stats, AuthorStat, ExtCount, Stats, StatsRange, Summary, WeekCount};
-pub use status::{read_status, worktree_diff, Status, StatusFile};
+pub use stage::PatchTarget;
+#[cfg(feature = "cli")]
+pub use stage::{apply_partial, co_authors, commit, committer, commit_message, discard, last_message, stage, unstage};
+pub use stats::{AuthorStat, ExtCount, Stats, StatsRange, Summary, WeekCount};
+#[cfg(feature = "cli")]
+pub use stats::repo_stats;
+pub use status::{Status, StatusFile};
+#[cfg(feature = "cli")]
+pub use status::{read_status, worktree_diff};
 pub use scan::find_repos;
+#[cfg(feature = "cli")]
 pub use version::git_version;
-pub use submodules::{read_submodules, Submodule, SubmoduleStatus};
-pub use worktree::{read_worktrees, Worktree};
-pub use lfs::{lfs_status, Lfs, LfsFile};
+pub use submodules::{Submodule, SubmoduleStatus};
+#[cfg(feature = "cli")]
+pub use submodules::read_submodules;
+pub use worktree::Worktree;
+#[cfg(feature = "cli")]
+pub use worktree::read_worktrees;
+pub use lfs::{Lfs, LfsFile};
+#[cfg(feature = "cli")]
+pub use lfs::lfs_status;
 pub use job::{JobEvent, JobHandle};
-pub use runner::{reject_option, GitRunner};
+#[cfg(feature = "cli")]
+pub use runner::GitRunner;
 pub use backend::{Capabilities, GitBackend, Op, Spawned};
 #[cfg(feature = "cli")]
 pub use backend::CliBackend;
+
+#[cfg(not(any(feature = "cli", feature = "gix")))]
+compile_error!("gc-core에는 feature `cli`(git 실행 파일) 또는 `gix`(순수 Rust) 중 하나가 필요하다");
+
+/// 사용자가 준 이름·rev·URL이 `-`로 시작하면 git이 옵션으로 읽는다 (예: `--upload-pack=...`). 그런 값은 거부한다.
+pub fn reject_option(arg: &str) -> Result<&str> {
+    if arg.trim_start().starts_with('-') {
+        return Err(gc_i18n::coded!("git.badArg", "invalid argument (must not start with '-'): {arg}", arg = arg).into());
+    }
+    Ok(arg)
+}
 
 #[derive(Debug)]
 pub enum Error {
@@ -122,3 +172,15 @@ impl From<std::io::Error> for Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[cfg(test)]
+mod tests {
+    use super::reject_option;
+
+    #[test]
+    fn 옵션처럼_보이는_인자는_거부한다() {
+        assert!(reject_option("--upload-pack=x").is_err());
+        assert!(reject_option(" -x").is_err());
+        assert_eq!(reject_option("main").unwrap(), "main");
+    }
+}

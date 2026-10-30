@@ -206,14 +206,6 @@ impl GitRunner {
     }
 }
 
-/// 사용자가 준 이름·rev·URL이 `-`로 시작하면 git이 옵션으로 읽는다 (예: `--upload-pack=...`). 그런 값은 거부한다.
-pub fn reject_option(arg: &str) -> Result<&str> {
-    if arg.trim_start().starts_with('-') {
-        return Err(gc_i18n::coded!("git.badArg", "invalid argument (must not start with '-'): {arg}", arg = arg).into());
-    }
-    Ok(arg)
-}
-
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
@@ -237,13 +229,6 @@ mod tests {
         std::fs::write(dir.join("한글.txt"), "x").unwrap();
         git.output(&dir, &["add", "-A"]).await.unwrap();
         assert_eq!(String::from_utf8(git.output(&dir, &["ls-files"]).await.unwrap()).unwrap(), "한글.txt\n");
-    }
-
-    #[test]
-    fn 옵션처럼_보이는_인자는_거부한다() {
-        assert!(reject_option("--upload-pack=x").is_err());
-        assert!(reject_option(" -x").is_err());
-        assert_eq!(reject_option("main").unwrap(), "main");
     }
 
     #[cfg(target_os = "macos")]

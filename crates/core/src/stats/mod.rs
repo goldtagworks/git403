@@ -2,18 +2,25 @@
 //! 추적 파일 수·확장자는 `ls-files`, 저장소 크기는 `count-objects -v`.
 //! 줄 수(`--numstat`)는 큰 저장소에서 느려서 `with_lines`일 때만 계산한다.
 
+#[cfg(feature = "cli")]
 use std::collections::HashMap;
+#[cfg(feature = "cli")]
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "cli")]
 use tokio::sync::mpsc;
 
+#[cfg(feature = "cli")]
 use crate::{Error, GitRunner, JobEvent, JobHandle, Result};
 
+#[cfg(feature = "cli")]
 mod calendar;
+#[cfg(feature = "cli")]
 mod log_parser;
 
+#[cfg(feature = "cli")]
 use log_parser::LogParser;
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -29,6 +36,7 @@ pub enum StatsRange {
 }
 
 impl StatsRange {
+    #[cfg(feature = "cli")]
     fn days(self) -> Option<i64> {
         match self {
             Self::All => None,
@@ -99,9 +107,12 @@ pub struct Stats {
     pub extensions: Vec<ExtCount>,
 }
 
+#[cfg(feature = "cli")]
 pub const MAX_WEEKS: usize = 104;
+#[cfg(feature = "cli")]
 const MAX_EXT: usize = 30;
 
+#[cfg(feature = "cli")]
 /// `on_start`는 로그 프로세스를 띄운 직후 취소 핸들과 함께 불린다 (호출 측이 보관했다가 `cancel()`).
 /// 취소되면 `Error::Cancelled`. 빈 저장소(ref 없음)는 빈 통계, 그 밖의 git 오류는 그대로 돌려준다.
 ///
@@ -177,10 +188,12 @@ pub async fn repo_stats(
     Ok(stats)
 }
 
+#[cfg(feature = "cli")]
 fn now() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64)
 }
 
+#[cfg(feature = "cli")]
 /// `size`(느슨한 객체) + `size-pack` (KiB)
 fn parse_size(text: &str) -> u64 {
     text.lines()
@@ -190,6 +203,7 @@ fn parse_size(text: &str) -> u64 {
         .sum()
 }
 
+#[cfg(feature = "cli")]
 fn count_field(text: &str, key: &str) -> u64 {
     text.lines()
         .filter_map(|l| l.split_once(": "))
@@ -198,11 +212,13 @@ fn count_field(text: &str, key: &str) -> u64 {
         .unwrap_or(0)
 }
 
+#[cfg(feature = "cli")]
 /// 느슨한 객체가 있는데(`count`) 크기(`size`)가 0
 fn loose_size_missing(text: &str) -> bool {
     count_field(text, "count") > 0 && count_field(text, "size") == 0
 }
 
+#[cfg(feature = "cli")]
 /// `objects/??/*` 파일 크기 합 (KiB, 올림). 공통 git dir의 objects 경로를 받는다.
 fn loose_objects_kb(objects: &Path) -> u64 {
     let Ok(rd) = std::fs::read_dir(objects) else { return 0 };
@@ -219,6 +235,7 @@ fn loose_objects_kb(objects: &Path) -> u64 {
     bytes.div_ceil(1024)
 }
 
+#[cfg(feature = "cli")]
 fn parse_files(text: &str) -> (u64, Vec<ExtCount>) {
     let mut total = 0;
     let mut map: HashMap<String, u64> = HashMap::new();
@@ -238,7 +255,7 @@ fn parse_files(text: &str) -> (u64, Vec<ExtCount>) {
     (total, v)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "cli"))]
 mod tests {
     use super::*;
 

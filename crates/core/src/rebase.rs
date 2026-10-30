@@ -1,11 +1,14 @@
 //! interactive rebase를 편집기 없이 실행한다.
 //! 우리가 만든 todo 목록을 GIT_SEQUENCE_EDITOR로 그대로 넣고, reword는 `exec git commit --amend`로 처리한다.
 
+#[cfg(feature = "cli")]
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use crate::runner::reject_option;
+#[cfg(feature = "cli")]
+use crate::reject_option;
+#[cfg(feature = "cli")]
 use crate::{GitRunner, Result};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -18,9 +21,11 @@ pub struct RebaseStep {
     pub message: Option<String>,
 }
 
+#[cfg(feature = "cli")]
 /// 임시 todo·메시지 파일 폴더 이름 접두사 (`.git/gc-rebase-*`).
 const DIR_PREFIX: &str = "gc-rebase-";
 
+#[cfg(feature = "cli")]
 /// `base` 다음 커밋부터 HEAD까지를 `steps` 순서(오래된 것 먼저)대로 다시 쌓는다.
 ///
 /// reword의 `exec` 줄은 메시지 파일을 읽으므로, 충돌로 멈췄다 `--continue`할 때도 남아 있어야 한다.
@@ -41,6 +46,7 @@ pub async fn rebase_interactive(git: &GitRunner, repo: &Path, base: &str, steps:
     result
 }
 
+#[cfg(feature = "cli")]
 async fn run(git: &GitRunner, repo: &Path, base: &str, steps: &[RebaseStep], dir: &Path) -> Result<()> {
     let amend = format!("{} commit --amend --only --allow-empty -F", shell_quote(&git.git_path().to_string_lossy()));
     let mut todo = String::new();
@@ -63,10 +69,12 @@ async fn run(git: &GitRunner, repo: &Path, base: &str, steps: &[RebaseStep], dir
     git.output_env(repo, &["rebase", "-i", "--autostash", base], &[("GIT_SEQUENCE_EDITOR", &editor)]).await.map(drop)
 }
 
+#[cfg(feature = "cli")]
 fn in_progress(gitdir: &Path) -> bool {
     gitdir.join("rebase-merge").exists() || gitdir.join("rebase-apply").exists()
 }
 
+#[cfg(feature = "cli")]
 fn remove_stale(gitdir: &Path) {
     let Ok(entries) = std::fs::read_dir(gitdir) else { return };
     for e in entries.flatten() {
@@ -76,6 +84,7 @@ fn remove_stale(gitdir: &Path) {
     }
 }
 
+#[cfg(feature = "cli")]
 fn shell_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', r"'\''"))
 }

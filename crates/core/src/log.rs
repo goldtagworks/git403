@@ -1,7 +1,9 @@
+#[cfg(feature = "cli")]
 use std::path::Path;
 
 use serde::Serialize;
 
+#[cfg(feature = "cli")]
 use crate::{Error, GitRunner, Result};
 
 #[derive(Debug, Clone, Serialize)]
@@ -17,17 +19,22 @@ pub struct Commit {
     pub body: String,
 }
 
+#[cfg(feature = "cli")]
 const FORMAT: &str = "--format=%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%s%x1f%b%x1e";
+#[cfg(feature = "cli")]
 const BODY_MAX: usize = 200;
 
+#[cfg(feature = "cli")]
 const SEP: char = '\u{1f}';
 
+#[cfg(feature = "cli")]
 /// 숨긴 ref(`refs/heads/x`, 폴더는 `refs/remotes/origin/foo/*`)를 `--all` 앞의 `--exclude`로 바꾼다.
 /// `refs/`로 시작하지 않는 값은 무시한다. 빈 목록이면 아무것도 붙지 않는다.
 fn exclude_args(hidden: &[String]) -> Vec<String> {
     hidden.iter().filter(|p| p.starts_with("refs/")).map(|p| format!("--exclude={p}")).collect()
 }
 
+#[cfg(feature = "cli")]
 /// 숨긴 폴더 안에서 다시 보이게 한 예외(`!refs/remotes/origin/x`, 폴더는 `!…/foo/*`)를 `--all` 뒤에 붙인다.
 /// `--exclude`는 다음 `--all`까지만 걸리므로 예외는 다시 포함된다. 폴더는 `--glob`, 단일 ref는 그대로(없는 ref는 `--ignore-missing`로 무시).
 fn include_args(hidden: &[String]) -> Vec<String> {
@@ -40,12 +47,14 @@ fn include_args(hidden: &[String]) -> Vec<String> {
     if inc.is_empty() { inc } else { [vec!["--ignore-missing".to_owned()], inc].concat() }
 }
 
+#[cfg(feature = "cli")]
 /// 현재 체크아웃한 커밋 (커밋이 없는 저장소면 None).
 pub async fn head_commit(git: &GitRunner, repo: &Path) -> Option<String> {
     let out = git.query(repo, &["rev-parse", "--verify", "-q", "HEAD"]).await.ok()?;
     Some(String::from_utf8_lossy(&out).trim().to_owned()).filter(|s| !s.is_empty())
 }
 
+#[cfg(feature = "cli")]
 /// 그래프용 커밋 목록. 부모가 항상 자식보다 뒤에 오면서 브랜치끼리는 날짜순으로 섞이도록 `--date-order`를 쓴다.
 /// `hidden`에 든 ref로만 닿는 커밋은 빠진다 (HEAD는 `--all`에 늘 들어 있어 현재 브랜치는 숨겨지지 않는다).
 pub async fn read_log(git: &GitRunner, repo: &Path, limit: usize, hidden: &[String]) -> Result<Vec<Commit>> {
@@ -61,6 +70,7 @@ pub async fn read_log(git: &GitRunner, repo: &Path, limit: usize, hidden: &[Stri
     parse(&String::from_utf8_lossy(&out))
 }
 
+#[cfg(feature = "cli")]
 /// 파일 하나의 히스토리 (이름 변경을 따라간다).
 pub async fn file_log(git: &GitRunner, repo: &Path, path: &str, limit: usize) -> Result<Vec<Commit>> {
     let max = format!("--max-count={limit}");
@@ -68,6 +78,7 @@ pub async fn file_log(git: &GitRunner, repo: &Path, path: &str, limit: usize) ->
     parse(&String::from_utf8_lossy(&out))
 }
 
+#[cfg(feature = "cli")]
 /// 내용 검색: 문자열이 추가·삭제된 커밋의 SHA (`git log -S`). 숨긴 ref로만 닿는 커밋은 그래프에 없으니 뺀다.
 pub async fn search_content(git: &GitRunner, repo: &Path, text: &str, hidden: &[String]) -> Result<Vec<String>> {
     let pick = format!("-S{text}");
@@ -82,6 +93,7 @@ pub async fn search_content(git: &GitRunner, repo: &Path, text: &str, hidden: &[
     Ok(String::from_utf8_lossy(&out).lines().map(str::to_owned).collect())
 }
 
+#[cfg(feature = "cli")]
 fn parse(text: &str) -> Result<Vec<Commit>> {
     text.split('\x1e')
         .map(str::trim_start)
@@ -101,7 +113,7 @@ fn parse(text: &str) -> Result<Vec<Commit>> {
         .collect()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "cli"))]
 mod tests {
     use super::*;
 

@@ -1,8 +1,11 @@
+#[cfg(feature = "cli")]
 use std::path::Path;
 
 use serde::Serialize;
 
-use crate::runner::reject_option;
+#[cfg(feature = "cli")]
+use crate::reject_option;
+#[cfg(feature = "cli")]
 use crate::{GitRunner, Result};
 
 #[derive(Debug, Clone, Serialize)]
@@ -15,11 +18,14 @@ pub struct ChangedFile {
 }
 
 // 머지 커밋은 첫 부모 기준으로 보여준다 (일반적인 git 클라이언트와 같은 동작).
+#[cfg(feature = "cli")]
 const MERGE: &str = "--diff-merges=first-parent";
 
+#[cfg(feature = "cli")]
 /// 화면에 보이는 diff는 색·외부 diff 도구·사용자 접두사 설정(`diff.noprefix` 등)과 무관하게 같은 모양이어야 한다.
 pub const DIFF_ARGS: [&str; 4] = ["--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/"];
 
+#[cfg(feature = "cli")]
 /// 커밋에서 바뀐 파일 목록 (`-z`: 경로를 인용·이스케이프 없이 NUL로 받는다).
 pub async fn changed_files(git: &GitRunner, repo: &Path, commit: &str) -> Result<Vec<ChangedFile>> {
     let commit = reject_option(commit)?;
@@ -27,6 +33,7 @@ pub async fn changed_files(git: &GitRunner, repo: &Path, commit: &str) -> Result
     Ok(parse_status_z(&String::from_utf8_lossy(&out)))
 }
 
+#[cfg(feature = "cli")]
 /// 커밋의 파일 하나에 대한 unified diff.
 /// `ignore_eol`이면 줄 끝 CR 차이(`--ignore-cr-at-eol`), `ignore_ws`면 모든 공백 차이(`-w`)를 무시한다.
 pub async fn file_diff(git: &GitRunner, repo: &Path, commit: &str, path: &str, ignore_eol: bool, ignore_ws: bool) -> Result<String> {
@@ -44,6 +51,7 @@ pub async fn file_diff(git: &GitRunner, repo: &Path, commit: &str, path: &str, i
     Ok(String::from_utf8_lossy(&out).into_owned())
 }
 
+#[cfg(feature = "cli")]
 /// `-z` 출력: `상태\0경로\0` (이름 변경·복사는 `R087\0옛 경로\0새 경로\0`).
 fn parse_status_z(text: &str) -> Vec<ChangedFile> {
     let mut t = text.split('\0').filter(|s| !s.is_empty());
@@ -61,7 +69,7 @@ fn parse_status_z(text: &str) -> Vec<ChangedFile> {
     out
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "cli"))]
 mod tests {
     use super::*;
 

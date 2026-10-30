@@ -2,6 +2,7 @@
 
 use std::path::Path;
 
+#[cfg(feature = "cli")]
 use crate::{path_in_repo, GitRunner, Result};
 
 /// `.gitattributes` 내용에 줄바꿈 규칙(`text`·`-text`·`text=…`·`eol=…`)이 하나라도 있는지.
@@ -16,6 +17,7 @@ pub fn root_has_eol_rule(repo: &Path) -> bool {
     std::fs::read(repo.join(".gitattributes")).is_ok_and(|b| has_eol_rule(&String::from_utf8_lossy(&b)))
 }
 
+#[cfg(feature = "cli")]
 /// `git ls-files --eol -z` 출력에서 **인덱스에 CRLF가 든 텍스트 파일**만 고른다(`i/crlf`·`i/mixed`).
 /// 저장소가 `eol=crlf`를 명시한 파일은 제외한다. 바이너리(`i/-text`)는 애초에 해당 없음.
 pub fn parse_crlf(out: &str) -> Vec<String> {
@@ -29,6 +31,7 @@ pub fn parse_crlf(out: &str) -> Vec<String> {
         .collect()
 }
 
+#[cfg(feature = "cli")]
 /// 스테이지된(추가·수정) 파일 중 인덱스 내용에 CRLF가 든 것. `core.autocrlf`가 이미 LF로 정규화해 넣었으면 나오지 않는다.
 pub async fn staged_crlf(git: &GitRunner, repo: &Path) -> Result<Vec<String>> {
     let names = git.query(repo, &["diff", "--cached", "--name-only", "-z", "--diff-filter=AM"]).await?;
@@ -42,6 +45,7 @@ pub async fn staged_crlf(git: &GitRunner, repo: &Path) -> Result<Vec<String>> {
     Ok(parse_crlf(&String::from_utf8_lossy(&git.query(repo, &a).await?)))
 }
 
+#[cfg(feature = "cli")]
 /// 스테이지된 내용을 LF로 바꿔 인덱스에 다시 넣는다. 작업 파일은 **인덱스 내용과 같을 때만**(= 부분 스테이지가 아닐 때) LF로 바꾼다
 /// (그래야 변경 목록에 CR 차이만 남지 않고, 스테이지 안 한 수정은 건드리지 않는다).
 pub async fn fix_crlf(git: &GitRunner, repo: &Path, paths: &[String]) -> Result<()> {
@@ -73,6 +77,7 @@ pub async fn fix_crlf(git: &GitRunner, repo: &Path, paths: &[String]) -> Result<
     Ok(())
 }
 
+#[cfg(feature = "cli")]
 fn lf(b: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(b.len());
     for (i, &c) in b.iter().enumerate() {
@@ -83,7 +88,7 @@ fn lf(b: &[u8]) -> Vec<u8> {
     out
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "cli"))]
 mod tests {
     use super::*;
 

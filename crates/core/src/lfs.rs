@@ -1,9 +1,11 @@
 //! Git LFS 상태: 설치 여부, 추적 패턴(`git lfs track`), 파일(`git lfs ls-files -l`).
 
+#[cfg(feature = "cli")]
 use std::path::Path;
 
 use serde::Serialize;
 
+#[cfg(feature = "cli")]
 use crate::{Error, GitRunner, Result};
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -23,6 +25,7 @@ pub struct Lfs {
     pub files: Vec<LfsFile>,
 }
 
+#[cfg(feature = "cli")]
 /// `git lfs`가 없으면(`'lfs' is not a git command`) `installed: false`로 정상 반환한다.
 /// 그 밖의 실패(설치돼 있는데 실행 오류, 추적·파일 목록 실패)는 "LFS 없음·파일 0개"로 숨기지 않고 Err.
 pub async fn lfs_status(git: &GitRunner, repo: &Path) -> Result<Lfs> {
@@ -42,6 +45,7 @@ pub async fn lfs_status(git: &GitRunner, repo: &Path) -> Result<Lfs> {
     })
 }
 
+#[cfg(feature = "cli")]
 /// `Listing tracked patterns` 아래의 `    *.bin (.gitattributes)` 줄. `Listing excluded patterns`부터는 무시.
 fn parse_track(text: &str) -> Vec<String> {
     text.lines()
@@ -54,6 +58,7 @@ fn parse_track(text: &str) -> Vec<String> {
         .collect()
 }
 
+#[cfg(feature = "cli")]
 /// `<oid> <*|-> <path>`
 fn parse_files(text: &str) -> Vec<LfsFile> {
     text.lines()
@@ -65,7 +70,7 @@ fn parse_files(text: &str) -> Vec<LfsFile> {
         .collect()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "cli"))]
 mod tests {
     use super::*;
 

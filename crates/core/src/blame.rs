@@ -1,8 +1,11 @@
+#[cfg(feature = "cli")]
 use std::collections::HashMap;
+#[cfg(feature = "cli")]
 use std::path::Path;
 
 use serde::Serialize;
 
+#[cfg(feature = "cli")]
 use crate::{GitRunner, Result};
 
 #[derive(Debug, Clone, Serialize)]
@@ -15,17 +18,19 @@ pub struct BlameLine {
     pub text: String,
 }
 
+#[cfg(feature = "cli")]
 /// 줄마다 마지막으로 바꾼 커밋. `rev`가 있으면 그 커밋 시점 기준.
 pub async fn blame(git: &GitRunner, repo: &Path, path: &str, rev: Option<&str>) -> Result<Vec<BlameLine>> {
     let mut args = vec!["blame", "--porcelain"];
     if let Some(r) = rev {
-        args.push(crate::runner::reject_option(r)?);
+        args.push(crate::reject_option(r)?);
     }
     args.extend(["--", path]);
     let out = git.output(repo, &args).await?;
     Ok(parse(&String::from_utf8_lossy(&out)))
 }
 
+#[cfg(feature = "cli")]
 /// porcelain 형식: 커밋 정보는 그 커밋이 처음 나올 때만 온다. 줄 내용은 탭으로 시작한다.
 fn parse(text: &str) -> Vec<BlameLine> {
     #[derive(Default, Clone)]
@@ -54,7 +59,7 @@ fn parse(text: &str) -> Vec<BlameLine> {
     lines
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "cli"))]
 mod tests {
     use super::*;
 

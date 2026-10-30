@@ -1,6 +1,8 @@
 //! 충돌 파일의 단계별 내용(`git show :1:/:2:/:3:`)을 바이트로 읽어 검사한다 (AI 충돌 도우미 입력).
+#[cfg(feature = "cli")]
 use crate::{Error, GitRunner, Result};
 use serde::Serialize;
+#[cfg(feature = "cli")]
 use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -14,6 +16,7 @@ pub struct ConflictBlobs {
     pub fingerprint: String,
 }
 
+#[cfg(feature = "cli")]
 fn text(path: &str, stage: &str, bytes: Vec<u8>) -> Result<String> {
     if bytes.contains(&0) {
         return Err(gc_i18n::coded!("conflict.binary", "{path}: {stage} contains NUL bytes and looks binary. The AI conflict helper only supports text files", path = path, stage = stage).into());
@@ -21,6 +24,7 @@ fn text(path: &str, stage: &str, bytes: Vec<u8>) -> Result<String> {
     String::from_utf8(bytes).map_err(|_| gc_i18n::coded!("conflict.notUtf8", "{path}: {stage} is not valid UTF-8. Aborting instead of converting silently", path = path, stage = stage).into())
 }
 
+#[cfg(feature = "cli")]
 /// `:2:`·`:3:`가 없으면(한쪽 삭제 충돌) 오류. 비UTF-8·NUL이면 변환하지 않고 거부한다.
 pub async fn conflict_blobs(git: &GitRunner, repo: &Path, path: &str) -> Result<ConflictBlobs> {
     let show = |n: u8| {
@@ -38,7 +42,7 @@ pub async fn conflict_blobs(git: &GitRunner, repo: &Path, path: &str) -> Result<
     Ok(ConflictBlobs { base, ours, theirs, fingerprint })
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "cli"))]
 mod tests {
     use super::*;
     use std::process::Command;

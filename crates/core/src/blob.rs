@@ -1,5 +1,7 @@
 //! 파일 한 개의 바이트를 rev별로 읽는다 (이미지 diff용). `git cat-file`·작업 트리 직접 읽기.
-use crate::{canonical_in_repo, path_in_repo, Error, GitRunner, Result};
+use crate::{canonical_in_repo, path_in_repo, Error, Result};
+#[cfg(feature = "cli")]
+use crate::GitRunner;
 use std::path::Path;
 
 /// 읽을 수 있는 파일 크기 상한 (20MB)
@@ -17,6 +19,7 @@ pub(crate) fn valid_rev(r: &str) -> bool {
     r == "HEAD" || ((4..=64).contains(&r.len()) && r.bytes().all(|b| b.is_ascii_hexdigit()))
 }
 
+#[cfg(feature = "cli")]
 /// rev: 커밋 sha(또는 `<sha>^`), `":"`(인덱스), `None`·`"WORKTREE"`(작업 트리 파일).
 /// 그쪽에 파일이 없으면(루트 커밋의 부모·새 파일·삭제 파일) `None`. 상한 초과·저장소 밖 경로는 오류.
 pub async fn file_blob(git: &GitRunner, repo: &Path, rev: Option<&str>, path: &str) -> Result<Option<Vec<u8>>> {
@@ -38,6 +41,7 @@ pub async fn file_blob(git: &GitRunner, repo: &Path, rev: Option<&str>, path: &s
     git.query(repo, &["cat-file", "blob", &spec]).await.map(Some)
 }
 
+#[cfg(feature = "cli")]
 async fn read_worktree(repo: &Path, path: &str) -> Result<Option<Vec<u8>>> {
     let (repo, path) = (repo.to_path_buf(), path.to_string());
     tokio::task::spawn_blocking(move || read_worktree_sync(&repo, &path)).await.map_err(|e| Error::Parse(e.to_string()))?
@@ -69,7 +73,7 @@ pub fn base64(bytes: &[u8]) -> String {
     s
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "cli"))]
 mod tests {
     use super::*;
     use std::process::Command;

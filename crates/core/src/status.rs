@@ -2,6 +2,7 @@ use std::path::Path;
 
 use serde::Serialize;
 
+#[cfg(feature = "cli")]
 use crate::{Error, GitRunner, Result};
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -39,6 +40,7 @@ pub struct Status {
     pub operation: Option<String>,
 }
 
+#[cfg(feature = "cli")]
 /// 작업 디렉터리 상태 + 현재 브랜치의 ahead/behind.
 pub async fn read_status(git: &GitRunner, repo: &Path) -> Result<Status> {
     let out = git
@@ -49,6 +51,7 @@ pub async fn read_status(git: &GitRunner, repo: &Path) -> Result<Status> {
     Ok(st)
 }
 
+#[cfg(feature = "cli")]
 /// .git 안의 표시 파일로 진행 중인 작업을 알아낸다.
 async fn operation(git: &GitRunner, repo: &Path) -> Option<String> {
     let out = git.output(repo, &["rev-parse", "--absolute-git-dir"]).await.ok()?;
@@ -78,6 +81,7 @@ pub(crate) fn operation_in(dir: &Path) -> Option<String> {
     })
 }
 
+#[cfg(feature = "cli")]
 fn parse(text: &str) -> Result<Status> {
     let mut st = Status::default();
     let mut tokens = text.split('\0').filter(|t| !t.is_empty());
@@ -132,6 +136,7 @@ fn parse(text: &str) -> Result<Status> {
     Ok(st)
 }
 
+#[cfg(feature = "cli")]
 /// 작업 디렉터리 파일의 diff. `staged`면 스테이지된 변경, 아니면 스테이지 안 된 변경.
 /// 추적하지 않는 새 파일은 빈 파일과 비교한 diff를 만든다.
 /// `ignore_eol`이면 줄 끝 CR 차이(`--ignore-cr-at-eol`), `ignore_ws`면 모든 공백 차이(`-w`)를 무시한다 (이 diff로는 줄 단위 스테이지를 하면 안 된다).
@@ -158,7 +163,7 @@ pub async fn worktree_diff(git: &GitRunner, repo: &Path, path: &str, staged: boo
     Ok(String::from_utf8_lossy(&out).into_owned())
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "cli"))]
 mod tests {
     use super::*;
 

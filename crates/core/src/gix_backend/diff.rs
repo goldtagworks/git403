@@ -10,7 +10,7 @@ use gix::objs::tree::{EntryKind, EntryMode};
 
 use super::common::{fail, hex, open, under};
 use super::textdiff::{render, Opts, Side};
-use crate::runner::reject_option;
+use crate::reject_option;
 use crate::{ChangedFile, Error, Result, BLOB_LIMIT};
 
 /// 파일 종류 묶음: 실행 비트만 다른 것은 같은 종류(모드 변경), 링크·서브모듈로 바뀌면 타입 변경(`T`).
