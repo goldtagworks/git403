@@ -1587,6 +1587,7 @@ dependencies = [
  "gc-i18n",
  "gix",
  "libc",
+ "regex",
  "reqwest",
  "rustls",
  "serde",

@@ -314,6 +314,46 @@ async fn run_허용_목록() {
     assert!(matches!(g.run(d, &["config", "--global", "a.b", "c"], &[]).await, Err(gc_core::Error::Unsupported(_))));
 }
 
+#[tokio::test]
+async fn config_get_regexp가_같다() {
+    let tmp = plain_repo();
+    let d = tmp.path();
+    let (c, g) = backends();
+    let re = r"^remote\..*\.url$";
+    let argvs: Vec<Vec<&str>> = vec![
+        vec!["config", "--get-regexp", re],
+        vec!["config", "--local", "--get-regexp", re],
+        vec!["config", "--local", "--null", "--get-regexp", r"^(git403\..*|(diff|merge)\.tool)$"],
+        vec!["config", "--global", "--null", "--get-regexp", r"^(git403\..*|(diff|merge)\.tool)$"],
+    ];
+    // 원격 0개: 종료 코드 1
+    for a in &argvs[..3] {
+        assert!(g.run(d, a, &[]).await.is_err(), "{a:?}");
+        same(&format!("run {a:?}"), c.run(d, a, &[1]).await.unwrap(), g.run(d, a, &[1]).await.unwrap());
+    }
+    // 여러 원격 + url 여러 개 + pushurl + 대소문자 섞인 이름·서브섹션 + 사이에 낀 다른 키
+    git(d, &["remote", "add", "origin", "https://example.com/a/b.git"]);
+    git(d, &["remote", "add", "Up.Stream", "git@example.com:a/b.git"]);
+    git(d, &["config", "--add", "remote.origin.url", "https://mirror.example.com/a/b.git"]);
+    git(d, &["config", "remote.origin.pushurl", "ssh://example.com/a/b.git"]);
+    git(d, &["config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"]);
+    git(d, &["config", "--add", "remote.origin.url", "/tmp/with space/한글 path"]);
+    git(d, &["config", "git403.Alpha", "1"]);
+    git(d, &["config", "diff.tool", "vimdiff"]);
+    git(d, &["config", "--add", "git403.alpha", "two words"]);
+    for a in &argvs[..3] {
+        let (x, y) = (c.run(d, a, &[]).await.unwrap(), g.run(d, a, &[]).await.unwrap());
+        assert!(!x.is_empty(), "{a:?}");
+        same(&format!("run {a:?}"), x, y);
+    }
+    same("regexp other", c.run(d, &["config", "--get-regexp", r"^remote\.origin\..*"], &[]).await.unwrap(), g.run(d, &["config", "--get-regexp", r"^remote\.origin\..*"], &[]).await.unwrap());
+    // 전역 범위: 테스트 환경의 전역 설정을 그대로 비교(없으면 둘 다 1)
+    same("regexp global", c.run(d, &argvs[3], &[1]).await.unwrap(), g.run(d, &argvs[3], &[1]).await.unwrap());
+    // 지원하지 않는 형태
+    assert!(matches!(g.run(d, &["config", "--get-regexp", re, "value"], &[]).await, Err(gc_core::Error::Unsupported(_))));
+    assert!(matches!(g.run(d, &["config", "--list"], &[]).await, Err(gc_core::Error::Unsupported(_))));
+}
+
 // ---- 추가 경우들 ----
 
 fn plain_repo() -> tempfile::TempDir {
