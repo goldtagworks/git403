@@ -34,8 +34,9 @@ pub fn save<R: Runtime>(w: &Window<R>) {
     let _ = std::fs::write(path, serde_json::to_vec(&g).unwrap_or_default());
 }
 
-pub fn restore<R: Runtime>(w: &WebviewWindow<R>) {
-    let Some(g) = file(w).and_then(|p| std::fs::read(p).ok()).and_then(|b| serde_json::from_slice::<Geom>(&b).ok()) else { return };
+/// 되살린 창 사각형(논리 좌표 x, y, 폭, 높이)을 돌려준다. 숨긴 창은 위치를 바꾼 직후 outer_position이 예전 값을 줄 수 있어서다.
+pub fn restore<R: Runtime>(w: &WebviewWindow<R>) -> Option<[f64; 4]> {
+    let g = file(w).and_then(|p| std::fs::read(p).ok()).and_then(|b| serde_json::from_slice::<Geom>(&b).ok())?;
     let _ = w.set_size(LogicalSize::new(g.w, g.h));
     if g.screens != screens(&w.available_monitors().unwrap_or_default()) {
         // 모니터 배치가 바뀌었다: 예전 좌표는 믿을 수 없으니 주 모니터 크기 안으로 줄여 가운데에 둔다
@@ -44,9 +45,10 @@ pub fn restore<R: Runtime>(w: &WebviewWindow<R>) {
             let _ = w.set_size(LogicalSize::new(g.w.min(ms.width * 0.9), g.h.min(ms.height * 0.9)));
         }
         let _ = w.center();
-        return;
+        return None;
     }
     let _ = w.set_position(LogicalPosition::new(g.x, g.y));
+    Some([g.x, g.y, g.w, g.h])
 }
 
 /// 되살린 창이 지금 연결된 어느 모니터에도 제대로 걸치지 않으면(모니터를 빼거나 바꿨을 때, 저장값이 깨졌을 때)
@@ -71,4 +73,24 @@ pub fn keep_on_screen(w: &tauri::WebviewWindow) {
         let _ = w.set_size(tauri::LogicalSize::new(size.width.min(ms.width * 0.9), size.height.min(ms.height * 0.9)));
     }
     let _ = w.center();
+}
+
+/// 시작 스플래시 창을 되살린 메인 창 한가운데에 만든다. conf에 두면 setup 전에 주 모니터 가운데에 먼저 보이므로
+/// 메인 창 위치를 되살린 뒤 여기서 위치를 정해 만든다. 닫기는 UI가 한다(ui/src/shared/lib/splash.ts).
+/// `rect`는 restore가 되살린 메인 창 사각형. 없으면(처음 실행·모니터 배치 바뀜) 메인 창처럼 주 모니터 가운데.
+pub fn splash(app: &tauri::App, rect: Option<[f64; 4]>) {
+    const W: f64 = 340.0;
+    const H: f64 = 220.0;
+    let b = tauri::WebviewWindowBuilder::new(app, "splash", tauri::WebviewUrl::App("splash.html".into()));
+    let b = match rect {
+        Some([x, y, w, h]) => b.position(x + (w - W) / 2.0, y + (h - H) / 2.0),
+        None => b.center(),
+    };
+    let _ = b
+        .inner_size(W, H)
+        .resizable(false)
+        .decorations(false)
+        .skip_taskbar(true)
+        .always_on_top(true)
+        .build();
 }

@@ -93,9 +93,10 @@ pub fn run() {
             #[cfg(desktop)]
             if let Some(w) = app.get_webview_window("main") {
                 use tauri_plugin_window_state::{StateFlags, WindowExt};
-                window::restore(&w);
+                let rect = window::restore(&w);
                 window::keep_on_screen(&w);
                 let _ = w.restore_state(StateFlags::all() - StateFlags::POSITION - StateFlags::SIZE);
+                window::splash(app, rect);
                 // 창은 숨긴 채(conf visible: false) UI 첫 로드가 끝나면 UI가 보여 주고 스플래시 창을 닫는다(ui/src/shared/lib/splash.ts)
             }
             Ok(())
