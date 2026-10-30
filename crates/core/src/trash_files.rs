@@ -19,6 +19,10 @@ pub fn trash_files(repo: &Path, paths: &[String]) -> Result<()> {
         targets.push(full);
     }
     for t in targets {
+        // Android에는 `trash` 크레이트가 지원하는 휴지통이 없다 (UI는 op `trash_files`가 capabilities에 없어 메뉴를 숨긴다)
+        #[cfg(target_os = "android")]
+        return Err(Error::Unsupported("trash".into()));
+        #[cfg(not(target_os = "android"))]
         trash::delete(&t).map_err(|e| Error::from(gc_i18n::coded!("trash.failed", "could not move to trash: {path} ({reason})", path = t.display(), reason = e)))?;
     }
     Ok(())

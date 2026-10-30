@@ -47,7 +47,6 @@ async-trait = "0.1"
 gc-i18n = { path = "../i18n" }
 tokio.workspace = true
 serde.workspace = true
-trash = "5"
 ssh-key = { optional = true, version = "0.6.7", default-features = false, features = ["ed25519", "encryption", "getrandom"] }
 
 # 필요한 기능만: sha1, 리비전·인덱스·status·blob diff, 네트워크는 blocking + reqwest(rustls)
@@ -55,6 +54,9 @@ gix = { version = "0.90", optional = true, default-features = false, features = 
 # TLS: reqwest 기본 rustls는 aws-lc-sys(C·cmake)를 끌어오므로 provider 없는 rustls + ring(Android 크로스컴파일이 쉬움)을 쓴다
 reqwest = { version = "0.13", optional = true, default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "0.23", optional = true, default-features = false, features = ["ring", "std", "tls12"] }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+trash = "5"
 
 [target.'cfg(unix)'.dependencies]
 libc = { version = "0.2", optional = true }

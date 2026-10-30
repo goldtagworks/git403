@@ -12,13 +12,27 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 gc-i18n = { path = "../crates/i18n" }
-gc-backend = { path = "../crates/backend" }
 tauri = { version = "2", features = [] }
 serde.workspace = true
 serde_json.workspace = true
 parking_lot.workspace = true
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
+
+# 데스크탑: git 실행 파일을 쓰는 CliBackend(기본 feature cli)
+[target.'cfg(not(target_os = "android"))'.dependencies]
+gc-backend = { path = "../crates/backend" }
+
+# Android: 순수 Rust GixBackend (git 실행 파일 없음)
+[target.'cfg(target_os = "android")'.dependencies]
+gc-backend = { path = "../crates/backend", default-features = false, features = ["gix"] }
+# rustls-platform-verifier(reqwest·gix fetch의 TLS 인증서 검증)가 JVM 핸들을 요구한다 → android.rs에서 초기화
+rustls-platform-verifier = "0.7"
+jni = "0.22"
+ndk-context = "0.1"
+
+# 데스크탑 전용 플러그인 (업데이트·재시작·창 상태)
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 tauri-plugin-window-state = "2"

@@ -163,7 +163,7 @@ export const ChangesView = memo(function ChangesView({
                 ...(f.conflict ? [{ separator: true } as MenuEntry] : []),
                 { label: side === "staged" ? t("changes.unstage") : t("changes.stage"), op: side === "staged" ? "unstage" : "stage", action: () => run(side === "staged" ? api.unstage(repo, [f.path]) : api.stage(repo, [f.path])) },
                 ...(side === "unstaged" ? [{ label: t("changes.discardMenu"), op: "discard", action: () => discard([f]) }] : []),
-                { label: t("changes.trashMenu"), action: () => ops.trashFiles([f.path]), disabled: f.path.endsWith("/") }, // 폴더는 못 옮긴다
+                { label: t("changes.trashMenu"), op: "trash_files", action: () => ops.trashFiles([f.path]), disabled: f.path.endsWith("/") }, // 폴더는 못 옮긴다
                 ...(side === "unstaged" ? [{ label: t("changes.stashFile"), op: "stash", action: () => ops.stashFiles([f.path]) }] : []),
                 { label: t("changes.ignore"), action: () => ops.ignore(f.path), disabled: !f.untracked },
                 { label: t("changes.lfs"), op: "lfs", action: () => ops.lfsTrackFile(f.path) },

@@ -3,7 +3,7 @@
 node_modules
 /ui/dist
 .DS_Store
-/src-tauri/gen
+/src-tauri/gen/schemas
 
 # 서명 키는 저장소 밖(~/.tauri)에만 둔다
 *.key

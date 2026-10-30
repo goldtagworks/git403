@@ -2,6 +2,9 @@ use gc_backend::{askpass, Backend, Emit};
 use tauri::{AppHandle, Emitter, Manager};
 
 mod e2e;
+#[cfg(target_os = "android")]
+mod android;
+#[cfg(desktop)]
 mod window;
 
 pub fn askpass_helper() -> bool {
@@ -39,25 +42,33 @@ fn dispatch(invoke: tauri::ipc::Invoke) -> bool {
 pub fn run() {
     gc_i18n::init_from_os(); // UI의 set_locale 전까지 OS 언어로
 
-    // 창 위치·크기·최대화를 종료 때 저장하고 다음 실행 때 되살린다 (화면 밖이면 플러그인이 보정).
-    // 디버그 빌드는 설치한 앱과 다른 파일에 저장해 서로의 창 위치를 덮어쓰지 않는다.
-    // 처음 되살리기는 setup에서 직접 한다(되살린 뒤 화면 밖인지 확인하려고).
-    // 위치·크기는 플러그인이 물리 픽셀로 저장해 배율이 다른 모니터가 섞이면 엉뚱한 곳에 되살아난다.
-    // 그래서 그 둘은 빼고 논리 좌표로 직접 저장한다(window). 플러그인은 최대화·전체 화면만 맡는다.
-    use tauri_plugin_window_state::StateFlags;
-    let window_state = tauri_plugin_window_state::Builder::default()
-        .skip_initial_state("main")
-        .with_state_flags(StateFlags::all() - StateFlags::POSITION - StateFlags::SIZE);
-    #[cfg(debug_assertions)]
-    let window_state = window_state.with_filename(".window-state-dev.json");
-    tauri::Builder::default()
-        .plugin(window_state.build())
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_opener::init());
+    // 데스크탑 전용 플러그인: 창 상태 · 업데이트 · 재시작
+    #[cfg(desktop)]
+    let builder = {
+        // 창 위치·크기·최대화를 종료 때 저장하고 다음 실행 때 되살린다 (화면 밖이면 플러그인이 보정).
+        // 디버그 빌드는 설치한 앱과 다른 파일에 저장해 서로의 창 위치를 덮어쓰지 않는다.
+        // 처음 되살리기는 setup에서 직접 한다(되살린 뒤 화면 밖인지 확인하려고).
+        // 위치·크기는 플러그인이 물리 픽셀로 저장해 배율이 다른 모니터가 섞이면 엉뚱한 곳에 되살아난다.
+        // 그래서 그 둘은 빼고 논리 좌표로 직접 저장한다(window). 플러그인은 최대화·전체 화면만 맡는다.
+        use tauri_plugin_window_state::StateFlags;
+        let window_state = tauri_plugin_window_state::Builder::default()
+            .skip_initial_state("main")
+            .with_state_flags(StateFlags::all() - StateFlags::POSITION - StateFlags::SIZE);
+        #[cfg(debug_assertions)]
+        let window_state = window_state.with_filename(".window-state-dev.json");
+        builder
+            .plugin(window_state.build())
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            .plugin(tauri_plugin_process::init())
+    };
+    builder
         .setup(move |app| {
             let handle = app.handle().clone();
+            #[cfg(target_os = "android")]
+            android::init_tls_verifier();
             // 인증 입력: git·ssh가 이 실행 파일을 askpass로 부르게 한다 (gc_backend::askpass).
             let config_dir = app.path().app_config_dir().unwrap_or_else(|_| gc_backend::default_config_dir());
             let backend = Backend::new(std::sync::Arc::new(TauriEmit(handle.clone())), config_dir, std::env::args().nth(1));
@@ -66,8 +77,9 @@ pub fn run() {
             e2e::serve(&handle);
             #[cfg(target_os = "macos")]
             close_key_menu(app)?;
+            #[cfg(desktop)]
             if let Some(w) = app.get_webview_window("main") {
-                use tauri_plugin_window_state::WindowExt;
+                use tauri_plugin_window_state::{StateFlags, WindowExt};
                 window::restore(&w);
                 window::keep_on_screen(&w);
                 let _ = w.restore_state(StateFlags::all() - StateFlags::POSITION - StateFlags::SIZE);
@@ -76,20 +88,22 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|w, e| {
-            if w.label() != "main" {
-                return;
-            }
-            if let tauri::WindowEvent::CloseRequested { api, .. } = e {
-                window::save(w);
-                // macOS 관례: 창을 닫아도(⌘W·빨간 버튼) 앱은 Dock에 남는다. 종료는 ⌘Q. Dock 아이콘을 누르면 다시 보인다(Reopen)
-                #[cfg(target_os = "macos")]
-                {
-                    api.prevent_close();
-                    let _ = w.hide();
+            #[cfg(desktop)]
+            if w.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = e {
+                    window::save(w);
+                    // macOS 관례: 창을 닫아도(⌘W·빨간 버튼) 앱은 Dock에 남는다. 종료는 ⌘Q. Dock 아이콘을 누르면 다시 보인다(Reopen)
+                    #[cfg(target_os = "macos")]
+                    {
+                        api.prevent_close();
+                        let _ = w.hide();
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    let _ = api;
                 }
-                #[cfg(not(target_os = "macos"))]
-                let _ = api;
             }
+            #[cfg(not(desktop))]
+            let _ = (w, e);
         })
         .invoke_handler({
             let own: Box<dyn Fn(tauri::ipc::Invoke) -> bool + Send + Sync> = Box::new(tauri::generate_handler![e2e::e2e_result]);
@@ -108,6 +122,7 @@ pub fn run() {
             // 종료는 process::exit라 tokio 정리가 안 돈다 → 실행 중인 자식 프로세스 그룹을 여기서 직접 죽인다
             if matches!(event, tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit) {
                 // Cmd+Q·app.exit는 창 CloseRequested 없이 끝나므로 여기서도 창 위치·크기를 저장한다 (창이 이미 없으면 건너뜀)
+                #[cfg(desktop)]
                 if let Some(w) = app.get_webview_window("main") {
                     window::save(&w.as_ref().window());
                 }

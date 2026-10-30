@@ -537,6 +537,15 @@ mock: `author_avatars`는 `merge@demo.dev`만 null, 나머지는 data: URL. `win
   - 브라우저 데모: `pnpm --dir ui dev:mock` → http://localhost:1420
   - macOS는 Tauri WebDriver(`tauri-driver`)를 지원하지 않아 UI E2E는 모의 IPC로 한다.
 
+### Android 빌드 (27d)
+
+- 명령(루트): `ANDROID_HOME=… NDK_HOME=$ANDROID_HOME/ndk/<버전> JAVA_HOME=<JDK17> pnpm tauri android build --debug --target aarch64 --apk` → `src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`. 컴파일만: `cargo check -p git403 --target aarch64-linux-android` (NDK 툴체인 `CC_aarch64_linux_android`·`AR_…`·`CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER` 필요). 필요 env: `ANDROID_HOME`·`NDK_HOME`·`JAVA_HOME`(JDK 17), Rust 타깃 `aarch64-linux-android` 등.
+- `src-tauri/Cargo.toml`: android는 `gc-backend`를 `default-features=false, features=["gix"]`(GixBackend)로, 그 외는 기본(`cli`). `tauri-plugin-updater`·`process`·`window-state`는 android·ios 제외(iOS는 범위 밖이라 빌드 안 해 봄). 코드는 `#[cfg(desktop)]`로 창 상태 플러그인·`window.rs`(창 위치 저장·복원)·창 닫기 처리를 뺀다. android 전용: `src-tauri/src/android.rs`.
+- **rustls-platform-verifier 초기화**: reqwest·gix fetch의 TLS 검증이 JVM을 요구한다. `android::init_tls_verifier()`가 `setup`에서 `ndk_context`의 JavaVM·Activity로 `init_with_env`를 부른다(안 하면 첫 HTTPS에서 패닉). Kotlin 쪽은 `gen/android/app/build.gradle.kts`의 `org.rustls:rustls-platform-verifier`(maven 저장소 + Cargo.lock의 `rustls-platform-verifier-android` 버전). 크레이트를 올리면 Cargo.lock만 바뀌어도 gradle이 따라간다.
+- 설정: `src-tauri/tauri.android.conf.json`(창 하나만 — 스플래시 창 없음), 권한 `capabilities/default.json`(`platforms`: macOS·windows·linux)·`mobile.json`(android만; updater·process 권한 제외). `gen/android`는 커밋한다(`local.properties`·`build`는 gen 안 `.gitignore`), `gen/schemas`만 무시.
+- `gc-core`의 `trash` 의존성은 android 제외(`trash_files`가 android에선 `Error::Unsupported("trash")` = `git.unsupported`). UI 우클릭 항목에는 `op: "trash_files"`를 달아 gix capabilities(ops에 없음)에서 숨긴다.
+- 한계: android 의존성 트리에 `aws-lc-sys`가 gc-ai·gc-hosting의 reqwest 기본 TLS(aws-lc)로 들어온다 → 빌드에 NDK clang이 필요하다(gix 쪽은 ring).
+
 ## 자동 업데이트 (UI, `docs/release.md`)
 
 - Rust는 `tauri-plugin-updater`·`tauri-plugin-process` 등록뿐(`src-tauri/tauri.conf.json`의 `plugins.updater`, 권한 `updater:default`·`process:allow-restart`). IPC는 `api.checkUpdate()`(새 버전 없으면 null)·`api.relaunch()`.
