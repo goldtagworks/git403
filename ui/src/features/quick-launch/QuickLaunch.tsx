@@ -1,4 +1,4 @@
-import { isMac } from "../../shared/lib/platform";
+import { isMac, isMobile } from "../../shared/lib/platform";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { t, useLocale } from "../../shared/i18n/i18n";
 import { bigView } from "../../shared/model/bigview";
@@ -65,9 +65,11 @@ export function QuickLaunch({ recent, onOpen, onClose }: { recent: string[]; onO
       { label: t("quick.c19"), op: "diff", run: () => ops.savePatchChanges("staged") },
       { label: t("quick.c20"), op: "diff", run: () => ops.savePatchChanges("all") },
       { label: t("quick.c21"), op: "stash", run: () => ops.pop() },
-      { label: t("quick.c22"), op: "open_in", run: ops.openTerminal },
-      { label: t("quick.c23"), op: "open_in", run: ops.openFolder },
-      { label: t("quick.c24"), op: "open_in", run: () => ops.toolSetup() },
+      ...(isMobile ? [] : [ // 모바일엔 터미널·파일 관리자·외부 도구 연동이 없다
+        { label: t("quick.c22"), run: ops.openTerminal },
+        { label: t("quick.c23"), run: ops.openFolder },
+        { label: t("quick.c24"), run: () => ops.toolSetup() },
+      ]),
       ...ops.customQuick(),
       { label: t("quick.c25"), op: "remote", run: ops.addRemote },
       { label: t("quick.c26"), hint: "submodule update --init --recursive", op: "submodule", run: () => ops.updateSubmodules() },

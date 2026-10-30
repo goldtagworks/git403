@@ -934,6 +934,7 @@ export const th: Record<Key, string> = {
   "graph.colSha": "Commit",
   "graph.localChanges": "การเปลี่ยนแปลงในเครื่อง",
   "sidebar.checkout": "Checkout",
+  "sidebar.toggle": "เปิด/ปิดแถบด้านข้าง",
   "sidebar.merge": "Merge เข้า branch ปัจจุบัน…",
   "sidebar.rebase": "Rebase branch ปัจจุบันลงบน branch นี้",
   "sidebar.createPr": "สร้าง Pull Request…",

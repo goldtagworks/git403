@@ -347,6 +347,8 @@ mockIPC(
 function handle(cmd: string, args: any): any {
   {
     if (cmd === "initial_repo") return null;
+    // E2E: window.__unsupported = [명령…] 이면 그 명령은 gix 백엔드처럼 git.unsupported 오류로 거절한다 (mobile.spec.ts)
+    if ((window as any).__unsupported?.includes(cmd)) throw JSON.stringify({ code: "git.unsupported", vars: { op: cmd }, message: `not supported in this environment: ${cmd}` });
     // 저장소 열기는 데모 저장소, 그 밖의 폴더 선택(복제 위치·스캔)은 /demo
     // E2E: window.__saveCancel = true 면 저장·패치 선택 대화상자를 취소한 것으로 본다. window.__patchFile = 선택될 패치 경로
     // 설정 내보내기·가져오기 대화상자. E2E: window.__dialog = { save: 경로|null, open: 경로|null } (null = 취소)

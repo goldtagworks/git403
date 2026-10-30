@@ -934,6 +934,7 @@ export const ja: Record<Key, string> = {
   "graph.colSha": "コミット",
   "graph.localChanges": "ローカルの変更",
   "sidebar.checkout": "チェックアウト",
+  "sidebar.toggle": "サイドバーを開閉",
   "sidebar.merge": "現在のブランチにマージ…",
   "sidebar.rebase": "現在のブランチをこのブランチに rebase",
   "sidebar.createPr": "プルリクエストを作成…",

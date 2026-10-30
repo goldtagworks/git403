@@ -1332,6 +1332,10 @@ html[data-mobile] .dom-menu button { align-items: center; }
 html[data-mobile] .dom-menu { min-width: 240px; }
 html[data-mobile] .splitter.x::after { left: -12px; right: -12px; }
 html[data-mobile] .splitter.y::after { top: -12px; bottom: -12px; }
+/* 터치에는 hover가 없고 손을 뗀 뒤에도 :hover가 남는다(sticky hover): hover 배경은 끄고 눌림(:active)만 보인다 */
+html[data-mobile] :is(.tool-btn:hover:not(:disabled), .tool-more:hover:not(:disabled), .picker:hover:not(:disabled), .sidebar button:hover, .tab:hover, .empty-repos button:hover, .dom-menu button:hover:not(:disabled), .palette li:hover) { background: none; }
+html[data-mobile] :is(.tool-btn:active:not(:disabled), .tool-more:active:not(:disabled), .picker:active:not(:disabled), .sidebar button:active, .tab:active, .empty-repos button:active, .dom-menu button:active:not(:disabled), .palette li:active) { background: var(--hover); }
+html[data-mobile] .dom-menu button:active:not(:disabled) { background: var(--selected); }
 /* hover가 없는 입력: hover로만 나타나던 버튼을 항상 보인다 */
 html[data-mobile] .sidebar .item .eye { display: block; }
 html[data-mobile] .files li .row-btn, html[data-mobile] .empty-repos .forget { visibility: visible; }
@@ -1339,7 +1343,7 @@ html[data-mobile] .info-edit, html[data-mobile] .prr-go, html[data-mobile] .tab-
 html[data-mobile] .tab:not(.active) .tab-close { display: flex; }
 html[data-mobile] .empty-actions { flex-wrap: wrap; justify-content: center; }
 html[data-mobile] .selectable { -webkit-touch-callout: default; }
-.side-toggle { display: none; border: 0; background: none; padding: 0 8px; border-radius: 6px; }
+html[data-mobile] .side-toggle { display: none; border: 0; background: none; padding: 0 8px; border-radius: 6px; }
 @media (max-width: 999px) {
   html[data-mobile] .side-toggle { display: inline-flex; align-items: center; justify-content: center; }
   html[data-mobile] .workspace { position: relative; }

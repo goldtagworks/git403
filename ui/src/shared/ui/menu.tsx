@@ -73,7 +73,7 @@ const domMenu = {
 export function DomMenuHost() {
   const [state, setState] = useState<{ items: MenuEntry[]; at: { x: number; y: number } } | null>(null);
   useEffect(() => {
-    domMenu.listener = (s) => ((openedAt = performance.now()), setState(s));
+    domMenu.listener = (s) => (s && (openedAt = performance.now()), setState(s));
     const close = () => setState(null);
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);

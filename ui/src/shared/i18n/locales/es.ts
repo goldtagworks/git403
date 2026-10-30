@@ -934,6 +934,7 @@ export const es: Record<Key, string> = {
   "graph.colSha": "Commit",
   "graph.localChanges": "Cambios locales",
   "sidebar.checkout": "Checkout",
+  "sidebar.toggle": "Mostrar u ocultar la barra lateral",
   "sidebar.merge": "Fusionar en la rama actual…",
   "sidebar.rebase": "Rebase de la rama actual sobre esta rama",
   "sidebar.createPr": "Crear pull request…",

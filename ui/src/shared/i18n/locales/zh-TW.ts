@@ -934,6 +934,7 @@ export const zhTW: Record<Key, string> = {
   "graph.colSha": "提交",
   "graph.localChanges": "本機變更",
   "sidebar.checkout": "簽出",
+  "sidebar.toggle": "展開/收合側邊欄",
   "sidebar.merge": "合併至目前分支…",
   "sidebar.rebase": "將目前分支 rebase 到此分支",
   "sidebar.createPr": "建立提取要求…",

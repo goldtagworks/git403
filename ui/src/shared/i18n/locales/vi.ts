@@ -934,6 +934,7 @@ export const vi: Record<Key, string> = {
   "graph.colSha": "Commit",
   "graph.localChanges": "Thay đổi cục bộ",
   "sidebar.checkout": "Checkout",
+  "sidebar.toggle": "Mở/đóng thanh bên",
   "sidebar.merge": "Merge vào nhánh hiện tại…",
   "sidebar.rebase": "Rebase nhánh hiện tại lên nhánh này",
   "sidebar.createPr": "Tạo Pull Request…",

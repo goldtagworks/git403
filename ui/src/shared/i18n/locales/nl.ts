@@ -934,6 +934,7 @@ export const nl: Record<Key, string> = {
   "graph.colSha": "Commit",
   "graph.localChanges": "Lokale wijzigingen",
   "sidebar.checkout": "Checkout",
+  "sidebar.toggle": "Zijbalk tonen of verbergen",
   "sidebar.merge": "Mergen in huidige branch…",
   "sidebar.rebase": "Huidige branch op deze branch rebasen",
   "sidebar.createPr": "Pull request aanmaken…",

@@ -934,6 +934,7 @@ export const ru: Record<Key, string> = {
   "graph.colSha": "Коммит",
   "graph.localChanges": "Локальные изменения",
   "sidebar.checkout": "Checkout",
+  "sidebar.toggle": "Показать или скрыть боковую панель",
   "sidebar.merge": "Слить в текущую ветку…",
   "sidebar.rebase": "Rebase текущей ветки на эту ветку",
   "sidebar.createPr": "Создать Pull Request…",

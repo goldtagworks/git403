@@ -934,6 +934,7 @@ export const tr: Record<Key, string> = {
   "graph.colSha": "Commit",
   "graph.localChanges": "Yerel değişiklikler",
   "sidebar.checkout": "Checkout",
+  "sidebar.toggle": "Kenar çubuğunu aç/kapat",
   "sidebar.merge": "Geçerli dala birleştir…",
   "sidebar.rebase": "Geçerli dalı bu dalın üzerine rebase et",
   "sidebar.createPr": "Pull Request oluştur…",

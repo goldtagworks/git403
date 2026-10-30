@@ -79,8 +79,8 @@ export function appMenuModel(s: AppMenuState, d: AppMenuDeps): MenuEntry[] {
       sep,
       { label: t("menu.closeTab"), action: d.close, accelerator: key(`${MOD}+W`) },
       sep,
-      { label: t("toolbar.openTerminal"), op: "open_in", action: ops.openTerminal, disabled: no },
-      { label: t("toolbar.openFolder"), op: "open_in", action: ops.openFolder, disabled: no },
+      { label: t("toolbar.openTerminal"), action: ops.openTerminal, disabled: no },
+      { label: t("toolbar.openFolder"), action: ops.openFolder, disabled: no },
       // Windows·Linux는 앱 메뉴가 없어 설정·종료가 File 끝에 온다
       ...(isMac ? [] : [sep, settings, { label: t("menu.quit"), action: async () => (await import("@tauri-apps/api/window")).getCurrentWindow().close() } as MenuEntry]),
     ],

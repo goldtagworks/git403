@@ -934,6 +934,7 @@ export const uz: Record<Key, string> = {
   "graph.colSha": "Kommit",
   "graph.localChanges": "Lokal o'zgarishlar",
   "sidebar.checkout": "Checkout",
+  "sidebar.toggle": "Yon panelni ochish/yopish",
   "sidebar.merge": "Joriy tarmoqqa birlashtirish…",
   "sidebar.rebase": "Joriy tarmoqni bu tarmoqqa rebase qilish",
   "sidebar.createPr": "Pull Request yaratish…",

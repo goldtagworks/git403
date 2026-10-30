@@ -934,6 +934,7 @@ export const zhCN: Record<Key, string> = {
   "graph.colSha": "提交",
   "graph.localChanges": "本地更改",
   "sidebar.checkout": "检出",
+  "sidebar.toggle": "展开/收起侧边栏",
   "sidebar.merge": "合并到当前分支…",
   "sidebar.rebase": "将当前分支变基到此分支",
   "sidebar.createPr": "创建拉取请求…",

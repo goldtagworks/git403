@@ -959,17 +959,21 @@ export const ops = {
       ctx.error(String(e));
     }
   },
-  /** 폴더 아래 저장소 찾기. 앱 전용 저장소 폴더가 있으면(Android) 선택 없이 거기를 스캔한다. quiet = 시작 때 자동 스캔(결과 알림 없음) */
-  scan: async (quiet?: unknown) => {
-    const root = (await reposRoot()) ?? (quiet === true ? null : await api.pickFolder(t("ops.scan.folder")));
+  scan: async () => {
+    const root = (await reposRoot()) ?? (await api.pickFolder(t("ops.scan.folder"))); // 앱 전용 저장소 폴더가 있으면(Android) 선택 없이 거기를 스캔
     if (!root) return;
     try {
       const found = await api.findRepos(root);
       ctx.addRepos(found);
-      if (quiet !== true) ctx.notify(t("ops.scan.found", { n: found.length }));
+      ctx.notify(t("ops.scan.found", { n: found.length }));
     } catch (e) {
       ctx.error(String(e));
     }
+  },
+  /** 모바일 시작 때 앱 전용 저장소 폴더의 저장소를 목록에 올린다 (알림·선택 없음) */
+  scanRoot: async () => {
+    const root = await reposRoot();
+    if (root) ctx.addRepos(await api.findRepos(root).catch(() => []));
   },
 
   // ---- 탭 이동 (⌘⌥←/→·빠른 실행). 양끝에서는 멈춘다 ----

@@ -383,7 +383,7 @@ function App() {
 
   // 시작: 실행 인자 → 마지막 활성 탭 → 최근 저장소 (설정에서 복원을 끄면 실행 인자만)
   useEffect(() => {
-    if (isMobile) void ops.scan(true); // 앱 전용 저장소 폴더의 저장소를 목록에 올린다 (알림 없이)
+    if (isMobile) void ops.scanRoot(); // 앱 전용 저장소 폴더의 저장소를 목록에 올린다 (알림 없이)
     api.initialRepo().then((p) => loadAll(p ?? (pref("restoreTabs") ? stored<string | null>("activeTab", null) ?? stored<string[]>("recent", [])[0] : undefined))).finally(hideSplash);
   }, [loadAll]);
 

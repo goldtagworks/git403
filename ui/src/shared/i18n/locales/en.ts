@@ -933,6 +933,7 @@ export const en = {
   "graph.colSha": "Commit",
   "graph.localChanges": "Local changes",
   "sidebar.checkout": "Checkout",
+  "sidebar.toggle": "Toggle sidebar",
   "sidebar.merge": "Merge into current branch…",
   "sidebar.rebase": "Rebase current branch onto this branch",
   "sidebar.createPr": "Create Pull Request…",

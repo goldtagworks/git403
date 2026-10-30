@@ -1,3 +1,4 @@
+import { isMobile } from "../../shared/lib/platform";
 import { IS_VSCODE } from "../../shared/api/bridge";
 import { t } from "../../shared/i18n/i18n";
 import { ops, revealLabel } from "../../shared/model/ops";
@@ -7,8 +8,7 @@ import { inspect } from "./Inspector";
 /** 파일 우클릭 공통: 파일 관리자에서 보기, 기본 앱으로 열기, 사용자 정의 명령(파일 대상) */
 export const fileOpenMenu = (path: string, rev: string | null): MenuEntry[] => [
   ...(IS_VSCODE ? [{ label: t("details.openEditor"), action: () => ops.openInEditor(path, rev) }] : []),
-  { label: revealLabel(), op: "open_in", action: () => ops.reveal(path) },
-  { label: t("details.openDefault"), op: "open_in", action: () => ops.openDefault(path) },
+  ...(isMobile ? [] : [{ label: revealLabel(), action: () => ops.reveal(path) }, { label: t("details.openDefault"), action: () => ops.openDefault(path) }]), // 모바일엔 파일 관리자·기본 앱 연동이 없다
   ...ops.customMenu("file", { file: path, sha: rev ?? undefined }),
 ];
 

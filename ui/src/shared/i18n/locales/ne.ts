@@ -934,6 +934,7 @@ export const ne: Record<Key, string> = {
   "graph.colSha": "कमिट",
   "graph.localChanges": "स्थानीय परिवर्तनहरू",
   "sidebar.checkout": "चेकआउट",
+  "sidebar.toggle": "साइडबार खोल्नुहोस्/बन्द गर्नुहोस्",
   "sidebar.merge": "हालको ब्रान्चमा merge…",
   "sidebar.rebase": "हालको ब्रान्चलाई यो ब्रान्चमा rebase गर्नुहोस्",
   "sidebar.createPr": "Pull Request बनाउनुहोस्…",

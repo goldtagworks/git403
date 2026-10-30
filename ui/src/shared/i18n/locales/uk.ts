@@ -934,6 +934,7 @@ export const uk: Record<Key, string> = {
   "graph.colSha": "Коміт",
   "graph.localChanges": "Локальні зміни",
   "sidebar.checkout": "Checkout",
+  "sidebar.toggle": "Показати або сховати бічну панель",
   "sidebar.merge": "Злити в поточну гілку…",
   "sidebar.rebase": "Rebase поточної гілки на цю гілку",
   "sidebar.createPr": "Створити Pull Request…",

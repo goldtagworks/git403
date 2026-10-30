@@ -934,6 +934,7 @@ export const lo: Record<Key, string> = {
   "graph.colSha": "ຄອມມິດ",
   "graph.localChanges": "ການປ່ຽນແປງໃນເຄື່ອງ",
   "sidebar.checkout": "Checkout",
+  "sidebar.toggle": "ເປີດ/ປິດແຖບຂ້າງ",
   "sidebar.merge": "Merge ເຂົ້າບຣານຊ໌ປັດຈຸບັນ…",
   "sidebar.rebase": "Rebase ບຣານຊ໌ປັດຈຸບັນມາໃສ່ບຣານຊ໌ນີ້",
   "sidebar.createPr": "ສ້າງ Pull Request…",

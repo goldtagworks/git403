@@ -934,6 +934,7 @@ export const km: Record<Key, string> = {
   "graph.colSha": "Commit",
   "graph.localChanges": "ការផ្លាស់ប្តូរមូលដ្ឋាន",
   "sidebar.checkout": "Checkout",
+  "sidebar.toggle": "បើក/បិទរបារចំហៀង",
   "sidebar.merge": "Merge ចូល branch បច្ចុប្បន្ន…",
   "sidebar.rebase": "Rebase branch បច្ចុប្បន្នមកលើ branch នេះ",
   "sidebar.createPr": "បង្កើត Pull Request…",

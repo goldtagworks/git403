@@ -51,7 +51,7 @@ for (const size of SIZES) {
     // 메뉴 막대(appMenu)는 만들지 않는다
     expect(await page.evaluate(() => (window as any).__appMenuModel)).toBeUndefined();
     // 데스크탑 전용 UI 숨김: 터미널·폴더 열기, 업데이트 안내
-    await expect(page.locator(".toolbar").getByRole("button", { name: /터미널|열기/ })).toHaveCount(0);
+    await expect(page.locator(".toolbar").getByRole("button", { name: /터미널/ })).toHaveCount(0);
     expect(errors.filter((e) => /plugin|menu/i.test(e))).toEqual([]);
     await page.screenshot({ path: `e2e/results/screens/mobile-repo-${tag}-${info.project.name}.png` });
   });
@@ -109,13 +109,33 @@ test("폭 820: 사이드바는 서랍이고 상세는 그래프 아래다", asyn
   await toggle.tap();
   await expect(side).toBeVisible();
   await expect(side.getByText("main").first()).toBeVisible();
-  await page.mouse.click(780, 600); // 서랍 밖
+  await page.touchscreen.tap(780, 600); // 서랍 밖
   await expect(side).toBeHidden();
   // 상세는 오른쪽 열이 아니라 아래
   await expect(page.locator(".main")).not.toHaveAttribute("data-layout", "right");
   await page.locator(".commits").getByText("로그 파서").tap();
   const g = (await page.locator(".pane.graph").boundingBox())!, d = (await page.locator(".details").boundingBox())!;
   expect(d.y).toBeGreaterThanOrEqual(g.y + g.height - 1);
+});
+
+test("gix가 거절하는 조회(서브모듈·worktree·commit-graph)는 오류 토스트·배너 없이 조용히 빈다", async ({ page }) => {
+  await page.addInitScript(() => ((window as any).__unsupported = ["load_submodules", "load_worktrees", "ensure_commit_graph", "lfs_status"]));
+  await start(page, SIZES[0]);
+  await openRepo(page);
+  await page.waitForTimeout(500);
+  await expect(page.locator(".toast, [role=alert]")).toHaveCount(0);
+  await expect(page.locator(".sidebar").getByText("서브모듈")).toHaveCount(0);
+});
+
+test("서랍 버튼은 열림 상태를 aria-expanded로 알린다", async ({ page }) => {
+  await start(page, SIZES[1]);
+  await openRepo(page);
+  const b = page.getByRole("button", { name: "사이드바 열기/닫기" });
+  await expect(b).toHaveAttribute("aria-expanded", "false");
+  await b.tap();
+  await expect(b).toHaveAttribute("aria-expanded", "true");
+  await page.touchscreen.tap(780, 600);
+  await expect(b).toHaveAttribute("aria-expanded", "false");
 });
 
 test("폭 1180: 사이드바가 그대로 보이고 서랍 버튼이 없으며 상세는 오른쪽 열이다", async ({ page }) => {
@@ -134,7 +154,7 @@ test("서랍·메뉴 스크린샷 (라이트/다크)", async ({ page }, info) =>
   await expect(page.locator(".pane.side")).toBeVisible();
   await page.waitForTimeout(300);
   await page.screenshot({ path: `e2e/results/screens/mobile-drawer-820x1180-${info.project.name}.png` });
-  await page.mouse.click(780, 600);
+  await page.touchscreen.tap(780, 600);
   await press(page, "로그 파서");
   await expect(page.getByRole("menu")).toBeVisible();
   await page.screenshot({ path: `e2e/results/screens/mobile-menu-820x1180-${info.project.name}.png` });

@@ -934,6 +934,7 @@ export const ko: Record<Key, string> = {
   "graph.colSha": "커밋",
   "graph.localChanges": "로컬 변경사항",
   "sidebar.checkout": "체크아웃",
+  "sidebar.toggle": "사이드바 열기/닫기",
   "sidebar.merge": "현재 브랜치에 머지…",
   "sidebar.rebase": "현재 브랜치를 이 브랜치 위로 rebase",
   "sidebar.createPr": "Pull Request 만들기…",

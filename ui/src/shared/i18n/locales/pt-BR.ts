@@ -934,6 +934,7 @@ export const ptBR: Record<Key, string> = {
   "graph.colSha": "Commit",
   "graph.localChanges": "Alterações locais",
   "sidebar.checkout": "Checkout",
+  "sidebar.toggle": "Mostrar ou ocultar a barra lateral",
   "sidebar.merge": "Fazer merge no branch atual…",
   "sidebar.rebase": "Fazer rebase do branch atual sobre este branch",
   "sidebar.createPr": "Criar pull request…",

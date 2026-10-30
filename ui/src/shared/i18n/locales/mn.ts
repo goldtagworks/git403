@@ -934,6 +934,7 @@ export const mn: Record<Key, string> = {
   "graph.colSha": "Коммит",
   "graph.localChanges": "Локал өөрчлөлтүүд",
   "sidebar.checkout": "Checkout",
+  "sidebar.toggle": "Хажуугийн самбарыг нээх/хаах",
   "sidebar.merge": "Одоогийн салбар руу merge хийх…",
   "sidebar.rebase": "Одоогийн салбарыг энэ салбар дээр rebase хийх",
   "sidebar.createPr": "Pull Request үүсгэх…",

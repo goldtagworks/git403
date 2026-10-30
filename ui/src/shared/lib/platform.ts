@@ -15,8 +15,10 @@ const onNarrow = (f: () => void) => (narrowQuery?.addEventListener("change", f),
 export const useNarrow = () => useSyncExternalStore(onNarrow, () => !!narrowQuery?.matches);
 
 const SIDE = "data-side";
-/** 서랍 사이드바 열기·닫기 (`<html data-side>`, React 상태가 아니라 리렌더 없음) */
-export const toggleSide = (open?: boolean) => document.documentElement.toggleAttribute(SIDE, open);
+const sideListeners = new Set<() => void>();
+/** 서랍 사이드바 열기·닫기 (`<html data-side>`; CSS가 읽고, 버튼만 `useSideOpen`으로 구독) */
+export const toggleSide = (open?: boolean) => (document.documentElement.toggleAttribute(SIDE, open), sideListeners.forEach((f) => f()));
+export const useSideOpen = () => useSyncExternalStore((f) => (sideListeners.add(f), () => void sideListeners.delete(f)), () => document.documentElement.hasAttribute(SIDE));
 
 /** 모바일 시작 때 한 번: `<html data-mobile>`(CSS 범위), 길게 누르기 → 우클릭 메뉴, 서랍 바깥 탭으로 닫기 */
 export function initMobile() {
@@ -49,5 +51,5 @@ export function initMobile() {
   // 길게 누른 뒤 손을 뗄 때의 클릭은 삼킨다
   addEventListener("click", (e) => { if (fired) (fired = false, e.preventDefault(), e.stopPropagation()); }, true);
   // 서랍 바깥을 탭하면 닫는다 (서랍 안·여는 버튼은 제외)
-  addEventListener("pointerdown", (e) => html.hasAttribute(SIDE) && !(e.target as Element).closest(".pane.side, .side-toggle") && toggleSide(false), true);
+  addEventListener("pointerdown", (e) => e.pointerType !== "mouse" && html.hasAttribute(SIDE) && !(e.target as Element).closest(".pane.side, .side-toggle, .dom-menu, .dom-menu-backdrop") && toggleSide(false), true);
 }

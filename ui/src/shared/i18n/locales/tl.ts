@@ -934,6 +934,7 @@ export const tl: Record<Key, string> = {
   "graph.colSha": "Commit",
   "graph.localChanges": "Mga lokal na pagbabago",
   "sidebar.checkout": "Checkout",
+  "sidebar.toggle": "Ipakita o itago ang sidebar",
   "sidebar.merge": "I-merge sa kasalukuyang branch…",
   "sidebar.rebase": "I-rebase ang kasalukuyang branch sa branch na ito",
   "sidebar.createPr": "Gumawa ng Pull Request…",
