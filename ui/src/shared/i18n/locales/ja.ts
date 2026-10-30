@@ -1441,6 +1441,7 @@ export const ja: Record<Key, string> = {
   "err.git.parse": "git の出力を解析できませんでした: {detail}",
   "err.git.badArg": "無効な引数です('-' で始められません): {arg}",
   "err.git.spawn": "git の実行に失敗しました: {error}",
+  "err.git.unsupported": "この環境ではサポートされていない操作です: {op}",
   "err.hosting.badResponse": "サーバーの応答を解析できませんでした",
   "err.hosting.bitbucketServer": "セルフホストの Bitbucket (Server/Data Center) はまだサポートされていません。接続できるのは bitbucket.org のみです",
   "err.hosting.file": "アカウントファイルのエラー: {detail}",

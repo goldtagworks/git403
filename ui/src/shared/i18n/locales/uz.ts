@@ -1441,6 +1441,7 @@ export const uz: Record<Key, string> = {
   "err.git.parse": "git chiqishini tahlil qilib bo'lmadi: {detail}",
   "err.git.badArg": "invalid argument (must not start with '-'): {arg}",
   "err.git.spawn": "git'ni ishga tushirib bo'lmadi: {error}",
+  "err.git.unsupported": "Bu muhitda qoʻllab-quvvatlanmaydi: {op}",
   "err.hosting.badResponse": "Server javobini tahlil qilib bo'lmadi",
   "err.hosting.bitbucketServer": "O'z serveridagi Bitbucket (Server/Data Center) hali qo'llab-quvvatlanmaydi. Faqat bitbucket.org ulanishi mumkin",
   "err.hosting.file": "Hisob fayli xatosi: {detail}",

@@ -1441,6 +1441,7 @@ export const tr: Record<Key, string> = {
   "err.git.parse": "git çıktısı ayrıştırılamadı: {detail}",
   "err.git.badArg": "invalid argument (must not start with '-'): {arg}",
   "err.git.spawn": "git çalıştırılamadı: {error}",
+  "err.git.unsupported": "Bu ortamda desteklenmiyor: {op}",
   "err.hosting.badResponse": "Sunucu yanıtı ayrıştırılamadı",
   "err.hosting.bitbucketServer": "Kendi sunucunuzdaki Bitbucket (Server/Data Center) henüz desteklenmiyor. Yalnızca bitbucket.org bağlanabilir",
   "err.hosting.file": "Hesap dosyası hatası: {detail}",

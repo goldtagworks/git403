@@ -7,7 +7,7 @@ import { Icon } from "../../shared/ui/Icon";
 import type { IconName } from "../../shared/ui/icons";
 import { isHiddenNode, isHiddenRef, nodePath, refPath, useHiddenNode, useHiddenRef, useViewing, useVisibleCount } from "../../shared/lib/hidden";
 import { contextMenu, type MenuEntry } from "../../shared/ui/menu";
-import { ops, store, stored } from "../../shared/model/ops";
+import { FLOW_OPS, ops, store, stored } from "../../shared/model/ops";
 import { atCommit, stashMenu } from "../../shared/model/menus";
 import { pick, useActive } from "../../shared/model/selection";
 import { PrSection } from "../../features/hosting/PrSection";
@@ -22,7 +22,7 @@ const SECTIONS: { kind: RefKind; label: Key; icon: IconName }[] = [
 
 const flowEntries = (name: string): MenuEntry[] => {
   const kind = ops.flowKind(name);
-  return kind ? [{ separator: true }, { label: `Finish ${kind}…`, action: () => ops.flowFinish(name) }] : [];
+  return kind ? [{ separator: true }, { label: `Finish ${kind}…`, op: FLOW_OPS, action: () => ops.flowFinish(name) }] : [];
 };
 
 /** 사이드바 항목 우클릭 메뉴 (ops 재사용) */
@@ -87,26 +87,26 @@ function refMenu(r: Ref, repo: string): MenuEntry[] {
         // Pull·Push는 현재 브랜치 대상이라 HEAD 브랜치에서만 보인다
         ...(r.head
           ? [
-              { label: t("toolbar.pull"), action: ops.pullQuick },
-              { label: t("toolbar.pullOpts"), action: ops.pull },
-              { label: t("toolbar.push"), action: ops.pushQuick },
-              { label: t("toolbar.pushOpts"), action: ops.push },
+              { label: t("toolbar.pull"), op: "pull", action: ops.pullQuick },
+              { label: t("toolbar.pullOpts"), op: "pull", action: ops.pull },
+              { label: t("toolbar.push"), op: "push", action: ops.pushQuick },
+              { label: t("toolbar.pushOpts"), op: "push", action: ops.push },
             ]
           : []),
-        { label: t("sidebar.setUpstream"), action: () => ops.setUpstream(r.name) },
+        { label: t("sidebar.setUpstream"), op: "branch", action: () => ops.setUpstream(r.name) },
         { separator: true },
-        { label: t("sidebar.checkout"), action: () => ops.checkout(r.name), disabled: r.head },
-        { label: t("sidebar.merge"), action: () => ops.merge(r.name), disabled: r.head },
-        { label: t("sidebar.rebase"), action: () => ops.rebase(r.name), disabled: r.head },
+        { label: t("sidebar.checkout"), op: "switch", action: () => ops.checkout(r.name), disabled: r.head },
+        { label: t("sidebar.merge"), op: "merge", action: () => ops.merge(r.name), disabled: r.head },
+        { label: t("sidebar.rebase"), op: "rebase", action: () => ops.rebase(r.name), disabled: r.head },
         { separator: true },
-        { label: t("sidebar.newBranch"), action: () => ops.createBranch(r.name) },
+        { label: t("sidebar.newBranch"), op: "branch", action: () => ops.createBranch(r.name) },
         ...atCommit(r.target).slice(1),
         { separator: true },
         { label: t("sidebar.createPr"), action: () => ops.createPr(r.name) },
         ...(ops.aiOn() ? [{ label: t("sidebar.aiReview"), action: () => ops.aiReviewBranch(r.name) }] : []),
         { separator: true },
-        { label: t("sidebar.rename"), action: () => ops.renameBranch(r.name) },
-        { label: t("sidebar.delete"), action: () => ops.deleteBranch(r.name), disabled: r.head },
+        { label: t("sidebar.rename"), op: "branch", action: () => ops.renameBranch(r.name) },
+        { label: t("sidebar.delete"), op: "branch", action: () => ops.deleteBranch(r.name), disabled: r.head },
         ...flowEntries(r.name),
         { separator: true },
         { label: t("sidebar.copyName"), action: () => ops.copy(r.name) },
@@ -115,17 +115,17 @@ function refMenu(r: Ref, repo: string): MenuEntry[] {
       ];
     case "remote":
       return [
-        { label: t("sidebar.checkoutRemote"), action: () => ops.checkoutRemote(r.name) },
-        { label: t("sidebar.merge"), action: () => ops.merge(r.name) },
-        { label: t("sidebar.rebase"), action: () => ops.rebase(r.name) },
+        { label: t("sidebar.checkoutRemote"), op: "switch", action: () => ops.checkoutRemote(r.name) },
+        { label: t("sidebar.merge"), op: "merge", action: () => ops.merge(r.name) },
+        { label: t("sidebar.rebase"), op: "rebase", action: () => ops.rebase(r.name) },
         { separator: true },
-        { label: t("sidebar.newBranch"), action: () => ops.createBranch(r.name) },
+        { label: t("sidebar.newBranch"), op: "branch", action: () => ops.createBranch(r.name) },
         ...atCommit(r.target).slice(1),
-        { label: `${t("ops.tag.new")}…`, action: () => ops.createTag(r.target) },
+        { label: `${t("ops.tag.new")}…`, op: "tag", action: () => ops.createTag(r.target) },
         { separator: true },
         { label: t("sidebar.prInto"), action: () => ops.createPr(undefined, r.name), disabled: !ops.head() },
         { separator: true },
-        { label: t("sidebar.deleteRemote"), action: () => ops.deleteRemoteBranch(r.name) },
+        { label: t("sidebar.deleteRemote"), op: "push", action: () => ops.deleteRemoteBranch(r.name) },
         { separator: true },
         { label: t("sidebar.copyName"), action: () => ops.copy(r.name) },
         ...hideEntry(r, repo),
@@ -133,16 +133,16 @@ function refMenu(r: Ref, repo: string): MenuEntry[] {
       ];
     case "tag":
       return [
-        { label: "Push", action: () => ops.pushTag(r.name) },
+        { label: "Push", op: "push", action: () => ops.pushTag(r.name) },
         { separator: true },
-        { label: t("sidebar.merge"), action: () => ops.merge(r.name) },
-        { label: t("sidebar.rebase"), action: () => ops.rebase(r.name) },
+        { label: t("sidebar.merge"), op: "merge", action: () => ops.merge(r.name) },
+        { label: t("sidebar.rebase"), op: "rebase", action: () => ops.rebase(r.name) },
         { separator: true },
-        { label: t("sidebar.checkoutDetached"), action: () => ops.checkoutCommit(r.target) },
+        { label: t("sidebar.checkoutDetached"), op: "switch", action: () => ops.checkoutCommit(r.target) },
         { separator: true },
         ...atCommit(r.target),
         { separator: true },
-        { label: t("sidebar.delete"), action: () => ops.deleteTag(r.name) },
+        { label: t("sidebar.delete"), op: "tag", action: () => ops.deleteTag(r.name) },
         { separator: true },
         { label: t("sidebar.copyName"), action: () => ops.copy(r.name) },
         ...hideEntry(r, repo),
@@ -156,34 +156,34 @@ const SUB_STATE: Record<Submodule["status"], Key | ""> = { ok: "", uninitialized
 
 const submoduleMenu = (s: Submodule): MenuEntry[] => [
   { label: t("sidebar.open"), action: () => ops.openSubmodule(s.path), disabled: s.status === "uninitialized" },
-  { label: t("sidebar.update"), action: () => ops.updateSubmodules(s.path) },
+  { label: t("sidebar.update"), op: "submodule", action: () => ops.updateSubmodules(s.path) },
   { separator: true },
-  { label: t("sidebar.remove"), action: () => ops.removeSubmodule(s.path) },
+  { label: t("sidebar.remove"), op: "submodule", action: () => ops.removeSubmodule(s.path) },
   { label: t("sidebar.copyPath"), action: () => ops.copy(s.path) },
 ];
 const submoduleSectionMenu = (): MenuEntry[] => [
-  { label: t("sidebar.updateAll"), action: () => ops.updateSubmodules() },
-  { label: t("sidebar.syncUrl"), action: ops.syncSubmodules },
-  { label: t("sidebar.addSubmodule"), action: ops.addSubmodule },
+  { label: t("sidebar.updateAll"), op: "submodule", action: () => ops.updateSubmodules() },
+  { label: t("sidebar.syncUrl"), op: "submodule", action: ops.syncSubmodules },
+  { label: t("sidebar.addSubmodule"), op: "submodule", action: ops.addSubmodule },
 ];
 
 const worktreeName = (w: Worktree) => w.branch ?? (w.bare ? "(bare)" : `(detached) ${w.head.slice(0, 7)}`);
 const worktreeMenu = (w: Worktree): MenuEntry[] => [
   { label: t("sidebar.open"), action: () => ops.openWorktree(w.path), disabled: w.prunable },
   { separator: true },
-  w.locked ? { label: t("sidebar.unlock"), action: () => ops.unlockWorktree(w.path) } : { label: t("sidebar.lock"), action: () => ops.lockWorktree(w.path), disabled: w.main },
-  { label: t("sidebar.remove"), action: () => ops.removeWorktree(w.path), disabled: w.main },
+  w.locked ? { label: t("sidebar.unlock"), op: "worktree", action: () => ops.unlockWorktree(w.path) } : { label: t("sidebar.lock"), op: "worktree", action: () => ops.lockWorktree(w.path), disabled: w.main },
+  { label: t("sidebar.remove"), op: "worktree", action: () => ops.removeWorktree(w.path), disabled: w.main },
   { label: t("sidebar.copyPath"), action: () => ops.copy(w.path) },
 ];
 const worktreeSectionMenu = (): MenuEntry[] => [
-  { label: t("sidebar.addWorktree"), action: ops.addWorktree },
-  { label: t("sidebar.prune"), action: ops.pruneWorktrees },
+  { label: t("sidebar.addWorktree"), op: "worktree", action: ops.addWorktree },
+  { label: t("sidebar.prune"), op: "worktree", action: ops.pruneWorktrees },
 ];
 
 const remoteMenu = (name: string): MenuEntry[] => [
-  { label: "Fetch", action: ops.fetch },
-  { label: t("sidebar.edit"), action: () => ops.editRemote(name) },
-  { label: t("sidebar.delete"), action: () => ops.removeRemote(name) },
+  { label: "Fetch", op: "fetch", action: ops.fetch },
+  { label: t("sidebar.edit"), op: "remote", action: () => ops.editRemote(name) },
+  { label: t("sidebar.delete"), op: "remote", action: () => ops.removeRemote(name) },
 ];
 
 /** 폴더 행: 숨김 여부만 구독해서 토글한 폴더만 다시 그려진다. */
@@ -411,7 +411,7 @@ export const Sidebar = memo(function Sidebar({ repo, refs, submodules, worktrees
               className="section-title"
               aria-expanded={open}
               onClick={() => toggle(kind)}
-              onContextMenu={kind === "remote" ? contextMenu(() => [{ label: t("sidebar.addRemote"), action: ops.addRemote }]) : undefined}
+              onContextMenu={kind === "remote" ? contextMenu(() => [{ label: t("sidebar.addRemote"), op: "remote", action: ops.addRemote }]) : undefined}
             >
               <Icon name={open ? "chevronDown" : "chevronRight"} size={12} />
               {t(label)}

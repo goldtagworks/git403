@@ -879,3 +879,16 @@ test("메뉴 막대로 실행한 Pull의 진행률 동안 그래프·사이드�
   const during = await renders(page);
   for (const id of ["CommitGraph", "Sidebar", "Details", "Toolbar"]) expect(during[id], id).toBe(before[id]);
 });
+
+test("지원 작업이 제한된 백엔드(capabilities)도 진행률 이벤트 동안 그래프·사이드바·상세·툴바를 다시 그리지 않는다", async ({ page }) => {
+  await page.addInitScript(() => Object.assign(window, { __caps: { all: false, ops: ["log", "status", "fetch", "pull"] } }));
+  await page.reload();
+  await expect(page.locator(".diff .add").first()).toBeVisible();
+  await expect(page.locator(".toolbar").getByRole("button", { name: "Push", exact: true })).toHaveCount(0);
+  await page.locator(".toolbar").getByRole("button", { name: "Pull", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Pull 취소" })).toBeVisible();
+  const before = await renders(page);
+  await expect(page.locator(".status-progress")).toContainText("Receiving objects");
+  const during = await renders(page);
+  for (const id of ["CommitGraph", "Sidebar", "Details", "Toolbar"]) expect(during[id], id).toBe(before[id]);
+});

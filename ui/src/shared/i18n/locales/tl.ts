@@ -1441,6 +1441,7 @@ export const tl: Record<Key, string> = {
   "err.git.parse": "nabigong i-parse ang output ng git: {detail}",
   "err.git.badArg": "invalid argument (must not start with '-'): {arg}",
   "err.git.spawn": "nabigong patakbuhin ang git: {error}",
+  "err.git.unsupported": "Hindi suportado sa environment na ito: {op}",
   "err.hosting.badResponse": "Hindi ma-parse ang tugon ng server",
   "err.hosting.bitbucketServer": "Hindi pa suportado ang self-hosted na Bitbucket (Server/Data Center). bitbucket.org lang ang maaaring ikonekta",
   "err.hosting.file": "Error sa file ng account: {detail}",

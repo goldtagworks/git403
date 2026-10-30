@@ -36,6 +36,7 @@ import { guide } from "../shared/model/guide";
 import { bigView } from "../shared/model/bigview";
 import { dismissTop } from "../shared/lib/dismiss";
 import { appMenu } from "../shared/model/appMenu";
+import { loadCaps } from "../shared/lib/caps";
 import "./style.css";
 
 /** 새로 받은 값이 이전과 내용이 같으면 이전 참조를 돌려준다 (memo된 화면을 다시 그리지 않게) */
@@ -48,6 +49,8 @@ if (import.meta.env.VITE_MOCK) await import("../shared/api/mock");
 // Rust가 만드는 문구의 언어: 시작 시와 언어가 바뀔 때 알린다 (실패해도 앱은 계속)
 api.setLocale(locale()).catch(() => {});
 onLocale(() => api.setLocale(locale()).catch(() => {}));
+// 백엔드가 지원하는 작업: 시작 때 한 번 (저장소가 바뀌어도 같다). 제한이 있으면 메뉴·툴바가 한 번 다시 그려진다
+void loadCaps();
 
 /** fetch 오류가 "태그 덮어쓰기 거부"뿐이면 그 태그 이름들(쉼표로), 아니면 null.
  *  --all이면 거부된 원격마다 "error: could not fetch <원격>"이 붙는다. 다른 error·fatal·거부가 있으면 진짜 실패다 */

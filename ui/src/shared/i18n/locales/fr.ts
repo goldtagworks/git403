@@ -1441,6 +1441,7 @@ export const fr: Record<Key, string> = {
   "err.git.parse": "échec de l’analyse de la sortie de git : {detail}",
   "err.git.badArg": "invalid argument (must not start with '-'): {arg}",
   "err.git.spawn": "échec de l’exécution de git : {error}",
+  "err.git.unsupported": "Non pris en charge dans cet environnement : {op}",
   "err.hosting.badResponse": "Impossible d’analyser la réponse du serveur",
   "err.hosting.bitbucketServer": "Bitbucket auto-hébergé (Server/Data Center) n’est pas encore pris en charge. Seul bitbucket.org peut être connecté",
   "err.hosting.file": "Erreur du fichier des comptes : {detail}",

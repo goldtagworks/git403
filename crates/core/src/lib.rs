@@ -57,7 +57,7 @@ pub use worktree::{read_worktrees, Worktree};
 pub use lfs::{lfs_status, Lfs, LfsFile};
 pub use job::{JobEvent, JobHandle};
 pub use runner::{reject_option, GitRunner};
-pub use backend::{GitBackend, Op, Spawned};
+pub use backend::{Capabilities, GitBackend, Op, Spawned};
 #[cfg(feature = "cli")]
 pub use backend::CliBackend;
 

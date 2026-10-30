@@ -13,6 +13,8 @@ export const api = {
   setLocale: (locale: Locale) => invoke<void>("set_locale", { locale }),
   /** 설치된 git 버전. 못 찾으면 null (앱은 git을 번들하지 않는다) */
   gitVersion: () => invoke<string | null>("git_version"),
+  /** 백엔드가 지원하는 작업. all=true면 전부, 아니면 ops(git 서브커맨드·코어 메서드 이름)만. 시작 때 한 번 (shared/lib/caps.ts) */
+  capabilities: () => invoke<{ all: boolean; ops: string[] }>("capabilities"),
   /** 업데이트 확인(plugin-updater). 새 버전이 없으면 null */
   checkUpdate: () => checkUpdate(),
   relaunch: () => relaunch(),

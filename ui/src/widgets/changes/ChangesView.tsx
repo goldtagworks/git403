@@ -6,6 +6,7 @@ import { ctx, ops, type AiCall, useAiOn, useTouched } from "../../shared/model/o
 import { contextMenu, showMenu, type MenuEntry } from "../../shared/ui/menu";
 import { fileMenu, fileOpenMenu } from "../../features/inspect/fileMenu";
 import { DiffView, type HunkAction } from "../../entities/diff/DiffView";
+import { supports, useCaps } from "../../shared/lib/caps";
 import { countRender } from "../../shared/lib/profile";
 import { onPrefs, pref } from "../../shared/lib/settings";
 import { useSplit } from "../../shared/ui/Splitter";
@@ -36,6 +37,7 @@ export const ChangesView = memo(function ChangesView({
   countRender("ChangesView");
   const touched = useTouched();
   const loc = useLocale();
+  useCaps();
   const [infoW, infoSplit] = useSplit("changes", 440, 220, 900, "x");
   // 파일 목록 ↔ 커밋 입력 경계: 입력 상자 높이(바닥에 붙고, 목록이 나머지를 채운다)
   const [boxH, boxSplit] = useSplit("commit-box", 190, 130, 600, "y", undefined, true);
@@ -119,24 +121,24 @@ export const ChangesView = memo(function ChangesView({
           <span className="head-actions">
             {side === "unstaged" && <button className="secondary" onClick={() => ops.snapshot()} title={t("changes.snapshotTip")}>{t("changes.snapshot")}</button>}
             <button className="secondary" onClick={() => ops.savePatchChanges(side === "staged" ? "staged" : "unstaged")}>{t("changes.savePatch")}</button>
-            {side === "unstaged" && <button className="secondary stop" onClick={() => discard(files)}>{t("changes.discardAll")}</button>}
+            {side === "unstaged" && supports("discard") && <button className="secondary stop" onClick={() => discard(files)}>{t("changes.discardAll")}</button>}
             {/* 좁을 때만 보인다: 위 보조 버튼들을 메뉴로 */}
             <button
               className="more"
               aria-label={t("changes.more")}
               onClick={() =>
                 showMenu([
-                  ...(side === "unstaged" ? [{ label: t("changes.snapshot"), action: () => ops.snapshot() }] : []),
-                  { label: t("changes.savePatch"), action: () => ops.savePatchChanges(side === "staged" ? "staged" : "unstaged") },
-                  ...(side === "unstaged" ? [{ label: t("changes.discardAll"), action: () => discard(files) }] : []),
+                  ...(side === "unstaged" ? [{ label: t("changes.snapshot"), op: "stash", action: () => ops.snapshot() }] : []),
+                  { label: t("changes.savePatch"), op: "diff", action: () => ops.savePatchChanges(side === "staged" ? "staged" : "unstaged") },
+                  ...(side === "unstaged" ? [{ label: t("changes.discardAll"), op: "discard", action: () => discard(files) }] : []),
                 ])
               }
             >
               ⋯
             </button>
-            <button className={side === "staged" ? undefined : "go"} onClick={() => run(side === "staged" ? api.unstage(repo, files.map((f) => f.path)) : api.stage(repo, files.map((f) => f.path)))}>
+            {supports(side === "staged" ? "unstage" : "stage") && <button className={side === "staged" ? undefined : "go"} onClick={() => run(side === "staged" ? api.unstage(repo, files.map((f) => f.path)) : api.stage(repo, files.map((f) => f.path)))}>
               {side === "staged" ? t("changes.unstageAll") : t("changes.stageAll")}
-            </button>
+            </button>}
           </span>
         )}
       </div>
@@ -156,25 +158,27 @@ export const ChangesView = memo(function ChangesView({
                 { label: t("diff.big"), action: () => (setSel({ side, path: f.path }), bigView.enter(true)) },
                 { separator: true },
                 // 순서: 충돌 해결 → 스테이지·버리기·스태시·무시 → 히스토리·Blame → 외부 도구·열기 → 경로·패치 복사
-                ...(f.conflict && !isDeleteConflict(f) ? [{ label: t("changes.mergeTool"), action: () => ops.mergeTool(f.path) }] : []),
+                ...(f.conflict && !isDeleteConflict(f) ? [{ label: t("changes.mergeTool"), op: "mergetool", action: () => ops.mergeTool(f.path) }] : []),
                 ...(f.conflict && !isDeleteConflict(f) && ops.aiOn() ? [{ label: t("changes.aiConflict"), action: () => ops.aiConflict(f.path) }] : []),
                 ...(f.conflict ? [{ separator: true } as MenuEntry] : []),
-                { label: side === "staged" ? t("changes.unstage") : t("changes.stage"), action: () => run(side === "staged" ? api.unstage(repo, [f.path]) : api.stage(repo, [f.path])) },
-                ...(side === "unstaged" ? [{ label: t("changes.discardMenu"), action: () => discard([f]) }] : []),
+                { label: side === "staged" ? t("changes.unstage") : t("changes.stage"), op: side === "staged" ? "unstage" : "stage", action: () => run(side === "staged" ? api.unstage(repo, [f.path]) : api.stage(repo, [f.path])) },
+                ...(side === "unstaged" ? [{ label: t("changes.discardMenu"), op: "discard", action: () => discard([f]) }] : []),
                 { label: t("changes.trashMenu"), action: () => ops.trashFiles([f.path]), disabled: f.path.endsWith("/") }, // 폴더는 못 옮긴다
-                ...(side === "unstaged" ? [{ label: t("changes.stashFile"), action: () => ops.stashFiles([f.path]) }] : []),
+                ...(side === "unstaged" ? [{ label: t("changes.stashFile"), op: "stash", action: () => ops.stashFiles([f.path]) }] : []),
                 { label: t("changes.ignore"), action: () => ops.ignore(f.path), disabled: !f.untracked },
-                { label: t("changes.lfs"), action: () => ops.lfsTrackFile(f.path) },
+                { label: t("changes.lfs"), op: "lfs", action: () => ops.lfsTrackFile(f.path) },
                 { separator: true },
                 ...(f.untracked ? fileOpenMenu(f.path, null) : fileMenu(f.path, null, side === "staged")),
-                ...(f.untracked ? [] : [{ label: t("changes.savePatchFile"), action: () => ops.savePatchChanges(side, [f.path]) }]),
+                ...(f.untracked ? [] : [{ label: t("changes.savePatchFile"), op: "diff", action: () => ops.savePatchChanges(side, [f.path]) }]),
               ])}
             >
               <span className={`status s-${statusChar(f, side)}`}>{statusChar(f, side)}</span>
               <span className="label">{f.path}</span>
-              <button className="row-btn" onMouseDown={(e) => e.stopPropagation()} onClick={() => run(side === "staged" ? api.unstage(repo, [f.path]) : api.stage(repo, [f.path]))}>
-                {side === "staged" ? "−" : "+"}
-              </button>
+              {supports(side === "staged" ? "unstage" : "stage") && (
+                <button className="row-btn" onMouseDown={(e) => e.stopPropagation()} onClick={() => run(side === "staged" ? api.unstage(repo, [f.path]) : api.stage(repo, [f.path]))}>
+                  {side === "staged" ? "−" : "+"}
+                </button>
+              )}
             </li>
           );
         })}

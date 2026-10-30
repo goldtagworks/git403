@@ -8,6 +8,7 @@ import { IS_VSCODE } from "../api/bridge";
 import { onLocale, t } from "../i18n/i18n";
 import { isMac } from "../lib/platform";
 import { nativeItems, type MenuEntry, type Roles } from "../ui/menu";
+import { onCaps, visible, capsVersion } from "../lib/caps";
 import { bigView } from "./bigview";
 import { guide } from "./guide";
 import { aiBus, ctx, ops } from "./ops";
@@ -72,8 +73,8 @@ export function appMenuModel(s: AppMenuState, d: AppMenuDeps): MenuEntry[] {
     label: t("menu.file"),
     submenu: [
       { label: t("toolbar.openRepo"), action: d.open, accelerator: key(`${MOD}+O`) },
-      { label: t("toolbar.clone"), action: ops.clone, accelerator: `${MOD}+N` },
-      { label: t("toolbar.init"), action: ops.init },
+      { label: t("toolbar.clone"), op: "clone", action: ops.clone, accelerator: `${MOD}+N` },
+      { label: t("toolbar.init"), op: "init", action: ops.init },
       { label: t("toolbar.scan"), action: ops.scan },
       sep,
       { label: t("menu.closeTab"), action: d.close, accelerator: key(`${MOD}+W`) },
@@ -105,24 +106,24 @@ export function appMenuModel(s: AppMenuState, d: AppMenuDeps): MenuEntry[] {
   const repo: MenuEntry = {
     label: t("menu.repo"),
     submenu: [
-      { label: t("toolbar.fetch"), action: idle(ops.fetch), disabled: no, accelerator: key(`${MOD}+Shift+F`) },
-      { label: t("toolbar.pull"), action: idle(ops.pullQuick), disabled: no, accelerator: key(`${MOD}+Shift+L`) },
-      { label: t("toolbar.pullOpts"), action: idle(ops.pull), disabled: no },
-      { label: t("toolbar.push"), action: idle(ops.pushQuick), disabled: no, accelerator: key(`${MOD}+Shift+P`) },
-      { label: t("toolbar.pushOpts"), action: idle(ops.push), disabled: no },
+      { label: t("toolbar.fetch"), op: "fetch", action: idle(ops.fetch), disabled: no, accelerator: key(`${MOD}+Shift+F`) },
+      { label: t("toolbar.pull"), op: "pull", action: idle(ops.pullQuick), disabled: no, accelerator: key(`${MOD}+Shift+L`) },
+      { label: t("toolbar.pullOpts"), op: "pull", action: idle(ops.pull), disabled: no },
+      { label: t("toolbar.push"), op: "push", action: idle(ops.pushQuick), disabled: no, accelerator: key(`${MOD}+Shift+P`) },
+      { label: t("toolbar.pushOpts"), op: "push", action: idle(ops.push), disabled: no },
       sep,
-      { label: t("toolbar.newBranch"), action: () => ops.createBranch(), disabled: no, accelerator: key(`${MOD}+Shift+B`) },
-      { label: t("toolbar.stashMenu"), action: () => (ctx.status?.files.length ? ops.stash() : ctx.notify(t("toolbar.noChanges"), { kind: "info" })), disabled: no, accelerator: key(`${MOD}+Shift+S`) },
-      { label: t("quick.c21"), action: () => (ctx.refs.some((r) => r.kind === "stash") ? ops.pop() : ctx.notify(t("toolbar.noStash"), { kind: "info" })), disabled: no },
-      { label: t("toolbar.snapshot"), action: () => ops.snapshot(), disabled: no },
+      { label: t("toolbar.newBranch"), op: "branch", action: () => ops.createBranch(), disabled: no, accelerator: key(`${MOD}+Shift+B`) },
+      { label: t("toolbar.stashMenu"), op: "stash", action: () => (ctx.status?.files.length ? ops.stash() : ctx.notify(t("toolbar.noChanges"), { kind: "info" })), disabled: no, accelerator: key(`${MOD}+Shift+S`) },
+      { label: t("quick.c21"), op: "stash", action: () => (ctx.refs.some((r) => r.kind === "stash") ? ops.pop() : ctx.notify(t("toolbar.noStash"), { kind: "info" })), disabled: no },
+      { label: t("toolbar.snapshot"), op: "stash", action: () => ops.snapshot(), disabled: no },
       sep,
       { label: t("toolbar.createPr"), action: () => ops.createPr(), disabled: no },
-      { label: t("toolbar.addRemote"), action: ops.addRemote, disabled: no },
-      { label: t("toolbar.applyPatch"), action: ops.applyPatch, disabled: no },
-      { label: t("toolbar.stats"), action: ops.repoStats, disabled: no },
+      { label: t("toolbar.addRemote"), op: "remote", action: ops.addRemote, disabled: no },
+      { label: t("toolbar.applyPatch"), op: ["apply", "am"], action: ops.applyPatch, disabled: no },
+      { label: t("toolbar.stats"), op: "repo_stats", action: ops.repoStats, disabled: no },
       sep,
-      { label: t("toolbar.addSubmodule"), action: ops.addSubmodule, disabled: no },
-      { label: t("toolbar.addWorktree"), action: ops.addWorktree, disabled: no },
+      { label: t("toolbar.addSubmodule"), op: "submodule", action: ops.addSubmodule, disabled: no },
+      { label: t("toolbar.addWorktree"), op: "worktree", action: ops.addWorktree, disabled: no },
     ],
   };
 
@@ -155,7 +156,7 @@ let state: AppMenuState = { repo: false, tabs: 0 };
 let timer = 0;
 let seq = 0;
 let current: Awaited<ReturnType<typeof import("@tauri-apps/api/menu").Menu.new>> | null = null;
-const sig = () => JSON.stringify(state) + t("menu.file") + ops.aiOn();
+const sig = () => JSON.stringify(state) + t("menu.file") + ops.aiOn() + capsVersion();
 let last = "";
 
 /* macOS는 창을 닫아도 숨기기만 한다. 그 상태에서 메뉴(설정·열기 등)를 고르면 숨은 창 안에서 열려 반응이 없어 보이므로
@@ -180,7 +181,7 @@ function withShow(items: MenuEntry[], skip: () => void): MenuEntry[] {
 async function apply() {
   if (!deps) return;
   const my = ++seq;
-  const model = appMenuModel(state, deps);
+  const model = visible(appMenuModel(state, deps));
   if (import.meta.env.VITE_MOCK) return void ((window as any).__appMenuModel = model);
   if (IS_VSCODE || !(window as any).__TAURI_INTERNALS__) return;
   const { Menu } = await import("@tauri-apps/api/menu");
@@ -208,7 +209,7 @@ export const appMenu = {
     deps = d;
     last = "";
     schedule();
-    const un = [onLocale(schedule), aiBus.on(schedule)];
+    const un = [onLocale(schedule), aiBus.on(schedule), onCaps(schedule)];
     return () => {
       un.forEach((f) => f());
       deps = null;

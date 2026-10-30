@@ -1441,6 +1441,7 @@ export const mn: Record<Key, string> = {
   "err.git.parse": "git-ийн гаралтыг задлан шинжилж чадсангүй: {detail}",
   "err.git.badArg": "invalid argument (must not start with '-'): {arg}",
   "err.git.spawn": "git-г ажиллуулж чадсангүй: {error}",
+  "err.git.unsupported": "Энэ орчинд дэмжигдэхгүй үйлдэл: {op}",
   "err.hosting.badResponse": "Серверийн хариуг задлан шинжилж чадсангүй",
   "err.hosting.bitbucketServer": "Өөрийн серверийн Bitbucket (Server/Data Center)-ийг одоогоор дэмжихгүй. Зөвхөн bitbucket.org-г холбох боломжтой",
   "err.hosting.file": "Бүртгэлийн файлын алдаа: {detail}",

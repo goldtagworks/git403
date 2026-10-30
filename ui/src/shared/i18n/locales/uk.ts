@@ -1441,6 +1441,7 @@ export const uk: Record<Key, string> = {
   "err.git.parse": "не вдалося розібрати вивід git: {detail}",
   "err.git.badArg": "invalid argument (must not start with '-'): {arg}",
   "err.git.spawn": "не вдалося запустити git: {error}",
+  "err.git.unsupported": "Не підтримується в цьому середовищі: {op}",
   "err.hosting.badResponse": "Не вдалося розібрати відповідь сервера",
   "err.hosting.bitbucketServer": "Власний Bitbucket (Server/Data Center) поки не підтримується. Можна підключити лише bitbucket.org",
   "err.hosting.file": "Помилка файлу облікових записів: {detail}",

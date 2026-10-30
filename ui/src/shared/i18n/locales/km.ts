@@ -1441,6 +1441,7 @@ export const km: Record<Key, string> = {
   "err.git.parse": "មិនអាចញែកលទ្ធផល git បានទេ៖ {detail}",
   "err.git.badArg": "invalid argument (must not start with '-'): {arg}",
   "err.git.spawn": "មិនអាចដំណើរការ git បានទេ៖ {error}",
+  "err.git.unsupported": "មិនគាំទ្រក្នុងបរិស្ថាននេះទេ: {op}",
   "err.hosting.badResponse": "មិនអាចញែកការឆ្លើយតបរបស់ម៉ាស៊ីនមេបានទេ",
   "err.hosting.bitbucketServer": "Bitbucket បង្ហោះខ្លួនឯង (Server/Data Center) មិនទាន់គាំទ្រទេ។ អាចតភ្ជាប់បានតែ bitbucket.org ប៉ុណ្ណោះ",
   "err.hosting.file": "កំហុសឯកសារគណនី៖ {detail}",

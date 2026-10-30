@@ -23,6 +23,7 @@ impl Backend {
                 Ok(Value::Null)
             }
             "git_version" => json(git.git_version().await.map_err(|e| e.ipc())?),
+            "capabilities" => json(git.capabilities()),
             "initial_repo" => json(&self.initial_repo),
             // ---- 조회 ----
             "load_graph" => {

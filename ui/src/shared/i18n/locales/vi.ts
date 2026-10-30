@@ -1441,6 +1441,7 @@ export const vi: Record<Key, string> = {
   "err.git.parse": "không phân tích được đầu ra git: {detail}",
   "err.git.badArg": "invalid argument (must not start with '-'): {arg}",
   "err.git.spawn": "không chạy được git: {error}",
+  "err.git.unsupported": "Không được hỗ trợ trong môi trường này: {op}",
   "err.hosting.badResponse": "Không phân tích được phản hồi của máy chủ",
   "err.hosting.bitbucketServer": "Chưa hỗ trợ Bitbucket tự host (Server/Data Center). Chỉ có thể kết nối bitbucket.org",
   "err.hosting.file": "Lỗi tệp tài khoản: {detail}",

@@ -1441,6 +1441,7 @@ export const pl: Record<Key, string> = {
   "err.git.parse": "nie udało się przetworzyć wyniku git: {detail}",
   "err.git.badArg": "invalid argument (must not start with '-'): {arg}",
   "err.git.spawn": "nie udało się uruchomić git: {error}",
+  "err.git.unsupported": "Nieobsługiwane w tym środowisku: {op}",
   "err.hosting.badResponse": "Nie udało się przetworzyć odpowiedzi serwera",
   "err.hosting.bitbucketServer": "Bitbucket na własnym serwerze (Server/Data Center) nie jest jeszcze obsługiwany. Można połączyć tylko bitbucket.org",
   "err.hosting.file": "Błąd pliku kont: {detail}",

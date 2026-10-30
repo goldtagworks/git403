@@ -1441,6 +1441,7 @@ export const zhCN: Record<Key, string> = {
   "err.git.parse": "无法解析 git 输出：{detail}",
   "err.git.badArg": "invalid argument (must not start with '-'): {arg}",
   "err.git.spawn": "无法运行 git：{error}",
+  "err.git.unsupported": "此环境不支持该操作：{op}",
   "err.hosting.badResponse": "无法解析服务器响应",
   "err.hosting.bitbucketServer": "暂不支持自托管 Bitbucket（Server/Data Center）。只能连接 bitbucket.org",
   "err.hosting.file": "账户文件错误：{detail}",

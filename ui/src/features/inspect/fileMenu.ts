@@ -23,5 +23,5 @@ export const fileMenu = (path: string, rev: string | null, staged = false): Menu
   ...fileOpenMenu(path, rev),
   { separator: true },
   { label: t("details.copyPath"), action: () => ops.copy(path) },
-  ...(rev ? [{ separator: true } as MenuEntry, { label: t("details.restoreVersion"), action: () => ops.restoreFile(path, rev) }] : []),
+  ...(rev ? [{ separator: true } as MenuEntry, { label: t("details.restoreVersion"), op: "restore_file", action: () => ops.restoreFile(path, rev) }] : []),
 ];

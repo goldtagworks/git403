@@ -1441,6 +1441,7 @@ export const ru: Record<Key, string> = {
   "err.git.parse": "не удалось разобрать вывод git: {detail}",
   "err.git.badArg": "invalid argument (must not start with '-'): {arg}",
   "err.git.spawn": "не удалось запустить git: {error}",
+  "err.git.unsupported": "Не поддерживается в этой среде: {op}",
   "err.hosting.badResponse": "Не удалось разобрать ответ сервера",
   "err.hosting.bitbucketServer": "Собственный Bitbucket (Server/Data Center) пока не поддерживается. Можно подключить только bitbucket.org",
   "err.hosting.file": "Ошибка файла аккаунтов: {detail}",

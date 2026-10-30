@@ -1441,6 +1441,7 @@ export const zhTW: Record<Key, string> = {
   "err.git.parse": "無法剖析 git 輸出：{detail}",
   "err.git.badArg": "invalid argument (must not start with '-'): {arg}",
   "err.git.spawn": "無法執行 git：{error}",
+  "err.git.unsupported": "此環境不支援該操作：{op}",
   "err.hosting.badResponse": "無法剖析伺服器回應",
   "err.hosting.bitbucketServer": "尚不支援自架的 Bitbucket（Server/Data Center）。只能連線 bitbucket.org",
   "err.hosting.file": "帳號檔案錯誤：{detail}",

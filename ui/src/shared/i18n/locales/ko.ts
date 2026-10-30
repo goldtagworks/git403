@@ -1441,6 +1441,7 @@ export const ko: Record<Key, string> = {
   "err.git.parse": "git 출력 파싱 실패: {detail}",
   "err.git.badArg": "잘못된 인자입니다('-'로 시작할 수 없음): {arg}",
   "err.git.spawn": "git 실행 실패: {error}",
+  "err.git.unsupported": "이 환경에서는 지원하지 않는 작업입니다: {op}",
   "err.hosting.badResponse": "서버 응답을 해석하지 못했습니다",
   "err.hosting.bitbucketServer": "셀프호스트 Bitbucket(Server/Data Center)은 아직 지원하지 않습니다. bitbucket.org만 연결할 수 있습니다",
   "err.hosting.file": "계정 파일 오류: {detail}",

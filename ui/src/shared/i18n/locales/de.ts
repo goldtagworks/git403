@@ -1441,6 +1441,7 @@ export const de: Record<Key, string> = {
   "err.git.parse": "git-Ausgabe konnte nicht verarbeitet werden: {detail}",
   "err.git.badArg": "invalid argument (must not start with '-'): {arg}",
   "err.git.spawn": "git konnte nicht ausgeführt werden: {error}",
+  "err.git.unsupported": "In dieser Umgebung nicht unterstützt: {op}",
   "err.hosting.badResponse": "Die Serverantwort konnte nicht verarbeitet werden",
   "err.hosting.bitbucketServer": "Selbst gehostetes Bitbucket (Server/Data Center) wird noch nicht unterstützt. Nur bitbucket.org kann verbunden werden",
   "err.hosting.file": "Fehler in der Kontodatei: {detail}",

@@ -1441,6 +1441,7 @@ export const lo: Record<Key, string> = {
   "err.git.parse": "ແຍກວິເຄາະຜົນອອກຂອງ git ບໍ່ໄດ້: {detail}",
   "err.git.badArg": "invalid argument (must not start with '-'): {arg}",
   "err.git.spawn": "ແລ່ນ git ບໍ່ໄດ້: {error}",
+  "err.git.unsupported": "ບໍ່ຮອງຮັບໃນສະພາບແວດລ້ອມນີ້: {op}",
   "err.hosting.badResponse": "ແຍກວິເຄາະຄຳຕອບຂອງເຊີບເວີບໍ່ໄດ້",
   "err.hosting.bitbucketServer": "ຍັງບໍ່ຮອງຮັບ Bitbucket ທີ່ໂຮສເອງ (Server/Data Center). ເຊື່ອມຕໍ່ໄດ້ສະເພາະ bitbucket.org",
   "err.hosting.file": "ຂໍ້ຜິດພາດໄຟລ໌ບັນຊີ: {detail}",

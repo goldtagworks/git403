@@ -1441,6 +1441,7 @@ export const nl: Record<Key, string> = {
   "err.git.parse": "kan git-uitvoer niet verwerken: {detail}",
   "err.git.badArg": "invalid argument (must not start with '-'): {arg}",
   "err.git.spawn": "uitvoeren van git mislukt: {error}",
+  "err.git.unsupported": "Niet ondersteund in deze omgeving: {op}",
   "err.hosting.badResponse": "Kan het antwoord van de server niet verwerken",
   "err.hosting.bitbucketServer": "Zelfgehoste Bitbucket (Server/Data Center) wordt nog niet ondersteund. Alleen bitbucket.org kan worden gekoppeld",
   "err.hosting.file": "Fout in accountbestand: {detail}",

@@ -1,15 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IS_VSCODE } from "../api/bridge";
+import { visible } from "../lib/caps";
 
 /** OS가 동작을 아는 기본 메뉴 항목 (앱 메뉴 막대 전용: 복사·붙여넣기·숨기기·종료·최소화 등) */
 export type Predefined = "Undo" | "Redo" | "Cut" | "Copy" | "Paste" | "SelectAll" | "About" | "Services" | "Hide" | "HideOthers" | "ShowAll" | "Quit" | "Minimize" | "Maximize" | "Fullscreen";
 
 export type MenuEntry =
-  /** hint = 오른쪽 muted 짧은 상태(네이티브 메뉴는 "라벨 — 힌트"), title = DOM 메뉴 툴팁 */
-  | { label: string; action: () => void; disabled?: boolean; checked?: boolean; accelerator?: string; hint?: string; title?: string }
+  /** hint = 오른쪽 muted 짧은 상태(네이티브 메뉴는 "라벨 — 힌트"), title = DOM 메뉴 툴팁,
+   *  op = 이 항목이 쓰는 git 서브커맨드(코어 IPC를 부르면 그 메서드 이름). 백엔드가 지원하지 않으면 메뉴에서 빠진다 (shared/lib/caps.ts) */
+  | { label: string; action: () => void; disabled?: boolean; checked?: boolean; accelerator?: string; hint?: string; title?: string; op?: string | string[] }
   | { separator: true }
   /** role = macOS 메뉴 막대에서 OS가 창 목록·도움말 검색을 붙이는 메뉴 */
-  | { label: string; submenu: MenuEntry[]; disabled?: boolean; role?: "window" | "help" }
+  | { label: string; submenu: MenuEntry[]; disabled?: boolean; role?: "window" | "help"; op?: string | string[] }
   | { label: string; predefined: Predefined };
 
 /** 앱 메뉴 막대를 만들 때 macOS 전용 역할 메뉴를 모아 둔다 */
@@ -33,7 +35,7 @@ export async function nativeItems(list: MenuEntry[], roles: Roles = {}): Promise
         return e.checked === undefined ? MenuItem.new(opts) : CheckMenuItem.new({ ...opts, checked: e.checked });
       }),
     );
-  return build(list);
+  return build(list); // 미지원 항목 거르기는 호출 측(showMenu·appMenu.apply)이 한 번 한다
 }
 
 /**
@@ -41,6 +43,7 @@ export async function nativeItems(list: MenuEntry[], roles: Roles = {}): Promise
  * 브라우저 데모·E2E·VS Code 웹뷰에서는 같은 항목을 DOM 메뉴로 그린다.
  */
 export async function showMenu(items: MenuEntry[], at?: { x: number; y: number }) {
+  items = visible(items);
   if (import.meta.env.VITE_MOCK || IS_VSCODE) return domMenu.open(items, at ?? lastPointer);
   const { Menu } = await import("@tauri-apps/api/menu");
   const menu = await Menu.new({ items: await nativeItems(items) });

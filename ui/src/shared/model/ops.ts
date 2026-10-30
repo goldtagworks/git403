@@ -37,6 +37,8 @@ const FLOW_KEYS: Record<keyof FlowConfig, string> = {
   master: "gitflow.branch.master", develop: "gitflow.branch.develop",
   feature: "gitflow.prefix.feature", release: "gitflow.prefix.release", hotfix: "gitflow.prefix.hotfix", tag: "gitflow.prefix.versiontag",
 };
+/** Git Flow가 쓰는 git 서브커맨드 (하나라도 없으면 Git Flow 항목을 숨긴다) */
+export const FLOW_OPS = ["switch", "merge", "tag", "branch", "config"];
 const FLOW_NAME: Record<FlowKind, string> = { feature: "Feature", release: "Release", hotfix: "Hotfix" };
 
 /** Pull/Push 작업: 완료 토스트에 받은·올린 커밋 수를 붙인다 (`ctx.job` opts.track) */
@@ -1111,13 +1113,13 @@ export const ops = {
   },
   /** 툴바·빠른 실행 메뉴 항목. 초기화 전에는 t("ops.flow.initMenu")만. */
   flowMenu: (): MenuEntry[] => {
-    if (!ctx.flow) return [{ label: t("ops.flow.initMenu"), action: ops.flowInit }];
+    if (!ctx.flow) return [{ label: t("ops.flow.initMenu"), op: FLOW_OPS, action: ops.flowInit }];
     const cur = head(), kind = cur ? ops.flowKind(cur) : null;
     return [
-      { label: t("ops.flow.startFeature"), action: () => ops.flowStart("feature") },
-      { label: t("ops.flow.startRelease"), action: () => ops.flowStart("release") },
-      { label: t("ops.flow.startHotfix"), action: () => ops.flowStart("hotfix") },
-      ...(kind ? [{ separator: true } as MenuEntry, { label: `Finish ${kind}: ${cur}…`, action: () => ops.flowFinish(cur!) }] : []),
+      { label: t("ops.flow.startFeature"), op: FLOW_OPS, action: () => ops.flowStart("feature") },
+      { label: t("ops.flow.startRelease"), op: FLOW_OPS, action: () => ops.flowStart("release") },
+      { label: t("ops.flow.startHotfix"), op: FLOW_OPS, action: () => ops.flowStart("hotfix") },
+      ...(kind ? [{ separator: true } as MenuEntry, { label: `Finish ${kind}: ${cur}…`, op: FLOW_OPS, action: () => ops.flowFinish(cur!) }] : []),
     ];
   },
   flowInit: async () => {

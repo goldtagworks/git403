@@ -1441,6 +1441,7 @@ export const ptBR: Record<Key, string> = {
   "err.git.parse": "falha ao interpretar a saída do git: {detail}",
   "err.git.badArg": "invalid argument (must not start with '-'): {arg}",
   "err.git.spawn": "falha ao executar o git: {error}",
+  "err.git.unsupported": "Não suportado neste ambiente: {op}",
   "err.hosting.badResponse": "Não foi possível interpretar a resposta do servidor",
   "err.hosting.bitbucketServer": "Bitbucket auto-hospedado (Server/Data Center) ainda não é suportado. Só é possível conectar o bitbucket.org",
   "err.hosting.file": "Erro no arquivo de contas: {detail}",

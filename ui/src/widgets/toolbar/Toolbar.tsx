@@ -4,8 +4,9 @@ import { t, useLocale } from "../../shared/i18n/i18n";
 import { Icon } from "../../shared/ui/Icon";
 import type { IconName } from "../../shared/ui/icons";
 import { showMenu, type MenuEntry } from "../../shared/ui/menu";
-import { ops } from "../../shared/model/ops";
+import { FLOW_OPS, ops } from "../../shared/model/ops";
 import { pref, setPref } from "../../shared/lib/settings";
+import { supports, useCaps } from "../../shared/lib/caps";
 import { countRender } from "../../shared/lib/profile";
 import type { ThemeMode } from "../../shared/lib/theme";
 import type { Ref, Status } from "../../shared/api/types";
@@ -24,7 +25,7 @@ interface Props {
 }
 
 /** 아이콘 위·글자 아래 툴바 버튼. menu가 있으면 오른쪽 ▾로 옵션 메뉴. */
-function Tool({ icon, label, onClick, menu, badge, disabled, why }: {
+function Tool({ icon, label, onClick, menu, badge, disabled, why, op }: {
   icon: IconName;
   label: string;
   onClick: () => void;
@@ -33,7 +34,10 @@ function Tool({ icon, label, onClick, menu, badge, disabled, why }: {
   disabled?: boolean;
   /** 비활성일 때 이유(툴팁) */
   why?: string;
+  /** 이 버튼이 쓰는 git 서브커맨드 — 백엔드가 지원하지 않으면 버튼을 그리지 않는다 (shared/lib/caps.ts) */
+  op?: string | string[];
 }) {
+  if (!supports(op)) return null;
   return (
     <div className="tool" title={disabled ? why : undefined}>
       <button className="tool-btn" onClick={onClick} disabled={disabled} aria-label={label}>
@@ -116,6 +120,7 @@ function BranchPicker({ refs, branch, disabled }: { refs: Ref[]; branch: string;
 export const Toolbar = memo(function Toolbar(p: Props) {
   countRender("Toolbar");
   useLocale();
+  useCaps(); // 지원 작업이 제한된 백엔드면 시작 직후 한 번만 바뀐다
   const name = p.repo.split(/[\\/]/).pop() || t("toolbar.repoFallback");
   const branch = p.status?.branch ?? (p.refs.length ? "(detached)" : "");
   const stashes = p.refs.filter((r) => r.kind === "stash").length;
@@ -123,28 +128,28 @@ export const Toolbar = memo(function Toolbar(p: Props) {
 
   const repoMenu = (): MenuEntry[] => [
     { label: t("toolbar.openRepo"), action: () => p.onOpen(), accelerator: "CmdOrCtrl+O" },
-    { label: t("toolbar.clone"), action: ops.clone },
-    { label: t("toolbar.init"), action: ops.init },
+    { label: t("toolbar.clone"), op: "clone", action: ops.clone },
+    { label: t("toolbar.init"), op: "init", action: ops.init },
     { label: t("toolbar.scan"), action: ops.scan },
     ...(none
       ? []
       : [
           { separator: true } as MenuEntry,
-          { label: t("toolbar.addSubmodule"), action: ops.addSubmodule },
-          { label: t("toolbar.addWorktree"), action: ops.addWorktree },
-          { label: t("toolbar.applyPatch"), action: ops.applyPatch },
-          { label: t("toolbar.stats"), action: ops.repoStats },
-          { label: "Git Flow", submenu: ops.flowMenu() } as MenuEntry,
+          { label: t("toolbar.addSubmodule"), op: "submodule", action: ops.addSubmodule },
+          { label: t("toolbar.addWorktree"), op: "worktree", action: ops.addWorktree },
+          { label: t("toolbar.applyPatch"), op: ["apply", "am"], action: ops.applyPatch },
+          { label: t("toolbar.stats"), op: "repo_stats", action: ops.repoStats },
+          { label: "Git Flow", op: FLOW_OPS, submenu: ops.flowMenu() } as MenuEntry,
           {
             label: "LFS",
             submenu: [
-              { label: t("toolbar.lfsStatus"), action: ops.lfsStatus },
-              { label: "LFS Pull", action: ops.lfsPull, disabled: p.busy },
-              { label: "LFS Fetch", action: ops.lfsFetch, disabled: p.busy },
-              { label: "LFS Push", action: ops.lfsPush, disabled: p.busy },
+              { label: t("toolbar.lfsStatus"), op: "lfs_status", action: ops.lfsStatus },
+              { label: "LFS Pull", op: "lfs", action: ops.lfsPull, disabled: p.busy },
+              { label: "LFS Fetch", op: "lfs", action: ops.lfsFetch, disabled: p.busy },
+              { label: "LFS Push", op: "lfs", action: ops.lfsPush, disabled: p.busy },
               { separator: true },
-              { label: t("toolbar.lfsTrack"), action: () => ops.lfsTrack() },
-              { label: t("toolbar.lfsUntrack"), action: () => ops.lfsUntrack() },
+              { label: t("toolbar.lfsTrack"), op: "lfs", action: () => ops.lfsTrack() },
+              { label: t("toolbar.lfsUntrack"), op: "lfs", action: () => ops.lfsUntrack() },
             ],
           } as MenuEntry,
         ]),
@@ -165,13 +170,13 @@ export const Toolbar = memo(function Toolbar(p: Props) {
 
       <div className="spacer" data-tauri-drag-region />
 
-      <Tool icon="fetch" label={t("toolbar.fetch")} onClick={ops.fetch} disabled={none || p.busy} why={none ? needRepo : busyWhy} />
-      <Tool icon="pull" label={t("toolbar.pull")} onClick={ops.pullQuick} menu={() => [{ label: t("toolbar.pullOpts"), action: ops.pull }]} badge={p.status?.behind} disabled={none || p.busy} why={none ? needRepo : busyWhy} />
-      <Tool icon="push" label={t("toolbar.push")} onClick={ops.pushQuick} menu={() => [{ label: t("toolbar.pushOpts"), action: ops.push }, { separator: true }, { label: t("toolbar.createPr"), action: () => ops.createPr(), disabled: !p.status?.branch }]} badge={p.status?.ahead} disabled={none || p.busy} why={none ? needRepo : busyWhy} />
+      <Tool op="fetch" icon="fetch" label={t("toolbar.fetch")} onClick={ops.fetch} disabled={none || p.busy} why={none ? needRepo : busyWhy} />
+      <Tool op="pull" icon="pull" label={t("toolbar.pull")} onClick={ops.pullQuick} menu={() => [{ label: t("toolbar.pullOpts"), op: "pull", action: ops.pull }]} badge={p.status?.behind} disabled={none || p.busy} why={none ? needRepo : busyWhy} />
+      <Tool op="push" icon="push" label={t("toolbar.push")} onClick={ops.pushQuick} menu={() => [{ label: t("toolbar.pushOpts"), op: "push", action: ops.push }, { separator: true }, { label: t("toolbar.createPr"), action: () => ops.createPr(), disabled: !p.status?.branch }]} badge={p.status?.ahead} disabled={none || p.busy} why={none ? needRepo : busyWhy} />
       <div className="tool-sep" />
-      <Tool icon="newBranch" label={t("toolbar.branch")} onClick={() => ops.createBranch()} disabled={none} why={needRepo} />
-      <Tool icon="stashPush" label={t("toolbar.stash")} onClick={ops.stash} menu={() => [{ label: t("toolbar.stashMenu"), action: ops.stash }, { label: t("toolbar.snapshot"), action: ops.snapshot }]} disabled={none || !p.status?.files.length} why={none ? needRepo : t("toolbar.noChanges")} />
-      <Tool icon="stashPop" label={t("toolbar.pop")} onClick={() => ops.pop()} badge={stashes} disabled={none || !stashes} why={none ? needRepo : t("toolbar.noStash")} />
+      <Tool op="branch" icon="newBranch" label={t("toolbar.branch")} onClick={() => ops.createBranch()} disabled={none} why={needRepo} />
+      <Tool op="stash" icon="stashPush" label={t("toolbar.stash")} onClick={ops.stash} menu={() => [{ label: t("toolbar.stashMenu"), op: "stash", action: ops.stash }, { label: t("toolbar.snapshot"), op: "stash", action: ops.snapshot }]} disabled={none || !p.status?.files.length} why={none ? needRepo : t("toolbar.noChanges")} />
+      <Tool op="stash" icon="stashPop" label={t("toolbar.pop")} onClick={() => ops.pop()} badge={stashes} disabled={none || !stashes} why={none ? needRepo : t("toolbar.noStash")} />
       <div className="tool-sep" />
       <Tool icon="launch" label={t("toolbar.quick")} onClick={p.onQuickLaunch} />
       <Tool
@@ -195,7 +200,7 @@ export const Toolbar = memo(function Toolbar(p: Props) {
             { label: t("toolbar.theme"), submenu: (["system", "light", "dark"] as const).map((m) => ({ label: t(({ system: "toolbar.themeSystem", light: "toolbar.themeLight", dark: "toolbar.themeDark" } as const)[m]), checked: p.theme === m, action: () => p.onTheme(m) })) },
             { label: t("settings.detailLayout"), submenu: (["right", "bottom"] as const).map((m) => ({ label: t(m === "right" ? "settings.layoutRight" : "settings.layoutBottom"), checked: pref("detailLayout") === m, action: () => setPref("detailLayout", m) })) },
             { separator: true },
-            { label: t("toolbar.addRemote"), action: ops.addRemote, disabled: none },
+            { label: t("toolbar.addRemote"), op: "remote", action: ops.addRemote, disabled: none },
           ])
         }
       />

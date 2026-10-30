@@ -561,6 +561,8 @@ function handle(cmd: string, args: any): any {
     }
     // E2E: window.__noGit = true 면 git 미설치. window.__update = {version}이면 새 버전이 있는 것(없으면 최신), window.__updateFail = 확인 오류 문구,
     //      window.__downloadFail = 다운로드 오류 문구, window.__updateChecks = 확인 횟수. 설치·재시작은 __git에 [update_install]·[relaunch]로 기록한다.
+    // E2E: window.__caps = {all, ops}로 지원 작업을 제한한다 (기본 전부 지원)
+    if (cmd === "capabilities") return (window as any).__caps ?? { all: true, ops: [] };
     if (cmd === "git_version" && (window as any).__gitError) throw (window as any).__gitError;
     if (cmd === "git_version") return (window as any).__noGit ? null : ((window as any).__gitVersion ?? "2.45.1");
     if (cmd === "plugin:updater|check") {

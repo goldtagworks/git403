@@ -1440,6 +1440,7 @@ export const en = {
   "err.git.parse": "failed to parse git output: {detail}",
   "err.git.badArg": "invalid argument (must not start with '-'): {arg}",
   "err.git.spawn": "failed to run git: {error}",
+  "err.git.unsupported": "not supported in this environment: {op}",
   "err.hosting.badResponse": "Could not parse the server response",
   "err.hosting.bitbucketServer": "Self-hosted Bitbucket (Server/Data Center) is not supported yet. Only bitbucket.org can be connected",
   "err.hosting.file": "Account file error: {detail}",

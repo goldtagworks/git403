@@ -1441,6 +1441,7 @@ export const th: Record<Key, string> = {
   "err.git.parse": "แยกวิเคราะห์ผลลัพธ์ของ git ไม่สำเร็จ: {detail}",
   "err.git.badArg": "invalid argument (must not start with '-'): {arg}",
   "err.git.spawn": "รัน git ไม่สำเร็จ: {error}",
+  "err.git.unsupported": "ไม่รองรับในสภาพแวดล้อมนี้: {op}",
   "err.hosting.badResponse": "แยกวิเคราะห์การตอบกลับของเซิร์ฟเวอร์ไม่ได้",
   "err.hosting.bitbucketServer": "ยังไม่รองรับ Bitbucket แบบโฮสต์เอง (Server/Data Center) เชื่อมต่อได้เฉพาะ bitbucket.org",
   "err.hosting.file": "ข้อผิดพลาดของไฟล์บัญชี: {detail}",

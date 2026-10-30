@@ -1441,6 +1441,7 @@ export const ne: Record<Key, string> = {
   "err.git.parse": "git आउटपुट पार्स गर्न असफल: {detail}",
   "err.git.badArg": "invalid argument (must not start with '-'): {arg}",
   "err.git.spawn": "git चलाउन असफल: {error}",
+  "err.git.unsupported": "यो वातावरणमा समर्थित छैन: {op}",
   "err.hosting.badResponse": "सर्भरको प्रतिक्रिया पार्स गर्न सकिएन",
   "err.hosting.bitbucketServer": "आफ्नै होस्ट गरिएको Bitbucket (Server/Data Center) अझै समर्थित छैन। bitbucket.org मात्र जडान गर्न सकिन्छ",
   "err.hosting.file": "खाता फाइल त्रुटि: {detail}",

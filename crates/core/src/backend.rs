@@ -10,6 +10,7 @@
 use std::path::Path;
 
 use async_trait::async_trait;
+use serde::Serialize;
 use tokio::sync::mpsc;
 
 use crate::{
@@ -25,15 +26,29 @@ pub type Spawned = (JobHandle, tokio::task::JoinHandle<Result<()>>);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Op<'a>(pub &'a str);
 
+/// UI가 한 번에 받는 지원 목록. `all`이면 전부 지원, 아니면 `ops`(`Op`와 같은 이름)에 있는 것만 지원한다.
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Capabilities {
+    pub all: bool,
+    pub ops: Vec<String>,
+}
+
 fn no<T>(op: &str) -> Result<T> {
     Err(Error::Unsupported(op.to_owned()))
 }
 
 #[async_trait]
 pub trait GitBackend: Send + Sync {
-    /// 이 작업을 지원하는가. 기본은 아무것도 지원하지 않는다 (`CliBackend`는 항상 true).
-    fn supports(&self, _op: &Op) -> bool {
-        false
+    /// 지원 목록. 기본은 아무것도 지원하지 않는다 (`CliBackend`는 `all: true`). IPC `capabilities`가 그대로 돌려준다.
+    fn capabilities(&self) -> Capabilities {
+        Capabilities::default()
+    }
+
+    /// 이 작업을 지원하는가 (`capabilities` 기반).
+    fn supports(&self, op: &Op) -> bool {
+        let c = self.capabilities();
+        c.all || c.ops.iter().any(|o| o == op.0)
     }
 
     /// 짧은 argv 실행: 끝날 때까지 기다려 stdout을 돌려준다. `ok`는 성공으로 볼 종료 코드 (`GitRunner::output_allow`).
@@ -168,8 +183,8 @@ impl CliBackend {
 #[cfg(feature = "cli")]
 #[async_trait]
 impl GitBackend for CliBackend {
-    fn supports(&self, _op: &Op) -> bool {
-        true
+    fn capabilities(&self) -> Capabilities {
+        Capabilities { all: true, ops: Vec::new() }
     }
     async fn run(&self, repo: &Path, argv: &[&str], ok: &[i32]) -> Result<Vec<u8>> {
         self.0.output_allow(repo, argv, ok).await
@@ -306,6 +321,15 @@ mod tests {
         struct Empty;
         impl GitBackend for Empty {}
         assert!(!Empty.supports(&Op("push")));
+        assert_eq!(b.capabilities(), Capabilities { all: true, ops: vec![] });
+        assert_eq!(Empty.capabilities(), Capabilities { all: false, ops: vec![] });
+        struct Some_;
+        impl GitBackend for Some_ {
+            fn capabilities(&self) -> Capabilities {
+                Capabilities { all: false, ops: vec!["read_log".into()] }
+            }
+        }
+        assert!(Some_.supports(&Op("read_log")) && !Some_.supports(&Op("push")));
         assert!(matches!(Empty.read_log(dir.path(), 1, &[]).await, Err(Error::Unsupported(_))));
     }
 }
