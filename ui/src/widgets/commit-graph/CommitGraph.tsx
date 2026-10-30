@@ -1,4 +1,5 @@
 import { t, dateFmt, useLocale } from "../../shared/i18n/i18n";
+import { isMobile } from "../../shared/lib/platform";
 import { Sha } from "../../shared/ui/Sha";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { contextMenu, type MenuEntry } from "../../shared/ui/menu";
@@ -21,7 +22,7 @@ import { useSplit } from "../../shared/ui/Splitter";
 import { pick, useFocusRef } from "../../shared/model/selection";
 import { Avatar, avatarImage, avatarUrl, onAvatarChange, requestAvatars } from "../../shared/ui/avatar";
 
-const ROW_H = COMPACT ? 44 : 28; // compact(VS Code 사이드바·패널): 두 줄 행
+const ROW_H = COMPACT ? 44 : isMobile ? 40 : 28; // compact(VS Code 사이드바·패널): 두 줄 행, 모바일: 터치 타깃
 const COMPACT_GRAPH_MAX = 72; // compact 그래프 열 상한 (넘는 레인은 페이드로 잘린다)
 const LANE_W = 22;
 const AUTO_MAX = 120; // 자동 폭 상한 (더 넓게는 사용자가 끌어서)

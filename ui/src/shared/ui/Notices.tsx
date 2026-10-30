@@ -2,12 +2,14 @@ import { memo, useEffect, useState, useSyncExternalStore } from "react";
 import { api } from "../api/api";
 import { t, useLocale } from "../i18n/i18n";
 import { IS_VSCODE } from "../api/bridge";
+import { isMobile } from "../lib/platform";
 import { autoCheck, installUpdate, onUpdate, updateState } from "../lib/update";
 
 /** 앱이 쓰는 인자(`--diff-merges`, `rev-parse --path-format` 등)가 요구하는 최소 git */
 const MIN_GIT = [2, 31];
 /** `2.30.1`, `2.45.1.windows.1` → 최소 버전보다 낮은가 */
 export const gitTooOld = (v: string) => {
+  if (!/^\d/.test(v)) return false; // git 실행 파일이 없는 백엔드(gix)는 "gitoxide"처럼 숫자로 시작하지 않는 값을 돌려준다: 버전 비교 대상이 아님
   const [a, b] = v.split(".").map(Number);
   return a < MIN_GIT[0] || (a === MIN_GIT[0] && b < MIN_GIT[1]);
 };
@@ -24,7 +26,7 @@ export const Notices = memo(function Notices() {
   useEffect(() => void api.gitVersion().then((v) => (v === null ? setNoGit(true) : gitTooOld(v) && setOldGit(v)), (e) => setGitErr(String(e))), []);
   // 시작 직후 한 번, 이후 매시간 "하루 지났는가"만 확인한다
   useEffect(() => {
-    if (IS_VSCODE) return;
+    if (IS_VSCODE || isMobile) return; // 모바일은 업데이트 플러그인이 없다
     const t = setTimeout(autoCheck, import.meta.env.VITE_MOCK ? 0 : 5000);
     const id = setInterval(autoCheck, 60 * 60 * 1000);
     return () => (clearTimeout(t), clearInterval(id));

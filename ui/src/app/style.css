@@ -1312,3 +1312,44 @@ html[data-big] .detail-col .details > .info { width: var(--detail-w) !important;
 .detail-col .details > .info > * { flex: none; }
 .detail-col .details > .info > .files, .detail-col .details > .info > .guide, .detail-col .details > .info > .change-list { flex: 1 1 0; min-height: 60px; overflow: auto; }
 .detail-col .details > .info > .msg-box { flex: 0 1 auto; min-height: 60px; } /* 창이 낮으면 메시지 상자가 먼저 줄어(최소 60px) 파일 목록 자리를 남긴다 */
+
+/* 모바일(Android 태블릿): <html data-mobile>은 platform.ts initMobile이 켠다. 데스크탑·VS Code에는 속성이 없어 아래 규칙이 하나도 적용되지 않는다.
+   터치 타깃은 최소 44px, hover로만 보이던 버튼은 항상 보이게, 좁은 폭(<1000px = platform.ts NARROW)에서는 사이드바를 서랍으로 둔다. */
+html[data-mobile] .app { box-sizing: border-box; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); } /* 상태 표시줄·내비게이션 막대 뒤로 그리지 않는다 */
+html[data-mobile] { touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+html[data-mobile] :where(button, select, input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"])) { min-height: 44px; }
+html[data-mobile] :where(.sheet :where(select, input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"])), .commit-box input) { min-height: 44px; }
+html[data-mobile] :where(.sheet-actions, .commit-btns) button, html[data-mobile] .sheet-body > form :where(button:not(.tool-ico, .tool-txt)) { min-height: 44px; }
+html[data-mobile] input[type="checkbox"], html[data-mobile] input[type="radio"] { width: 22px; height: 22px; }
+html[data-mobile] .tool-btn, html[data-mobile] .tool-more { min-width: 44px; }
+html[data-mobile] .tool-more { padding: 0 8px; }
+html[data-mobile] .tabs { height: 44px; }
+html[data-mobile] .statusbar { height: 32px; }
+html[data-mobile] .statusbar button { min-height: 32px; }
+html[data-mobile] .sidebar button { padding-top: 10px; padding-bottom: 10px; }
+html[data-mobile] .dom-menu button, html[data-mobile] .palette li, html[data-mobile] .empty-repos button, html[data-mobile] .files li { min-height: 44px; }
+html[data-mobile] .dom-menu button { align-items: center; }
+html[data-mobile] .dom-menu { min-width: 240px; }
+html[data-mobile] .splitter.x::after { left: -12px; right: -12px; }
+html[data-mobile] .splitter.y::after { top: -12px; bottom: -12px; }
+/* hover가 없는 입력: hover로만 나타나던 버튼을 항상 보인다 */
+html[data-mobile] .sidebar .item .eye { display: block; }
+html[data-mobile] .files li .row-btn, html[data-mobile] .empty-repos .forget { visibility: visible; }
+html[data-mobile] .info-edit, html[data-mobile] .prr-go, html[data-mobile] .tab-close { opacity: 1; }
+html[data-mobile] .tab:not(.active) .tab-close { display: flex; }
+html[data-mobile] .empty-actions { flex-wrap: wrap; justify-content: center; }
+html[data-mobile] .selectable { -webkit-touch-callout: default; }
+.side-toggle { display: none; border: 0; background: none; padding: 0 8px; border-radius: 6px; }
+@media (max-width: 999px) {
+  html[data-mobile] .side-toggle { display: inline-flex; align-items: center; justify-content: center; }
+  html[data-mobile] .workspace { position: relative; }
+  html[data-mobile] .workspace > .splitter { display: none; }
+  html[data-mobile] .workspace > .pane.side {
+    position: absolute; z-index: 15; top: 0; bottom: 0; left: 0; width: min(320px, 85%) !important; max-width: none;
+    background: var(--surface); border-right: 1px solid var(--border); box-shadow: var(--shadow-modal);
+    transform: translateX(-100%); visibility: hidden; transition: transform 200ms var(--ease), visibility 0s linear 200ms;
+  }
+  html[data-mobile][data-side] .workspace > .pane.side { transform: none; visibility: visible; transition: transform 200ms var(--ease); }
+  html[data-mobile] .picker-value { max-width: 140px; }
+}
+@media (prefers-reduced-motion: reduce) { html[data-mobile] .workspace > .pane.side { transition: none; } }

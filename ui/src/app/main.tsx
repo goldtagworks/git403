@@ -37,6 +37,7 @@ import { bigView } from "../shared/model/bigview";
 import { dismissTop } from "../shared/lib/dismiss";
 import { appMenu } from "../shared/model/appMenu";
 import { loadCaps } from "../shared/lib/caps";
+import { initMobile, isMobile, useNarrow } from "../shared/lib/platform";
 import "./style.css";
 
 /** 새로 받은 값이 이전과 내용이 같으면 이전 참조를 돌려준다 (memo된 화면을 다시 그리지 않게) */
@@ -51,6 +52,7 @@ api.setLocale(locale()).catch(() => {});
 onLocale(() => api.setLocale(locale()).catch(() => {}));
 // 백엔드가 지원하는 작업: 시작 때 한 번 (저장소가 바뀌어도 같다). 제한이 있으면 메뉴·툴바가 한 번 다시 그려진다
 void loadCaps();
+initMobile(); // 모바일(Android)만: <html data-mobile>·길게 누르기 메뉴·서랍 닫기. 데스크탑은 아무것도 안 한다
 
 /** fetch 오류가 "태그 덮어쓰기 거부"뿐이면 그 태그 이름들(쉼표로), 아니면 null.
  *  --all이면 거부된 원격마다 "error: could not fetch <원격>"이 붙는다. 다른 error·fatal·거부가 있으면 진짜 실패다 */
@@ -96,7 +98,8 @@ function App() {
   const [sideW, sideSplit] = useSplit("sidebar", 240, 160, 480, "x");
   const [listH, listSplit] = useRatioSplit("commits-ratio", 0.55, 120, 140, "y"); // 창 크기가 바뀌면 그래프·상세가 같은 비율로
   // 상세 위치(설정): right면 그래프 | 오른쪽 상세 열(px, 왼쪽 경계를 끈다). 파일 diff는 크게 보기(그래프 자리)로 연다
-  const right = useSyncExternalStore(onPrefs, () => pref("detailLayout")) === "right" && !COMPACT && !DETAIL;
+  const narrow = useNarrow(); // 모바일의 좁은 폭(<1000px)에서는 상세를 그래프 아래에 둔다 (데스크탑은 항상 false)
+  const right = useSyncExternalStore(onPrefs, () => pref("detailLayout")) === "right" && !COMPACT && !DETAIL && !narrow;
   const [colW, colSplit] = useSplit("detail-col", 420, 280, 900, "x", undefined, true);
   const repoRef = useRef("");
   const loadSeq = useRef(0);
@@ -252,9 +255,10 @@ function App() {
   useEffect(() => void (view && wantSel.current && reveal(wantSel.current)), [view, reveal]);
 
   const open = useCallback(async (path?: string) => {
+    if (!path && isMobile) return clear(); // 모바일엔 폴더 선택기가 없다: 시작 화면(저장소 목록·복제)으로
     const p = path ?? (await api.pickRepo());
     if (p) loadAll(p);
-  }, [loadAll]);
+  }, [loadAll, clear]);
 
   const showPalette = useCallback(() => setPalette(true), []);
 
@@ -379,6 +383,7 @@ function App() {
 
   // 시작: 실행 인자 → 마지막 활성 탭 → 최근 저장소 (설정에서 복원을 끄면 실행 인자만)
   useEffect(() => {
+    if (isMobile) void ops.scan(true); // 앱 전용 저장소 폴더의 저장소를 목록에 올린다 (알림 없이)
     api.initialRepo().then((p) => loadAll(p ?? (pref("restoreTabs") ? stored<string | null>("activeTab", null) ?? stored<string[]>("recent", [])[0] : undefined))).finally(hideSplash);
   }, [loadAll]);
 
@@ -548,9 +553,13 @@ function App() {
           <div className="empty">
             <p>{t("app.emptyTitle")}</p>
             <div className="empty-actions">
-              <button className="primary" onClick={() => open()}>{t("app.openRepo")}</button>
-              <button onClick={ops.clone}>{t("app.clone")}</button>
-              <button onClick={ops.init}>{t("app.init")}</button>
+              {isMobile ? <button className="primary" onClick={ops.clone}>{t("app.clone")}</button> : (
+                <>
+                  <button className="primary" onClick={() => open()}>{t("app.openRepo")}</button>
+                  <button onClick={ops.clone}>{t("app.clone")}</button>
+                  <button onClick={ops.init}>{t("app.init")}</button>
+                </>
+              )}
               <button onClick={ops.scan}>{t("app.scan")}</button>
             </div>
             {repos.length > 0 && (

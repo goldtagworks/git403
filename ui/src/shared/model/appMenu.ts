@@ -6,7 +6,7 @@
 // Windows·Linux는 전역 단축키(keydown)가 이미 있는 항목에 메뉴 가속키를 달지 않는다(두 번 실행 방지). 새 키(Clone)만 모든 OS에 단다.
 import { IS_VSCODE } from "../api/bridge";
 import { onLocale, t } from "../i18n/i18n";
-import { isMac } from "../lib/platform";
+import { isMac, isMobile } from "../lib/platform";
 import { nativeItems, type MenuEntry, type Roles } from "../ui/menu";
 import { onCaps, visible, capsVersion } from "../lib/caps";
 import { bigView } from "./bigview";
@@ -79,8 +79,8 @@ export function appMenuModel(s: AppMenuState, d: AppMenuDeps): MenuEntry[] {
       sep,
       { label: t("menu.closeTab"), action: d.close, accelerator: key(`${MOD}+W`) },
       sep,
-      { label: t("toolbar.openTerminal"), action: ops.openTerminal, disabled: no },
-      { label: t("toolbar.openFolder"), action: ops.openFolder, disabled: no },
+      { label: t("toolbar.openTerminal"), op: "open_in", action: ops.openTerminal, disabled: no },
+      { label: t("toolbar.openFolder"), op: "open_in", action: ops.openFolder, disabled: no },
       // Windows·Linux는 앱 메뉴가 없어 설정·종료가 File 끝에 온다
       ...(isMac ? [] : [sep, settings, { label: t("menu.quit"), action: async () => (await import("@tauri-apps/api/window")).getCurrentWindow().close() } as MenuEntry]),
     ],
@@ -179,7 +179,7 @@ function withShow(items: MenuEntry[], skip: () => void): MenuEntry[] {
 }
 
 async function apply() {
-  if (!deps) return;
+  if (!deps || isMobile) return; // 모바일에는 메뉴 막대가 없다(menu 플러그인 권한도 없음): JS 메뉴 API를 부르지 않는다
   const my = ++seq;
   const model = visible(appMenuModel(state, deps));
   if (import.meta.env.VITE_MOCK) return void ((window as any).__appMenuModel = model);

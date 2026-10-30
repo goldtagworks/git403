@@ -7,8 +7,8 @@ import { inspect } from "./Inspector";
 /** 파일 우클릭 공통: 파일 관리자에서 보기, 기본 앱으로 열기, 사용자 정의 명령(파일 대상) */
 export const fileOpenMenu = (path: string, rev: string | null): MenuEntry[] => [
   ...(IS_VSCODE ? [{ label: t("details.openEditor"), action: () => ops.openInEditor(path, rev) }] : []),
-  { label: revealLabel(), action: () => ops.reveal(path) },
-  { label: t("details.openDefault"), action: () => ops.openDefault(path) },
+  { label: revealLabel(), op: "open_in", action: () => ops.reveal(path) },
+  { label: t("details.openDefault"), op: "open_in", action: () => ops.openDefault(path) },
   ...ops.customMenu("file", { file: path, sha: rev ?? undefined }),
 ];
 

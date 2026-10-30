@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IS_VSCODE } from "../api/bridge";
 import { visible } from "../lib/caps";
+import { isMobile } from "../lib/platform";
 
 /** OS가 동작을 아는 기본 메뉴 항목 (앱 메뉴 막대 전용: 복사·붙여넣기·숨기기·종료·최소화 등) */
 export type Predefined = "Undo" | "Redo" | "Cut" | "Copy" | "Paste" | "SelectAll" | "About" | "Services" | "Hide" | "HideOthers" | "ShowAll" | "Quit" | "Minimize" | "Maximize" | "Fullscreen";
@@ -44,7 +45,7 @@ export async function nativeItems(list: MenuEntry[], roles: Roles = {}): Promise
  */
 export async function showMenu(items: MenuEntry[], at?: { x: number; y: number }) {
   items = visible(items);
-  if (import.meta.env.VITE_MOCK || IS_VSCODE) return domMenu.open(items, at ?? lastPointer);
+  if (import.meta.env.VITE_MOCK || IS_VSCODE || isMobile) return domMenu.open(items, at ?? lastPointer);
   const { Menu } = await import("@tauri-apps/api/menu");
   const menu = await Menu.new({ items: await nativeItems(items) });
   await menu.popup();
@@ -61,6 +62,7 @@ export const contextMenu = (items: () => MenuEntry[]) => (e: React.MouseEvent) =
 let lastPointer = { x: 0, y: 0 };
 window.addEventListener("pointerdown", (e) => (lastPointer = { x: e.clientX, y: e.clientY }), true);
 
+let openedAt = 0; // 모바일: 길게 눌러 연 직후 손을 뗄 때의 마우스 이벤트가 바로 닫지 않게
 const domMenu = {
   listener: null as null | ((s: { items: MenuEntry[]; at: { x: number; y: number } } | null) => void),
   open(items: MenuEntry[], at: { x: number; y: number }) {
@@ -71,7 +73,7 @@ const domMenu = {
 export function DomMenuHost() {
   const [state, setState] = useState<{ items: MenuEntry[]; at: { x: number; y: number } } | null>(null);
   useEffect(() => {
-    domMenu.listener = setState;
+    domMenu.listener = (s) => ((openedAt = performance.now()), setState(s));
     const close = () => setState(null);
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
@@ -92,7 +94,7 @@ export function DomMenuHost() {
   // 하위 메뉴는 제목 줄 + 항목으로 펼친다 (DOM 메뉴는 한 겹)
   const flat = (list: MenuEntry[]): (MenuEntry | { group: string })[] => list.flatMap((e) => ("submenu" in e ? [{ group: e.label }, ...e.submenu] : [e]));
   return (
-    <div className="dom-menu-backdrop" onMouseDown={() => setState(null)}>
+    <div className="dom-menu-backdrop" onMouseDown={() => !(isMobile && performance.now() - openedAt < 400) && setState(null)}>
       <div ref={box} role="menu" className="dom-menu" style={{ left: state.at.x, top: state.at.y }} onMouseDown={(e) => e.stopPropagation()}>
         {flat(state.items).map((e, i) =>
           "separator" in e ? (

@@ -17,6 +17,7 @@ import { ACCENTS, applyAccent, readAccent, type ThemeMode } from "../../shared/l
 import { cleanJiraKeys, cleanJiraUrl, jiraCfg, type IssueRule, type JiraSuggestion } from "../../shared/lib/issues";
 import type { CustomCommand } from "../../shared/lib/custom";
 import type { SshKey } from "../../shared/api/types";
+import { isMobile } from "../../shared/lib/platform";
 
 // 설정 창(⌘/Ctrl+,): 왼쪽 탭 목록 + 본문. 진입점은 ops.openSettings(tab).
 // 계정·도구·이슈 링크는 기존 시트·ops를 그대로 쓰고, 여기서는 버튼으로 연다. 자주 바뀌는 입력 상태는 각 탭 안에만 있다.
@@ -117,7 +118,7 @@ function GeneralTab({ theme, onTheme }: { theme: ThemeMode; onTheme: (m: ThemeMo
           <button type="button" disabled={!ctx.repo} onClick={() => ops.eolSuggest(ctx.repo, true)}>{t("settings.eolFix")}</button>
         </SettingsRow>
       </SettingsGroup>
-      {!IS_VSCODE && (
+      {!IS_VSCODE && !isMobile && (
         <SettingsGroup title={t("settings.group.update")}>
           <SettingsRow name={t("settings.autoUpdate")} desc={<span role="status">{up.phase === "checking" ? t("settings.checking") : up.phase === "available" ? t("settings.updateAvail", { v: up.version ?? "" }) : up.message ?? ""}</span>}>
             <span className="folder-field">

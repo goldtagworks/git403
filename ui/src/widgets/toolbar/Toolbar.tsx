@@ -7,6 +7,7 @@ import { showMenu, type MenuEntry } from "../../shared/ui/menu";
 import { FLOW_OPS, ops } from "../../shared/model/ops";
 import { pref, setPref } from "../../shared/lib/settings";
 import { supports, useCaps } from "../../shared/lib/caps";
+import { isMobile, toggleSide } from "../../shared/lib/platform";
 import { countRender } from "../../shared/lib/profile";
 import type { ThemeMode } from "../../shared/lib/theme";
 import type { Ref, Status } from "../../shared/api/types";
@@ -127,7 +128,7 @@ export const Toolbar = memo(function Toolbar(p: Props) {
   const none = !p.repo;
 
   const repoMenu = (): MenuEntry[] => [
-    { label: t("toolbar.openRepo"), action: () => p.onOpen(), accelerator: "CmdOrCtrl+O" },
+    { label: t("toolbar.openRepo"), op: "open_repo", action: () => p.onOpen(), accelerator: "CmdOrCtrl+O" },
     { label: t("toolbar.clone"), op: "clone", action: ops.clone },
     { label: t("toolbar.init"), op: "init", action: ops.init },
     { label: t("toolbar.scan"), action: ops.scan },
@@ -161,6 +162,7 @@ export const Toolbar = memo(function Toolbar(p: Props) {
   const busyWhy = t("toolbar.busy");
   return (
     <header className="toolbar" data-tauri-drag-region>
+      {isMobile && <button className="side-toggle" aria-label={t("sidebar.branches")} onClick={() => toggleSide()}><Icon name="branch" size={20} /></button>}
       <button className="picker" onClick={() => showMenu(repoMenu())}>
         <span className="picker-label">{t("toolbar.repo")}</span>
         <span className="picker-value">{name}<Icon name="dropdown" size={11} /></span>
@@ -180,12 +182,13 @@ export const Toolbar = memo(function Toolbar(p: Props) {
       <div className="tool-sep" />
       <Tool icon="launch" label={t("toolbar.quick")} onClick={p.onQuickLaunch} />
       <Tool
+        op="open_in"
         icon="terminal"
         label={t("toolbar.openMenu")}
         onClick={ops.openTerminal}
         menu={() => [
-          { label: t("toolbar.openTerminal"), action: ops.openTerminal },
-          { label: t("toolbar.openFolder"), action: ops.openFolder },
+          { label: t("toolbar.openTerminal"), op: "open_in", action: ops.openTerminal },
+          { label: t("toolbar.openFolder"), op: "open_in", action: ops.openFolder },
           ...ops.customMenu("repo"),
         ]}
         disabled={none}

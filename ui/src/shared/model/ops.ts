@@ -372,7 +372,7 @@ const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 const confirm = (message: string, title: string) => ask(message, { title, kind: "warning" });
 
-import { isMac, isWin } from "../lib/platform";
+import { isMac, isMobile, isWin } from "../lib/platform";
 export { isMac, isWin };
 /** 파일을 파일 관리자에서 선택해 보여 주는 항목의 이름 (OS별) */
 export const revealLabel = () => t(isMac ? "ops.reveal.mac" : isWin ? "ops.reveal.win" : "ops.reveal.other");
@@ -444,7 +444,10 @@ async function prBase(remote: string, bases: string[]) {
   return fromHead || ["main", "master"].find((b) => bases.includes(b)) || bases[0] || "main";
 }
 
-const customList = () => stored<CustomCommand[]>("customCommands", []);
+/** 앱 전용 저장소 폴더(`repos_root`). 값이 있으면 폴더 선택기가 없는 백엔드라 복제 위치·저장소 스캔 루트를 이걸로 고정한다. 데스크탑은 null(IPC도 안 부른다) */
+let rootP: Promise<string | null> | undefined;
+const reposRoot = () => (rootP ??= isMobile ? api.reposRoot().catch(() => null) : Promise.resolve(null));
+const customList = () => (isMobile ? [] : stored<CustomCommand[]>("customCommands", [])); // 모바일은 셸·외부 프로세스가 없다
 
 /** 저장소 작성자 두 키를 쓴다. 중간에 실패하면 이전 값으로 되돌려 이름·이메일이 섞이지 않게 한다 */
 async function writeAuthor(vals: Record<"user.name" | "user.email", string | null>) {
@@ -915,11 +918,14 @@ export const ops = {
     const gh = await api.ghAccounts().catch(() => null);
     const users = gh?.installed ? gh.hosts.flatMap((h) => h.accounts.map((a) => ({ host: h.host, user: a.user }))) : [];
     const label = (a: { host: string; user: string }) => (gh!.hosts.length > 1 ? `${a.user} (${a.host})` : a.user);
+    // 폴더 선택기가 없는 백엔드(Android)는 앱 전용 저장소 폴더에 고정: 위치 입력 없이 폴더 경로만 안내한다
+    const root = await reposRoot();
     const r = await prompt({
       title: t("ops.clone.title"),
+      message: root ?? undefined,
       fields: [
         { kind: "text", name: "url", label: "URL", placeholder: t("ops.f.urlPh") },
-        { kind: "folder", name: "dir", label: t("ops.f.location"), value: stored("cloneDir", "") },
+        ...(root ? [] : [{ kind: "folder" as const, name: "dir", label: t("ops.f.location"), value: stored("cloneDir", "") }]),
         { kind: "text", name: "name", label: t("ops.f.name") },
         ...(users.length > 1 ? [{ kind: "select" as const, name: "account", label: t("ops.clone.account"), options: [t("ops.clone.accountActive"), ...users.map(label)] }] : []),
       ],
@@ -928,9 +934,9 @@ export const ops = {
       submit: t("ops.clone"),
     });
     if (!r) return;
-    const dir = String(r.dir), name = String(r.name).trim(), url = String(r.url).trim();
+    const dir = root ?? String(r.dir), name = String(r.name).trim(), url = String(r.url).trim();
     if (dashed(url, name)) return;
-    store("cloneDir", dir);
+    if (!root) store("cloneDir", dir);
     const user = users.find((a) => label(a) === r.account)?.user;
     const open = () => ctx.open(join(dir, name));
     ctx.job(t("ops.clone"), ["clone", "--progress", "--", url, name], { repo: dir, ghUser: user, onDone: user ? () => void api.ghBind(join(dir, name), user).catch((e) => ctx.error(String(e))).finally(open) : open });
@@ -953,13 +959,14 @@ export const ops = {
       ctx.error(String(e));
     }
   },
-  scan: async () => {
-    const root = await api.pickFolder(t("ops.scan.folder"));
+  /** 폴더 아래 저장소 찾기. 앱 전용 저장소 폴더가 있으면(Android) 선택 없이 거기를 스캔한다. quiet = 시작 때 자동 스캔(결과 알림 없음) */
+  scan: async (quiet?: unknown) => {
+    const root = (await reposRoot()) ?? (quiet === true ? null : await api.pickFolder(t("ops.scan.folder")));
     if (!root) return;
     try {
       const found = await api.findRepos(root);
       ctx.addRepos(found);
-      ctx.notify(t("ops.scan.found", { n: found.length }));
+      if (quiet !== true) ctx.notify(t("ops.scan.found", { n: found.length }));
     } catch (e) {
       ctx.error(String(e));
     }

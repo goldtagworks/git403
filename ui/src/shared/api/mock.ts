@@ -534,6 +534,7 @@ function handle(cmd: string, args: any): any {
       return null;
     }
     if (cmd === "home_dir") return "/home/demo";
+    if (cmd === "repos_root") return (window as any).__reposRoot ?? null;
     if (cmd === "ignore_read") return ignoreFiles().repo ?? "";
     if (cmd === "ignore_write") {
       gitCalls.push(["ignore_write", (args as { text: string }).text]);

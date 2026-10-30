@@ -93,6 +93,8 @@ export const api = {
   appendLine: (repo: string, file: string, line: string) => invoke<void>("append_line", { repo, file, line }),
   /** 사용자 홈 폴더 (저장소 없이 `git config --global`을 실행할 때의 작업 폴더) */
   homeDir: () => invoke<string>("home_dir"),
+  /** 앱 전용 저장소 폴더(Android 등 폴더 선택기 없는 백엔드만, 데스크탑은 null). 만들어 둔 상태. 복제 기본 위치·`findRepos` 루트로 쓴다 */
+  reposRoot: () => invoke<string | null>("repos_root"),
   /** 저장소 루트 .gitignore 읽기(없으면 "")·쓰기 */
   ignoreRead: (repo: string) => invoke<string>("ignore_read", { repo }),
   ignoreWrite: (repo: string, text: string) => invoke<void>("ignore_write", { repo, text }),
