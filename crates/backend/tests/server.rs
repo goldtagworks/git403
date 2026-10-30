@@ -100,6 +100,8 @@ fn 그래프와_참조_응답_형식() {
     // 인자 없는 명령·null 반환
     assert!(s.call(3, "git_version", json!({}))["ok"].is_string());
     assert_eq!(s.call(4, "set_locale", json!({"locale": "en"}))["ok"], Value::Null);
+    // 데스크탑(cli)에는 앱 전용 저장소 폴더가 없다
+    assert_eq!(s.call(5, "repos_root", json!({}))["ok"], Value::Null);
 }
 
 #[test]

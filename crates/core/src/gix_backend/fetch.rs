@@ -16,8 +16,8 @@ use tokio::sync::mpsc;
 use super::common::{fail, open};
 use crate::{Error, JobEvent, JobHandle, Result, Spawned};
 
-/// `["-c", kv]… "fetch" [remote]` → 원격 이름(없으면 기본 원격).
-fn parse(argv: &[&str]) -> Result<Option<String>> {
+/// 앞에 붙는 `-c <키=값>`을 건너뛴다(허용 키가 아니면 `Unsupported`). fetch·clone이 같이 쓴다.
+pub(super) fn strip_config<'a, 'b>(argv: &'b [&'a str]) -> Result<&'b [&'a str]> {
     let mut a = argv;
     while let ["-c", kv, rest @ ..] = a {
         let key = kv.split('=').next().unwrap_or("").to_ascii_lowercase();
@@ -26,7 +26,12 @@ fn parse(argv: &[&str]) -> Result<Option<String>> {
         }
         a = rest;
     }
-    match a {
+    Ok(a)
+}
+
+/// `["-c", kv]… "fetch" [remote]` → 원격 이름(없으면 기본 원격).
+fn parse(argv: &[&str]) -> Result<Option<String>> {
+    match strip_config(argv)? {
         ["fetch"] => Ok(None),
         ["fetch", remote] if !remote.starts_with('-') => Ok(Some((*remote).to_owned())),
         _ => Err(Error::Unsupported(format!("spawn_job: {}", argv.join(" ")))),
@@ -34,7 +39,7 @@ fn parse(argv: &[&str]) -> Result<Option<String>> {
 }
 
 /// reqwest(rustls-no-provider)는 암호 제공자를 프로세스에 한 번 설치해야 한다.
-fn init_tls() {
+pub(super) fn init_tls() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
         let _ = rustls::crypto::ring::default_provider().install_default();
@@ -93,21 +98,25 @@ fn fetch(repo: &Path, remote: Option<&str>, ssh_batch: Option<bool>, stop: &Atom
 pub(super) fn spawn(repo: &Path, argv: &[&str], ssh_batch: Option<bool>, events: mpsc::UnboundedSender<JobEvent>) -> Result<Spawned> {
     let remote = parse(argv)?;
     let repo = repo.to_path_buf();
+    Ok(spawn_cancellable(events, move |stop, tx| fetch(&repo, remote.as_deref(), ssh_batch, stop, tx)))
+}
+
+/// 블로킹 작업 `job`을 돌리고 종료 `JobEvent`를 보낸다. 취소 신호(또는 핸들 전부 drop)는 `job`이 받는 중단 플래그로 옮긴다.
+pub(super) fn spawn_cancellable(events: mpsc::UnboundedSender<JobEvent>, job: impl FnOnce(&AtomicBool, &mpsc::UnboundedSender<JobEvent>) -> Result<()> + Send + 'static) -> Spawned {
     let (handle, mut cancel) = JobHandle::detached();
     let stop = Arc::new(AtomicBool::new(false));
     let task = tokio::spawn(async move {
-        // 취소 신호(또는 핸들 전부 drop)를 gix의 중단 플래그로 옮긴다
         let flag = stop.clone();
         let watcher = tokio::spawn(async move {
             let _ = cancel.wait_for(|c| *c).await;
             flag.store(true, Ordering::SeqCst);
         });
         let (stop2, tx) = (stop.clone(), events.clone());
-        let res = tokio::task::spawn_blocking(move || fetch(&repo, remote.as_deref(), ssh_batch, &stop2, &tx)).await.map_err(fail)?;
+        let res = tokio::task::spawn_blocking(move || job(&stop2, &tx)).await.map_err(fail)?;
         watcher.abort();
         let res = if stop.load(Ordering::SeqCst) && res.is_err() { Err(Error::Cancelled) } else { res };
         let _ = events.send(JobEvent::Finished { code: Some(if res.is_ok() { 0 } else { 1 }) });
         res
     });
-    Ok((handle, task))
+    (handle, task)
 }

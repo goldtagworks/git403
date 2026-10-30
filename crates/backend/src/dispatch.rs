@@ -91,6 +91,8 @@ impl Backend {
                 let repos = tokio::task::spawn_blocking(move || gc_core::find_repos(&root, 4)).await.map_err(|e| e.to_string())?;
                 json(repos.into_iter().map(|p| p.to_string_lossy().into_owned()).collect::<Vec<_>>())
             }
+            // 앱 전용 저장소 폴더(`<config_dir>/repos`, 만들어 둠). 폴더 선택기가 없는 백엔드(gix = Android)만 있고, 데스크탑은 null
+            "repos_root" => json(self.repos_root().await?),
             // ---- 통계 ----
             "repo_stats" => {
                 let (repo, range, branch, with_lines, token) =

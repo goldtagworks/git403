@@ -545,7 +545,7 @@ async fn capabilities가_구현한_작업만_나열한다() {
     let caps = GixBackend::new().capabilities();
     assert!(!caps.all);
     let g = GixBackend::new();
-    for op in ["read_log", "read_status", "commit"] {
+    for op in ["read_log", "read_status", "commit", "clone"] {
         assert!(g.supports(&gc_core::Op(op)));
     }
     for op in ["push", "blame", "discard", "file_log", "rebase_interactive"] {
@@ -696,6 +696,132 @@ async fn fetch가_같다() {
     // 없는 원격은 오류
     let (_, r) = run_job(&g, b2.path(), &["fetch", "nope-remote"]).await;
     assert!(r.is_err());
+}
+
+/// 복제 결과의 비교 대상: refs·HEAD·remote/branch 설정·인덱스(모드·해시)·HEAD 트리.
+fn clone_state(p: &Path) -> String {
+    let cfg = |pat: &str| git(p, &["config", "--local", "--get-regexp", pat]);
+    format!(
+        "{}\nHEAD={}\n{}\n{}\n{}\n{}\n{}",
+        git(p, &["for-each-ref", "--format=%(refname) %(objectname)"]),
+        git(p, &["symbolic-ref", "HEAD"]).trim(),
+        cfg("^remote\\."),
+        cfg("^branch\\."),
+        git(p, &["ls-files", "-s"]),
+        git(p, &["ls-tree", "-r", "HEAD"]),
+        // 순서와 파일 시스템을 시험해 정하는 core.precomposeunicode는 빼고 비교한다
+        {
+            let mut l: Vec<String> = git(p, &["config", "--local", "--list"]).lines().filter(|l| !l.starts_with("core.precomposeunicode")).map(String::from).collect();
+            l.sort();
+            l.join("\n")
+        },
+    )
+}
+
+#[tokio::test]
+async fn clone이_같다() {
+    let tmp = fixture();
+    let bare = git(tmp.path(), &["remote", "get-url", "origin"]).trim().to_owned();
+    let (c, g) = backends();
+    let out = tempfile::tempdir().unwrap();
+    let (po, pg) = (out.path().join("c"), out.path().join("g"));
+    for (b, name, dir) in [(&c as &dyn GitBackend, "cli", "c"), (&g as &dyn GitBackend, "gix", "g")] {
+        let (ev, r) = run_job(b, out.path(), &["clone", "--progress", "--", &bare, dir]).await;
+        r.unwrap_or_else(|e| panic!("{name}: {e}"));
+        assert!(matches!(ev.last(), Some(gc_core::JobEvent::Finished { code: Some(0) })), "{name}: {ev:?}");
+    }
+    let (sc, sg) = (clone_state(&po), clone_state(&pg));
+    assert_eq!(sc, sg, "복제 결과가 다르다");
+    assert!(sg.contains("branch.main.remote origin") && sg.contains("remote.origin.url"), "{sg}");
+    for p in [&po, &pg] {
+        assert_eq!(git(p, &["status", "--porcelain"]), "", "{p:?}");
+        git(p, &["fsck", "--strict", "--no-dangling"]);
+    }
+    // 작업 트리: 파일 목록·내용·심볼릭 링크 여부
+    let tree = |p: &Path| {
+        git(p, &["ls-files", "-z"]).split('\0').filter(|s| !s.is_empty()).map(|f| (f.to_owned(), fs::read(p.join(f)).ok(), fs::symlink_metadata(p.join(f)).map(|m| m.file_type().is_symlink()).ok())).collect::<Vec<_>>()
+    };
+    assert_eq!(tree(&po), tree(&pg));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let x = |p: &Path| fs::metadata(p.join("run.sh")).unwrap().permissions().mode() & 0o111;
+        assert_eq!(x(&po), x(&pg));
+    }
+    same("복제 뒤 refs", c.read_refs(&po).await.unwrap(), g.read_refs(&pg).await.unwrap());
+    same("복제 뒤 status", c.read_status(&po).await.unwrap(), g.read_status(&pg).await.unwrap());
+    same("복제 뒤 log", c.read_log(&po, 100, &[]).await.unwrap(), g.read_log(&pg, 100, &[]).await.unwrap());
+    // file:// URL, 비어 있는 기존 대상, 앞에 붙는 -c credential.*
+    fs::create_dir(out.path().join("e")).unwrap();
+    let (_, r) = run_job(&g, out.path(), &["-c", "credential.helper=", "clone", "--", &format!("file://{bare}"), "e"]).await;
+    r.unwrap();
+    assert!(git(&out.path().join("e"), &["config", "remote.origin.url"]).trim() == format!("file://{bare}"));
+    // 비어 있지 않은 대상은 git처럼 128로 실패하고 내용을 건드리지 않는다
+    let (_, r) = run_job(&g, out.path(), &["clone", "--progress", "--", &bare, "g"]).await;
+    assert!(matches!(r, Err(gc_core::Error::Exit { code: Some(128), .. })), "{r:?}");
+    assert_eq!(clone_state(&pg), sg);
+    // 해석하지 않는 모양과 ssh·git:// URL은 Unsupported
+    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+    for argv in [
+        &["clone", "--", &bare[..]][..],
+        &["clone", &bare, "x"],
+        &["clone", "--bare", "--", &bare, "x"],
+        &["clone", "--depth", "1", "--", &bare, "x"],
+        &["clone", "--progress", "--", "git@github.com:o/r.git", "x"],
+        &["clone", "--", "ssh://git@github.com/o/r.git", "x"],
+        &["clone", "--", "git://example.com/o/r.git", "x"],
+        // 상대 경로(gix는 cwd 기준으로 풀어 git과 다름)·scp 형식·호스트가 있는 file URL
+        &["clone", "--", "rel/path.git", "x"],
+        &["clone", "--", "../origin.git", "x"],
+        &["clone", "--", "host:path", "x"],
+        &["clone", "--", "user@host:path/r.git", "x"],
+        &["clone", "--", "file://host/path", "x"],
+        #[cfg(not(windows))]
+        &["clone", "--", "C:\\x", "x"],
+    ] {
+        assert!(matches!(g.spawn_job(out.path(), argv, None, tx.clone()), Err(gc_core::Error::Unsupported(_))), "{argv:?}");
+    }
+    // 없는 원격은 실패하고 디렉터리를 남기지 않는다
+    let (_, r) = run_job(&g, out.path(), &["clone", "--", &format!("{bare}-nope"), "n"]).await;
+    assert!(r.is_err());
+    assert!(!out.path().join("n").exists());
+    // 원래 있던 빈 폴더는 실패해도 남고 비어 있다
+    fs::create_dir(out.path().join("keep")).unwrap();
+    let (_, r) = run_job(&g, out.path(), &["clone", "--", &format!("{bare}-nope"), "keep"]).await;
+    assert!(r.is_err());
+    assert!(out.path().join("keep").is_dir() && fs::read_dir(out.path().join("keep")).unwrap().next().is_none());
+    // 대상이 파일이면 git처럼 128
+    fs::write(out.path().join("afile"), "x").unwrap();
+    let (_, r) = run_job(&g, out.path(), &["clone", "--", &bare, "afile"]).await;
+    assert!(matches!(r, Err(gc_core::Error::Exit { code: Some(128), .. })), "{r:?}");
+}
+
+#[tokio::test]
+async fn clone을_취소하면_정리하거나_끝까지_끝낸다() {
+    let tmp = fixture();
+    let bare = git(tmp.path(), &["remote", "get-url", "origin"]).trim().to_owned();
+    let g = GixBackend::new();
+    let out = tempfile::tempdir().unwrap();
+    fs::create_dir(out.path().join("pre")).unwrap();
+    for dir in ["new", "pre"] {
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let (handle, task) = g.spawn_job(out.path(), &["clone", "--", &bare, dir], None, tx).unwrap();
+        handle.cancel();
+        let d = out.path().join(dir);
+        match task.await.unwrap() {
+            // 취소가 먼저 닿으면: 새 폴더는 없고, 원래 있던 빈 폴더는 비어서 남는다
+            Err(gc_core::Error::Cancelled) => {
+                assert_eq!(d.exists(), dir == "pre", "{dir}");
+                assert!(!d.exists() || fs::read_dir(&d).unwrap().next().is_none(), "{dir}");
+            }
+            // 취소가 늦으면 체크아웃은 끝까지 가서 성공이다(일부만 쓴 채 성공하지 않는다)
+            Ok(()) => {
+                assert_eq!(git(&d, &["status", "--porcelain"]), "");
+                assert!(d.join("a.txt").exists());
+            }
+            r => panic!("{dir}: {r:?}"),
+        }
+    }
 }
 
 // ---- 거절해야 하는 쓰기 상황과 git과 같아야 하는 상황 (27c 리뷰) ----

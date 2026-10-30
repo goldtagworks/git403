@@ -71,6 +71,8 @@ impl Backend {
     /// `interactive: false`면 백그라운드 작업(자동 fetch): 인증 입력 창(askpass)을 쓰지 않고 ssh는 BatchMode.
     /// 사용자가 `core.sshCommand`·`GIT_SSH_COMMAND`를 설정해 뒀으면 그대로 둔다.
     pub(crate) async fn start_job(&self, repo: PathBuf, mut args: Vec<String>, interactive: Option<bool>, gh_user: Option<String>, gh_restore: bool) -> Res<u64> {
+        #[cfg(target_os = "android")]
+        self.check_clone_dest(&repo, &args)?;
         let (tx, rx) = mpsc::unbounded_channel();
         // 저장소에 연결된 gh 계정이 있으면(push/fetch/pull, clone은 고른 계정 ghUser) 필요할 때 전환하고 gh 자격 도우미를 쓴다. 끝나면 아래에서 복원.
         let lease = self.gh_lease_for_job(&repo, &args, gh_user.as_deref(), &tx).await?;
@@ -133,6 +135,35 @@ impl Backend {
     #[cfg(not(feature = "cli"))]
     pub(crate) fn start_shell(&self, _repo: PathBuf, _command: String) -> Res<u64> {
         Err(gc_core::Error::Unsupported("shell".into()).ipc())
+    }
+
+    /// 앱 전용 저장소 폴더 `<config_dir>/repos`(만들어 둔다). Android에서만 값이 있고 데스크탑은 `None`.
+    /// Android의 `config_dir`는 Tauri `app_config_dir()`(앱 전용 내부 저장소; `src-tauri`가 실패 시 대체 경로 없이 시작을 중단)다.
+    #[cfg(target_os = "android")]
+    pub(crate) async fn repos_root(&self) -> Res<Option<String>> {
+        let dir = self.config_dir.join("repos");
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        Ok(Some(dir.to_string_lossy().into_owned()))
+    }
+
+    #[cfg(not(target_os = "android"))]
+    pub(crate) async fn repos_root(&self) -> Res<Option<String>> {
+        Ok(None)
+    }
+
+    /// Android에서는 복제 대상(`repo/<dir>`)이 앱 전용 저장소 폴더 안이어야 한다(`..`·절대 경로 `<dir>` 거절). 다른 `start_job` 작업과 데스크탑은 그대로.
+    #[cfg(target_os = "android")]
+    fn check_clone_dest(&self, repo: &std::path::Path, args: &[String]) -> Res<()> {
+        use std::path::Component;
+        if args.first().map(String::as_str) != Some("clone") {
+            return Ok(());
+        }
+        let dest = repo.join(args.last().map(String::as_str).unwrap_or(""));
+        let root = self.config_dir.join("repos");
+        if dest.components().any(|c| c == Component::ParentDir) || !dest.starts_with(&root) {
+            return Err(gc_core::Error::Unsupported("clone: outside app storage".into()).ipc());
+        }
+        Ok(())
     }
 
     /// 끝날 때까지 오래 걸리는 GUI 도구(difftool·mergetool)용. 바로 돌아오고, 끝나면 이벤트 `detached-done [token, err?]`

@@ -70,6 +70,10 @@ pub fn run() {
             #[cfg(target_os = "android")]
             android::init_tls_verifier();
             // 인증 입력: git·ssh가 이 실행 파일을 askpass로 부르게 한다 (gc_backend::askpass).
+            // Android: 앱 전용 내부 저장소(`repos_root`·복제 대상의 기준)라 대체 경로 없이 실패시킨다
+            #[cfg(target_os = "android")]
+            let config_dir = app.path().app_config_dir()?;
+            #[cfg(not(target_os = "android"))]
             let config_dir = app.path().app_config_dir().unwrap_or_else(|_| gc_backend::default_config_dir());
             let backend = Backend::new(std::sync::Arc::new(TauriEmit(handle.clone())), config_dir, std::env::args().nth(1));
             app.manage(backend.clone());
