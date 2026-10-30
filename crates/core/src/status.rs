@@ -55,7 +55,7 @@ async fn operation(git: &GitRunner, repo: &Path) -> Option<String> {
     operation_in(Path::new(String::from_utf8_lossy(&out).trim()))
 }
 
-fn operation_in(dir: &Path) -> Option<String> {
+pub(crate) fn operation_in(dir: &Path) -> Option<String> {
     // `am`도 rebase-apply를 쓴다. 안에 `applying` 파일이 있으면 am.
     if dir.join("rebase-apply/applying").exists() {
         return Some("am".to_owned());

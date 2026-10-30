@@ -9,6 +9,8 @@ pub mod blob;
 pub mod commit_graph;
 pub mod conflict;
 pub mod eol;
+#[cfg(feature = "gix")]
+pub mod gix_backend;
 pub mod job;
 pub mod log;
 pub mod open;

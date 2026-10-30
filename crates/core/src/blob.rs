@@ -12,7 +12,7 @@ fn too_big(size: u64) -> Error {
 }
 
 /// 허용하는 rev: `HEAD`, 16진 sha(4~64자), 그 뒤 선택적 `^` (`HEAD^`·`<sha>^`). 이름 있는 ref·`HEAD:경로` 같은 식은 거부한다.
-fn valid_rev(r: &str) -> bool {
+pub(crate) fn valid_rev(r: &str) -> bool {
     let r = r.strip_suffix('^').unwrap_or(r);
     r == "HEAD" || ((4..=64).contains(&r.len()) && r.bytes().all(|b| b.is_ascii_hexdigit()))
 }
@@ -40,19 +40,20 @@ pub async fn file_blob(git: &GitRunner, repo: &Path, rev: Option<&str>, path: &s
 
 async fn read_worktree(repo: &Path, path: &str) -> Result<Option<Vec<u8>>> {
     let (repo, path) = (repo.to_path_buf(), path.to_string());
-    tokio::task::spawn_blocking(move || {
-        if std::fs::symlink_metadata(path_in_repo(&repo, &path)?).is_err() {
-            return Ok(None);
-        }
-        let full = repo.join(canonical_in_repo(&repo, &path)?);
-        let size = std::fs::metadata(&full)?.len();
-        if size > BLOB_LIMIT {
-            return Err(too_big(size));
-        }
-        Ok(Some(std::fs::read(full)?))
-    })
-    .await
-    .map_err(|e| Error::Parse(e.to_string()))?
+    tokio::task::spawn_blocking(move || read_worktree_sync(&repo, &path)).await.map_err(|e| Error::Parse(e.to_string()))?
+}
+
+/// 작업 트리 파일 바이트(동기). 없으면 `None`. gix 백엔드도 쓴다.
+pub(crate) fn read_worktree_sync(repo: &Path, path: &str) -> Result<Option<Vec<u8>>> {
+    if std::fs::symlink_metadata(path_in_repo(repo, path)?).is_err() {
+        return Ok(None);
+    }
+    let full = repo.join(canonical_in_repo(repo, path)?);
+    let size = std::fs::metadata(&full)?.len();
+    if size > BLOB_LIMIT {
+        return Err(too_big(size));
+    }
+    Ok(Some(std::fs::read(full)?))
 }
 
 /// 표준 base64(패딩 포함)

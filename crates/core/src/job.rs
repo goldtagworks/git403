@@ -43,6 +43,15 @@ impl JobHandle {
     }
 }
 
+#[cfg(feature = "gix")]
+impl JobHandle {
+    /// 프로세스가 없는 작업(순수 Rust 백엔드)용 핸들. 돌려주는 수신기가 `true`가 되거나(취소) 모든 복제본이 drop되면 취소다.
+    pub(crate) fn detached() -> (JobHandle, watch::Receiver<bool>) {
+        let (tx, rx) = watch::channel(false);
+        (JobHandle { cancel: tx, pid: None, done: Arc::new(AtomicBool::new(false)) }, rx)
+    }
+}
+
 pub(crate) fn run_job(
     mut cmd: Command,
     events: mpsc::UnboundedSender<JobEvent>,
