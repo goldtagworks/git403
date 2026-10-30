@@ -14,7 +14,7 @@ impl Backend {
     pub async fn dispatch(&self, cmd: &str, args: Value) -> Res<Value> {
         let mut a = Args(args);
         let a = &mut a;
-        let git = &self.git;
+        let git = &*self.backend;
         // 모든 명령은 로그인 셸 PATH가 채워진 뒤에 돈다: gh·claude CLI뿐 아니라 git이 부르는 git-lfs 필터·훅도 PATH에서 찾는다
         self.path_ready().await;
         match cmd {
@@ -22,67 +22,67 @@ impl Backend {
                 gc_i18n::set(&a.get::<String>("locale")?);
                 Ok(Value::Null)
             }
-            "git_version" => json(gc_core::git_version(git).await.map_err(|e| e.ipc())?),
+            "git_version" => json(git.git_version().await.map_err(|e| e.ipc())?),
             "initial_repo" => json(&self.initial_repo),
             // ---- 조회 ----
             "load_graph" => {
                 let (repo, limit, hidden) = (a.repo()?, a.get::<usize>("limit")?, a.get::<Option<Vec<String>>>("hidden")?.unwrap_or_default());
                 json(graph::load_graph(git, &repo, limit, &hidden).await?)
             }
-            "load_refs" => json(gc_core::read_refs(git, &a.repo()?).await.map_err(err)?),
-            "load_submodules" => json(gc_core::read_submodules(git, &a.repo()?).await.map_err(err)?),
-            "load_worktrees" => json(gc_core::read_worktrees(git, &a.repo()?).await.map_err(err)?),
-            "lfs_status" => json(gc_core::lfs_status(git, &a.repo()?).await.map_err(err)?),
-            "load_status" => json(gc_core::read_status(git, &a.repo()?).await.map_err(err)?),
+            "load_refs" => json(git.read_refs(&a.repo()?).await.map_err(err)?),
+            "load_submodules" => json(git.read_submodules(&a.repo()?).await.map_err(err)?),
+            "load_worktrees" => json(git.read_worktrees(&a.repo()?).await.map_err(err)?),
+            "lfs_status" => json(git.lfs_status(&a.repo()?).await.map_err(err)?),
+            "load_status" => json(git.read_status(&a.repo()?).await.map_err(err)?),
             "changed_files" => {
                 let (repo, commit) = (a.repo()?, a.get::<String>("commit")?);
-                json(gc_core::changed_files(git, &repo, &commit).await.map_err(err)?)
+                json(git.changed_files(&repo, &commit).await.map_err(err)?)
             }
             "file_diff" => {
                 let (repo, commit, path, eol) = (a.repo()?, a.get::<String>("commit")?, a.get::<String>("path")?, a.get::<bool>("ignoreEol")?);
                 let ws = a.get::<Option<bool>>("ignoreWs")?.unwrap_or(false); // 없으면 꺼짐 (VS Code 확장 등 옛 호출)
-                json(gc_core::file_diff(git, &repo, &commit, &path, eol, ws).await.map_err(err)?)
+                json(git.file_diff(&repo, &commit, &path, eol, ws).await.map_err(err)?)
             }
             "file_blob" => {
                 let (repo, rev, path) = (a.repo()?, a.get::<Option<String>>("rev")?, a.get::<String>("path")?);
-                let bytes = gc_core::file_blob(git, &repo, rev.as_deref(), &path).await.map_err(err)?;
+                let bytes = git.file_blob(&repo, rev.as_deref(), &path).await.map_err(err)?;
                 json(bytes.as_deref().map(gc_core::base64))
             }
             "worktree_diff" => {
                 let (repo, path, staged, untracked, eol) =
                     (a.repo()?, a.get::<String>("path")?, a.get::<bool>("staged")?, a.get::<bool>("untracked")?, a.get::<bool>("ignoreEol")?);
                 let ws = a.get::<Option<bool>>("ignoreWs")?.unwrap_or(false);
-                json(gc_core::worktree_diff(git, &repo, &path, staged, untracked, eol, ws).await.map_err(err)?)
+                json(git.worktree_diff(&repo, &path, staged, untracked, eol, ws).await.map_err(err)?)
             }
-            "last_message" => json(gc_core::last_message(git, &a.repo()?).await.map_err(err)?),
+            "last_message" => json(git.last_message(&a.repo()?).await.map_err(err)?),
             "commit_message" => {
                 let (repo, sha) = (a.repo()?, a.get::<String>("sha")?);
-                json(gc_core::commit_message(git, &repo, &sha).await.map_err(err)?)
+                json(git.commit_message(&repo, &sha).await.map_err(err)?)
             }
             "co_authors" => {
                 let (repo, sha) = (a.repo()?, a.get::<String>("sha")?);
-                json(gc_core::co_authors(git, &repo, &sha).await.map_err(err)?)
+                json(git.co_authors(&repo, &sha).await.map_err(err)?)
             }
             "committer" => {
                 let (repo, sha) = (a.repo()?, a.get::<String>("sha")?);
-                json(gc_core::committer(git, &repo, &sha).await.map_err(err)?)
+                json(git.committer(&repo, &sha).await.map_err(err)?)
             }
             "file_log" => {
                 let (repo, path) = (a.repo()?, a.get::<String>("path")?);
-                json(gc_core::file_log(git, &repo, &path, 5000).await.map_err(err)?)
+                json(git.file_log(&repo, &path, 5000).await.map_err(err)?)
             }
             "search_content" => {
                 let (repo, text, hidden) = (a.repo()?, a.get::<String>("text")?, a.get::<Option<Vec<String>>>("hidden")?.unwrap_or_default());
-                json(gc_core::search_content(git, &repo, &text, &hidden).await.map_err(err)?)
+                json(git.search_content(&repo, &text, &hidden).await.map_err(err)?)
             }
             "blame" => {
                 let (repo, path, rev) = (a.repo()?, a.get::<String>("path")?, a.get::<Option<String>>("rev")?);
-                json(gc_core::blame(git, &repo, &path, rev.as_deref()).await.map_err(err)?)
+                json(git.blame(&repo, &path, rev.as_deref()).await.map_err(err)?)
             }
             // 충돌 파일의 공통 조상·ours·theirs를 바이트로 읽어 UTF-8·NUL 검사(실패하면 오류)하고 작업 파일 지문을 함께 준다.
             "conflict_inputs" => {
                 let (repo, path) = (a.repo()?, a.get::<String>("path")?);
-                json(gc_core::conflict_blobs(git, &repo, &path).await.map_err(err)?)
+                json(git.conflict_blobs(&repo, &path).await.map_err(err)?)
             }
             // 폴더 아래 git 저장소 찾기 (깊이 4). 디스크 순회라 블로킹 스레드에서 돈다.
             "find_repos" => {
@@ -118,15 +118,15 @@ impl Backend {
             // ---- 변경·커밋 ----
             "stage" => {
                 let (repo, paths) = (a.repo()?, a.get::<Vec<String>>("paths")?);
-                json(gc_core::stage(git, &repo, &paths).await.map_err(err)?)
+                json(git.stage(&repo, &paths).await.map_err(err)?)
             }
             "unstage" => {
                 let (repo, paths) = (a.repo()?, a.get::<Vec<String>>("paths")?);
-                json(gc_core::unstage(git, &repo, &paths).await.map_err(err)?)
+                json(git.unstage(&repo, &paths).await.map_err(err)?)
             }
             "discard" => {
                 let (repo, tracked, untracked) = (a.repo()?, a.get::<Vec<String>>("tracked")?, a.get::<Vec<String>>("untracked")?);
-                json(gc_core::discard(git, &repo, &tracked, &untracked).await.map_err(err)?)
+                json(git.discard(&repo, &tracked, &untracked).await.map_err(err)?)
             }
             "trash_files" => {
                 let (repo, paths) = (a.repo()?, a.get::<Vec<String>>("paths")?);
@@ -134,7 +134,7 @@ impl Backend {
             }
             "restore_file" => {
                 let (repo, rev, paths) = (a.repo()?, a.get::<String>("rev")?, a.get::<Vec<String>>("paths")?);
-                json(gc_core::restore_file(git, &repo, &rev, &paths).await.map_err(err)?)
+                json(git.restore_file(&repo, &rev, &paths).await.map_err(err)?)
             }
             // hunk(또는 그 안의 일부 줄) 단위 스테이지·언스테이지·버리기. target: "stage" | "unstage" | "discard"
             "apply_partial" => {
@@ -145,15 +145,15 @@ impl Backend {
                     "unstage" => gc_core::PatchTarget::Unstage,
                     _ => gc_core::PatchTarget::Discard,
                 };
-                json(gc_core::apply_partial(git, &repo, &diff, hunk, lines.as_deref(), target).await.map_err(err)?)
+                json(git.apply_partial(&repo, &diff, hunk, lines.as_deref(), target).await.map_err(err)?)
             }
             "commit" => {
                 let (repo, message, amend) = (a.repo()?, a.get::<String>("message")?, a.get::<bool>("amend")?);
-                json(gc_core::commit(git, &repo, &message, amend).await.map_err(err)?)
+                json(git.commit(&repo, &message, amend).await.map_err(err)?)
             }
             "rebase_interactive" => {
                 let (repo, base, steps) = (a.repo()?, a.get::<String>("base")?, a.get::<Vec<gc_core::RebaseStep>>("steps")?);
-                json(gc_core::rebase_interactive(git, &repo, &base, &steps).await.map_err(err)?)
+                json(git.rebase_interactive(&repo, &base, &steps).await.map_err(err)?)
             }
             // 루트 `.gitattributes`에 줄바꿈 규칙(`text`/`eol=`)이 있는지
             "eol_rule_exists" => {
@@ -161,18 +161,18 @@ impl Backend {
                 json(off(move || Ok(gc_core::root_has_eol_rule(&repo))).await?)
             }
             // 스테이지된 파일 중 인덱스에 CRLF가 든 텍스트 파일 (`eol=crlf` 명시 파일 제외)
-            "staged_crlf" => json(gc_core::staged_crlf(git, &a.repo()?).await.map_err(err)?),
+            "staged_crlf" => json(git.staged_crlf(&a.repo()?).await.map_err(err)?),
             // 스테이지된 내용을 LF로 바꿔 다시 스테이지 (작업 파일은 인덱스와 같을 때만 LF로)
             "fix_crlf" => {
                 let (repo, paths) = (a.repo()?, a.get::<Vec<String>>("paths")?);
-                json(gc_core::fix_crlf(git, &repo, &paths).await.map_err(err)?)
+                json(git.fix_crlf(&repo, &paths).await.map_err(err)?)
             }
             // 결과만 필요한 짧은 git 명령 (checkout, branch -d, tag …). 긴 작업은 start_job.
             // ok: 실패로 보지 않을 종료 코드(예: `config --get` 키 없음 = 1). 생략하면 0만 성공
             "git" => {
                 let (repo, args, ok) = (a.repo()?, a.get::<Vec<String>>("args")?, a.get::<Option<Vec<i32>>>("ok")?.unwrap_or_default());
                 let argv: Vec<&str> = args.iter().map(String::as_str).collect();
-                let out = git.output_allow(&repo, &argv, &ok).await.map_err(err)?;
+                let out = git.run(&repo, &argv, &ok).await.map_err(err)?;
                 json(String::from_utf8_lossy(&out))
             }
             // ---- 파일 ----
@@ -239,7 +239,7 @@ impl Backend {
             "remote_info" => json(self.hosting.remote_info(git, &a.repo()?).await?),
             "author_avatars" => {
                 let (repo, items) = (a.repo()?, a.get::<Vec<gc_hosting::AvatarQuery>>("items")?);
-                json(self.hosting.author_avatars(git, &repo, items).await?)
+                json(self.hosting.author_avatars(git, self.git.path_override(), &repo, items).await?)
             }
             "pr_create" => {
                 let (account, repo, head, base, title, body, draft) = (
@@ -279,12 +279,12 @@ impl Backend {
                 // activity: 최근 활동(타임라인)도 받을지. 생략 = 받음. 끄면 응답이 훨씬 빠르다
                 let activity = a.get::<Option<bool>>("activity")?.unwrap_or(true);
                 let bound = self.gh_bound_token(a.get::<Option<PathBuf>>("localRepo")?.as_deref(), &repo).await?;
-                json(self.hosting.pr_inbox(account, &repo, me, closed, activity, git.path_override(), bound).await?)
+                json(self.hosting.pr_inbox(account, &repo, me, closed, activity, self.git.path_override(), bound).await?)
             }
             "pr_detail" => {
                 let (account, repo, number) = (a.get::<Option<Account>>("account")?, a.get::<RemoteRepo>("repo")?, a.get::<u64>("number")?);
                 let bound = self.gh_bound_token(a.get::<Option<PathBuf>>("localRepo")?.as_deref(), &repo).await?;
-                json(self.hosting.pr_detail(account, &repo, number, git.path_override(), bound).await?)
+                json(self.hosting.pr_detail(account, &repo, number, self.git.path_override(), bound).await?)
             }
             // PR 리뷰 게시: event = COMMENT|APPROVE|REQUEST_CHANGES, comments[{path,line,startLine?,side?,body}] → 리뷰 URL
             "pr_review_submit" => {
@@ -292,7 +292,7 @@ impl Backend {
                 let (commit_id, event, body) = (a.get::<String>("commitId")?, a.get::<String>("event")?, a.get::<String>("body")?);
                 let comments = a.get::<Vec<gc_hosting::ReviewComment>>("comments")?;
                 let bound = self.gh_bound_token(a.get::<Option<PathBuf>>("localRepo")?.as_deref(), &repo).await?;
-                json(self.hosting.pr_review_submit(account, &repo, number, &commit_id, &event, &body, &comments, git.path_override(), bound).await?)
+                json(self.hosting.pr_review_submit(account, &repo, number, &commit_id, &event, &body, &comments, self.git.path_override(), bound).await?)
             }
             // ---- gh(GitHub CLI) 계정: 표시·전환·저장소 연결 (docs/reuse.md gh 절) ----
             "gh_accounts" => json(self.gh_accounts(a.get::<Option<String>>("host")?).await?),
@@ -326,7 +326,7 @@ impl Backend {
             "settings_import_apply" => json(self.settings_import_apply(a.get("json")?, a.get("sections")?, a.get("ui")?).await?),
             // ---- AI ----
             // 쓸 방식이 없으면 `active`가 None이고 UI가 AI 메뉴를 숨긴다.
-            "ai_status" => json(self.ai.status(git.path_override()).await?),
+            "ai_status" => json(self.ai.status(self.git.path_override()).await?),
             "ai_settings_set" => {
                 // provider 생략 = 선택된 공급자의 설정. select: true면 그 공급자를 선택
                 let (provider, model, method, consent) = (a.get("provider")?, a.get("model")?, a.get("method")?, a.get("consent")?);
@@ -350,7 +350,7 @@ impl Backend {
                 let opts = gc_ai::Opts { model: a.get("model")?, effort: a.get("effort")? };
                 // 선택: repo(저장소 경로) — 있으면 커밋·PR 작업에 그 저장소의 규칙을 붙인다
                 let repo = a.get::<Option<PathBuf>>("repo")?;
-                self.ai.run(git, repo, task, parts, token, opts).await
+                self.ai.run(&self.git, repo, task, parts, token, opts).await
             }
             "ai_cancel" => {
                 self.ai.cancel(a.get("token")?);
@@ -359,7 +359,7 @@ impl Backend {
             // ---- 외부 앱 ----
             "open_in" => {
                 let (repo, what, app, path) = (a.repo()?, a.get::<String>("what")?, a.get::<Option<String>>("app")?, a.get::<Option<String>>("path")?);
-                open::open_in(git, repo, what, app, path).await?;
+                open::open_in(&self.git, repo, what, app, path).await?;
                 Ok(Value::Null)
             }
             // ---- 긴 작업 ----
@@ -390,7 +390,7 @@ impl Backend {
             }
             // 저장소를 열 때 부른다. 바로 돌아오고 commit-graph는 백그라운드로 만든다.
             "ensure_commit_graph" => {
-                crate::jobs::spawn_commit_graph(git, a.repo()?);
+                crate::jobs::spawn_commit_graph(self.backend.clone(), a.repo()?);
                 Ok(Value::Null)
             }
             "askpass_reply" => {

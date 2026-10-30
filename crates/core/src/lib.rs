@@ -3,6 +3,7 @@
 //! 모든 git 작업은 별도 프로세스 + tokio 비동기로 돌아가므로
 //! 호출 측(UI)은 절대 블로킹되지 않는다. 진행 상황은 이벤트 채널로 받는다.
 
+pub mod backend;
 pub mod blame;
 pub mod blob;
 pub mod commit_graph;
@@ -56,6 +57,9 @@ pub use worktree::{read_worktrees, Worktree};
 pub use lfs::{lfs_status, Lfs, LfsFile};
 pub use job::{JobEvent, JobHandle};
 pub use runner::{reject_option, GitRunner};
+pub use backend::{GitBackend, Op, Spawned};
+#[cfg(feature = "cli")]
+pub use backend::CliBackend;
 
 #[derive(Debug)]
 pub enum Error {
@@ -64,6 +68,8 @@ pub enum Error {
     Cancelled,
     Parse(String),
     Coded(gc_i18n::Coded),
+    /// 이 백엔드가 지원하지 않는 작업 (`GitBackend` 기본 구현)
+    Unsupported(String),
 }
 
 impl Error {
@@ -76,6 +82,7 @@ impl Error {
             Error::Cancelled => Some(coded!("git.cancelled", "Cancelled")),
             Error::Parse(m) => Some(coded!("git.parse", "failed to parse git output: {detail}", detail = m)),
             Error::Coded(c) => Some(c.clone()),
+            Error::Unsupported(op) => Some(coded!("git.unsupported", "not supported by this backend: {op}", op = op)),
         }
     }
 

@@ -3,7 +3,15 @@ name = "gc-core"
 version.workspace = true
 edition.workspace = true
 
+[features]
+default = ["cli"]
+# git 실행 파일을 띄우는 백엔드(`CliBackend`)
+cli = []
+# 순수 Rust(gitoxide) 백엔드 자리(이름만 예약, 아직 구현 없음)
+gix = []
+
 [dependencies]
+async-trait = "0.1"
 gc-i18n = { path = "../i18n" }
 tokio.workspace = true
 serde.workspace = true

@@ -32,6 +32,16 @@ Rust에는 번역 문구가 없다. 사용자에게 보이는 오류·경고는 
 
 ## gc-core
 
+### `GitBackend` / `CliBackend` — git 실행 경로의 trait (`backend.rs`)
+
+`gc-backend`는 git을 `Arc<dyn GitBackend>`(`Inner.backend`)로만 부른다. 나중에 순수 Rust(gitoxide) 백엔드를 같은 자리에 꽂기 위한 경계다.
+
+- trait(`async_trait`, `Send + Sync`): `supports(&Op) -> bool`(기본 false), `run(repo, argv, ok) -> Vec<u8>`(짧은 argv 실행 = `GitRunner::output_allow`), `spawn_job(repo, argv, ssh_batch: Option<bool>, tx) -> Spawned`(긴 작업, `None` = `spawn`·`Some(b)` = `spawn_batch`), `git_version`, `ensure_commit_graph`, 조회 `read_log`·`head_commit`·`file_log`·`search_content`·`read_refs`·`read_status`·`worktree_diff`·`changed_files`·`file_diff`·`blame`·`file_blob`·`conflict_blobs`·`repo_stats(.., on_start: Box<dyn FnOnce(JobHandle)+Send+'a>)`·`read_submodules`·`read_worktrees`·`lfs_status`·`last_message`·`commit_message`·`co_authors`·`committer`·`staged_crlf`, 쓰기 `stage`·`unstage`·`discard`·`restore_file`·`apply_partial`·`commit`·`rebase_interactive`·`fix_crlf`. 시그니처는 같은 이름 함수에서 `git: &GitRunner`만 뺀 것.
+- 메서드를 재정의하지 않으면 `Error::Unsupported(op)`(코드 `git.unsupported`, UI 사전 추가는 2단계). `Op(&str)` = git 서브커맨드(`"push"`) 또는 메서드 이름. `CliBackend`는 `supports`가 항상 true.
+- `CliBackend::new(GitRunner)`는 기존 함수를 그대로 부른다(파서·인자 불변). feature `cli`(기본)가 켜져야 존재하고 `gix`는 이름만 예약.
+- **새 git 조회·쓰기 함수는 `GitRunner` 함수로 만든 뒤 trait 메서드(기본 Unsupported) + `CliBackend` 한 줄을 같이 추가한다.** `gc-backend`는 `self.backend`로 부른다.
+- trait 밖(`Inner.git: GitRunner` 직접 사용): `path_override`·`path_cell`(PATH 보정: gh·ai·open, hosting은 dispatch가 `path_override`를 인자로 넘김), `spawn_shell`(사용자 셸 명령), askpass 환경(`with_env`, `Backend::new`), `conventions::collect`(`query`), `ai::run`(conventions 전달), 테스트. `Inner.backend` 안의 runner와 `Inner.git`은 같은 runner의 복제(PATH 칸 공유)여야 한다 — 환경은 복제 전에 붙인다.
+
 ### `GitRunner` — git 실행은 전부 여기로
 
 | 메서드 | 용도 | 예 |

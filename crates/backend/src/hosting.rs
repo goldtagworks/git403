@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use gc_core::GitRunner;
+use gc_core::GitBackend;
 use gc_hosting::{Account, Accounts, AvatarCache, AvatarQuery, AvatarResult, Keychain, Provider, RemoteRepo};
 use serde::Serialize;
 
@@ -99,7 +99,7 @@ impl Hosting {
     }
 
     /// 저장소의 원격 URL → 서비스·owner/name·웹 URL·매칭 계정. 해석 불가한 원격(로컬 경로 등)은 뺀다.
-    pub async fn remote_info(&self, git: &GitRunner, repo: &Path) -> Res<Vec<RemoteInfo>> {
+    pub async fn remote_info(&self, git: &dyn GitBackend, repo: &Path) -> Res<Vec<RemoteInfo>> {
         let remotes = parsed_remotes(git, repo).await?;
         let accts = self.accounts();
         let accounts = off(move || accts.list().map_err(|e| e.ipc())).await?;
@@ -114,8 +114,7 @@ impl Hosting {
     }
 
     /// 커밋 작성자 프로필 사진 URL (GitHub 원격만). origin 우선, 없으면 첫 원격. 이메일별 한 건.
-    pub async fn author_avatars(&self, git: &GitRunner, repo: &Path, items: Vec<AvatarQuery>) -> Res<Vec<AvatarResult>> {
-        let path = git.path_override();
+    pub async fn author_avatars(&self, git: &dyn GitBackend, path: Option<&str>, repo: &Path, items: Vec<AvatarQuery>) -> Res<Vec<AvatarResult>> {
         let mut remotes = parsed_remotes(git, repo).await?;
         remotes.sort_by_key(|(n, _, _)| n != "origin");
         let remote = remotes.into_iter().next().map(|(_, _, r)| r);
@@ -139,8 +138,8 @@ impl Hosting {
 }
 
 /// `remote.<name>.url` 설정 → (이름, URL, 해석 결과). 해석 불가한 원격은 뺀다.
-pub(crate) async fn parsed_remotes(git: &GitRunner, repo: &Path) -> Res<Vec<(String, String, RemoteRepo)>> {
-    let out = git.output_allow(repo, &["config", "--get-regexp", r"^remote\..*\.url$"], &[1]).await.map_err(err)?;
+pub(crate) async fn parsed_remotes(git: &dyn GitBackend, repo: &Path) -> Res<Vec<(String, String, RemoteRepo)>> {
+    let out = git.run(repo, &["config", "--get-regexp", r"^remote\..*\.url$"], &[1]).await.map_err(err)?;
     Ok(String::from_utf8_lossy(&out)
         .lines()
         .filter_map(|l| {

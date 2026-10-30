@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use gc_core::GitRunner;
+use gc_core::GitBackend;
 
 use crate::util::{blocking, err, Res};
 
@@ -34,20 +34,20 @@ pub(crate) fn remove_git_dir(repo: &Path, path: &Path) -> Res<()> {
 }
 
 /// 홈 폴더와 현재 `git config --global core.excludesfile` 값 (없으면 None)
-async fn home_and_excludes(git: &GitRunner) -> Res<(PathBuf, Option<String>)> {
+async fn home_and_excludes(git: &dyn GitBackend) -> Res<(PathBuf, Option<String>)> {
     let home = gc_core::home_dir().map_err(err)?;
-    let out = git.output(&home, &["config", "--global", "--get", "core.excludesfile"]).await.ok();
+    let out = git.run(&home, &["config", "--global", "--get", "core.excludesfile"], &[]).await.ok();
     let configured = out.map(|o| String::from_utf8_lossy(&o).trim().to_string()).filter(|s| !s.is_empty());
     Ok((home, configured))
 }
 
 /// 전역 excludesfile 읽기. 허용 경로는 현재 core.excludesfile 값·`~/.gitignore_global`·`~/.config/git/ignore`뿐.
-pub(crate) async fn global_ignore_read(git: &GitRunner, path: String) -> Res<String> {
+pub(crate) async fn global_ignore_read(git: &dyn GitBackend, path: String) -> Res<String> {
     let (home, cfg) = home_and_excludes(git).await?;
     blocking(move || gc_core::read_text(&gc_core::home_ignore_path(&home, &path, cfg.as_deref())?)).await
 }
 
-pub(crate) async fn global_ignore_write(git: &GitRunner, path: String, text: String) -> Res<()> {
+pub(crate) async fn global_ignore_write(git: &dyn GitBackend, path: String, text: String) -> Res<()> {
     let (home, cfg) = home_and_excludes(git).await?;
     blocking(move || gc_core::write_text(&gc_core::home_ignore_path(&home, &path, cfg.as_deref())?, &text)).await
 }

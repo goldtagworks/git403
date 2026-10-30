@@ -4,7 +4,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use gc_core::{GitRunner, JobEvent, JobHandle};
+use std::sync::Arc;
+
+use gc_core::{GitBackend, JobEvent, JobHandle, Spawned};
 use parking_lot::Mutex;
 use serde::Serialize;
 use serde_json::Value;
@@ -12,8 +14,6 @@ use tokio::sync::mpsc;
 
 use crate::util::{err, Res};
 use crate::Backend;
-
-type Spawned = (JobHandle, tokio::task::JoinHandle<gc_core::Result<()>>);
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -57,10 +57,9 @@ impl Jobs {
 }
 
 /// commit-graph 보장을 백그라운드로 돌린다. 실패는 로그(stderr)만 남기고 무시한다.
-pub(crate) fn spawn_commit_graph(git: &GitRunner, repo: PathBuf) {
-    let git = git.clone();
+pub(crate) fn spawn_commit_graph(git: Arc<dyn GitBackend>, repo: PathBuf) {
     tokio::spawn(async move {
-        if let Err(e) = gc_core::ensure_commit_graph(&git, &repo).await {
+        if let Err(e) = git.ensure_commit_graph(&repo).await {
             eprintln!("commit-graph: {e}");
         }
     });
@@ -86,13 +85,14 @@ impl Backend {
         }
         let log_tx = tx.clone();
         let argv: Vec<&str> = args.iter().map(String::as_str).collect();
-        let spawned = if interactive == Some(false) {
+        let ssh_batch = if interactive == Some(false) {
             let own_ssh = std::env::var_os("GIT_SSH_COMMAND").is_some()
-                || self.git.output(&repo, &["config", "--get", "core.sshCommand"]).await.is_ok_and(|o| !o.is_empty());
-            self.git.spawn_batch(&repo, &argv, !own_ssh, tx)
+                || self.backend.run(&repo, &["config", "--get", "core.sshCommand"], &[]).await.is_ok_and(|o| !o.is_empty());
+            Some(!own_ssh)
         } else {
-            self.git.spawn(&repo, &argv, tx)
+            None
         };
+        let spawned = self.backend.spawn_job(&repo, &argv, ssh_batch, tx);
         let (handle, task) = match spawned {
             Ok(s) => s,
             Err(e) => {
@@ -103,7 +103,7 @@ impl Backend {
             }
         };
         let task = if network || lease.is_some() {
-            let (git, me) = (self.git.clone(), self.clone());
+            let (git, me) = (self.backend.clone(), self.clone());
             tokio::spawn(async move {
                 let res = task.await;
                 // 성공·실패·취소 모두 복원한다(복원 로그는 채널이 닫히기 전에 보낸다)
@@ -111,7 +111,7 @@ impl Backend {
                     me.gh_release(l, gh_restore, &log_tx).await;
                 }
                 if network && matches!(res, Ok(Ok(()))) {
-                    spawn_commit_graph(&git, repo);
+                    spawn_commit_graph(git, repo);
                 }
                 res.unwrap_or_else(|e| Err(gc_core::Error::Spawn(std::io::Error::other(e))))
             })
@@ -134,7 +134,7 @@ impl Backend {
     pub(crate) fn run_detached(&self, repo: PathBuf, args: Vec<String>, token: String) -> Res<()> {
         let (tx, mut rx) = mpsc::unbounded_channel();
         let argv: Vec<&str> = args.iter().map(String::as_str).collect();
-        let (handle, task) = self.git.spawn(&repo, &argv, tx).map_err(err)?;
+        let (handle, task) = self.backend.spawn_job(&repo, &argv, None, tx).map_err(err)?;
         self.jobs.detached.lock().insert(token.clone(), handle);
         let me = self.clone();
         tokio::spawn(async move {

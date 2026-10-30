@@ -249,7 +249,7 @@ impl Backend {
 
     /// 전역 git 설정에서 허용 키만 읽는다 (`gitGlobal`, `tools` 섹션 값)
     async fn git_globals(&self) -> Res<(Map<String, Value>, Map<String, Value>)> {
-        let out = self.git.output_allow(&std::env::temp_dir(), &["config", "--global", "--null", "--get-regexp", r"^(git403\..*|(diff|merge)\.tool)$"], &[1]).await.map_err(err)?;
+        let out = self.backend.run(&std::env::temp_dir(), &["config", "--global", "--null", "--get-regexp", r"^(git403\..*|(diff|merge)\.tool)$"], &[1]).await.map_err(err)?;
         let (mut g, mut t) = (Map::new(), Map::new());
         for entry in String::from_utf8_lossy(&out).split('\0').filter(|e| !e.is_empty()) {
             let (k, v) = entry.split_once('\n').unwrap_or((entry, ""));
@@ -372,7 +372,7 @@ impl Backend {
                 }
                 _ => {
                     for (k, v) in c.as_object().into_iter().flatten() {
-                        self.git.output(&std::env::temp_dir(), &["config", "--global", k, v.as_str().unwrap_or_default()]).await.map_err(err)?;
+                        self.backend.run(&std::env::temp_dir(), &["config", "--global", k, v.as_str().unwrap_or_default()], &[]).await.map_err(err)?;
                     }
                 }
             }

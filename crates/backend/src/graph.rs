@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use gc_core::GitRunner;
+use gc_core::GitBackend;
 use serde::Serialize;
 
 use crate::util::{err, Res};
@@ -14,8 +14,8 @@ pub(crate) struct GraphView {
     layout: gc_graph::Layout,
 }
 
-pub(crate) async fn load_graph(git: &GitRunner, repo: &Path, limit: usize, hidden: &[String]) -> Res<GraphView> {
-    let (commits, head) = tokio::join!(gc_core::read_log(git, repo, limit, hidden), gc_core::head_commit(git, repo));
+pub(crate) async fn load_graph(git: &dyn GitBackend, repo: &Path, limit: usize, hidden: &[String]) -> Res<GraphView> {
+    let (commits, head) = tokio::join!(git.read_log(repo, limit, hidden), git.head_commit(repo));
     let commits = commits.map_err(err)?;
     // 현재 브랜치(HEAD)를 맨 왼쪽 레인에
     let layout = gc_graph::layout_with_head(commits.iter().map(|c| gc_graph::Node { id: &c.id, parents: &c.parents }), head.as_deref());

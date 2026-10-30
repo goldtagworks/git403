@@ -9,7 +9,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 
-use gc_core::{GitRunner, JobEvent};
+use gc_core::{GitBackend, JobEvent};
 use gc_hosting::RemoteRepo;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, Mutex, Notify};
@@ -398,8 +398,8 @@ pub(crate) struct Bound {
 }
 
 /// 없는 키(종료 1)만 None, 그 밖의 git 실패는 Err
-async fn config_get(git: &GitRunner, repo: &Path, key: &str) -> Res<Option<String>> {
-    let out = git.output_allow(repo, &["config", "--local", "--get", key], &[1]).await.map_err(|e| e.to_string())?;
+async fn config_get(git: &dyn GitBackend, repo: &Path, key: &str) -> Res<Option<String>> {
+    let out = git.run(repo, &["config", "--local", "--get", key], &[1]).await.map_err(|e| e.to_string())?;
     Ok(Some(String::from_utf8_lossy(&out).trim().to_string()).filter(|s| !s.is_empty()))
 }
 
@@ -419,11 +419,11 @@ impl Backend {
 
     /// 저장소의 (원격 이름, 원격). 추적 원격 → origin.
     async fn gh_remote(&self, repo: &Path, hint: Option<&str>) -> Res<Option<(String, RemoteRepo)>> {
-        let mut remotes = parsed_remotes(&self.git, repo).await?;
-        let tracking = match self.git.output_allow(repo, &["symbolic-ref", "--short", "-q", "HEAD"], &[1]).await {
+        let mut remotes = parsed_remotes(&*self.backend, repo).await?;
+        let tracking = match self.backend.run(repo, &["symbolic-ref", "--short", "-q", "HEAD"], &[1]).await {
             Ok(b) => {
                 let br = String::from_utf8_lossy(&b).trim().to_string();
-                if br.is_empty() { None } else { config_get(&self.git, repo, &format!("branch.{br}.remote")).await? }
+                if br.is_empty() { None } else { config_get(&*self.backend, repo, &format!("branch.{br}.remote")).await? }
             }
             Err(_) => None,
         };
@@ -445,7 +445,7 @@ impl Backend {
     pub(crate) async fn gh_repo_account(&self, repo: &Path) -> Res<RepoAccount> {
         let remote = self.gh_remote(repo, None).await?.map(|(_, r)| r);
         let host = remote.as_ref().map(|r| r.host.clone()).unwrap_or_else(|| "github.com".into());
-        let bound = config_get(&self.git, repo, BIND_KEY).await?;
+        let bound = config_get(&*self.backend, repo, BIND_KEY).await?;
         let active = self.gh().active_user(&host).await;
         Ok(RepoAccount { host, bound, active, remote: remote.map(|r| r.path()) })
     }
@@ -453,8 +453,8 @@ impl Backend {
     /// 저장소에 계정 연결(`None`이면 연결 해제)
     pub(crate) async fn gh_bind(&self, repo: &Path, user: Option<String>) -> Res<()> {
         match user.filter(|u| !u.is_empty()) {
-            Some(u) => self.git.output(repo, &["config", "--local", BIND_KEY, &u]).await.map(drop).map_err(err),
-            None => self.git.output_allow(repo, &["config", "--local", "--unset", BIND_KEY], &[5]).await.map(drop).map_err(err),
+            Some(u) => self.backend.run(repo, &["config", "--local", BIND_KEY, &u], &[]).await.map(drop).map_err(err),
+            None => self.backend.run(repo, &["config", "--local", "--unset", BIND_KEY], &[5]).await.map(drop).map_err(err),
         }
     }
 
@@ -474,7 +474,7 @@ impl Backend {
     /// 연결이 없거나 그 계정이 로그아웃됐으면 Ok(None). 읽기 실패(gh 시간 초과 등)는 Err —
     /// "연결 없음"으로 넘기면 다른 계정으로 push·PR이 진행된다.
     async fn bound_for(&self, repo: &Path, remote: &RemoteRepo) -> Res<Option<Bound>> {
-        let Some(user) = config_get(&self.git, repo, BIND_KEY).await? else { return Ok(None) };
+        let Some(user) = config_get(&*self.backend, repo, BIND_KEY).await? else { return Ok(None) };
         let all = self.gh().accounts(Some(&remote.host)).await?;
         if !all.installed {
             return Ok(None);
@@ -503,7 +503,7 @@ impl Backend {
         if !matches!(args.first().map(String::as_str), Some("push" | "fetch" | "pull")) {
             return Ok(None);
         }
-        let remotes = parsed_remotes(&self.git, repo).await?;
+        let remotes = parsed_remotes(&*self.backend, repo).await?;
         let hint = remote_hint(args, &remotes).map(String::from);
         let Some((_, remote)) = self.gh_remote(repo, hint.as_deref()).await? else { return Ok(None) };
         let Some(b) = self.bound_for(repo, &remote).await? else { return Ok(None) };
@@ -842,7 +842,7 @@ esac
         if let Some(u) = bound {
             git(&["config", "--local", BIND_KEY, u]);
         }
-        let runner = GitRunner::default();
+        let runner = gc_core::GitRunner::default();
         runner.path_cell().set(gh.path.clone().unwrap()).unwrap();
         let log = Arc::new(parking_lot::Mutex::new(Vec::new()));
         let be = Backend::with_parts(runner, Default::default(), Arc::new(Events(log.clone())), repo.path().join("cfg"), None);

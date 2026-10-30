@@ -2,7 +2,7 @@
 
 ## 이어서 하기 (다음 세션용)
 
-- 작업 브랜치: `main`(브랜치 만들지 않는다). 0~25단계 완료(25는 diff 업그레이드 a~d, 25b~d는 사용자 확인 대기), UI FSD 구조 정리 완료. 20~24는 VS Code 확장 트랙(GitLens식: 그래프 웹뷰·줄 끝 blame·호버·상태 바·사이드바 TreeView·CodeLens·다중 저장소·저장 전 편집 추적). **다음 단계는 아직 정하지 않았다** — 아래 "다음 후보"에서 고른다.
+- 작업 브랜치: `main`(브랜치 만들지 않는다). 0~25단계 완료(25는 diff 업그레이드 a~d, 25b~d는 사용자 확인 대기), UI FSD 구조 정리 완료. 20~24는 VS Code 확장 트랙(GitLens식: 그래프 웹뷰·줄 끝 blame·호버·상태 바·사이드바 TreeView·CodeLens·다중 저장소·저장 전 편집 추적). **진행 중: 27단계(코어 백엔드 레이어화, Android 대비)** — 27a 완료, 다음은 27b.
 - 구조: 명령 본문은 `crates/backend`(`dispatch.rs` 진입점 + 담당 모듈). Tauri 앱(`src-tauri`)과 stdio 서버 `git403-server`가 같이 쓴다. 새 IPC는 `dispatch`에 arm 하나. UI는 `ui/src/shared/api/bridge.ts`로 Tauri/VS Code를 가른다. UI 코드는 FSD 레이어(`app`·`widgets`·`features`·`entities`·`shared`, 규칙은 `docs/reuse.md` ui 절)로 나뉘어 있다. 확장은 `vscode/`(`extension.ts` → `features`·`services`·`shared` 계층).
 - 먼저 읽을 문서: 이 파일 → `docs/reuse.md`(모듈·IPC·서버 프로토콜·VS Code 확장 절) → `docs/performance.md` → `docs/design.md`.
 - 확인 명령: `cargo test --workspace --no-fail-fast` · `pnpm --dir ui build` · `pnpm --dir ui e2e`(mock, headless) · `pnpm --dir ui e2e:app`(실제 앱, 창 뜸) · `pnpm --dir ui e2e:native`(macOS OS 연동, 창 뜸·키보드 사용) · `pnpm --dir vscode test:unit` · `pnpm --dir vscode test`(진짜 VS Code 스모크 single+multi, 창 뜸) · `pnpm --dir vscode package`(현재 OS VSIX).
@@ -104,6 +104,15 @@
 
 ## 7~11
 - 앞 단계가 끝날 때 다시 구체화한다.
+
+## 27. 코어 백엔드 레이어화 (진행 중, Android 대비)
+
+목표: Android에서 git 실행 파일 없이 순수 Rust(gitoxide) 백엔드를 쓸 수 있게, git 실행 경로를 trait 뒤로 숨긴다. 데스크탑은 지금과 같은 `CliBackend`.
+- 27a `GitBackend` trait + `CliBackend` (완료; 동작·IPC·UI 변화 없음): `crates/core/src/backend.rs`. `gc-core` feature `cli`(기본)·`gix`(예약). `crates/backend`는 조회·쓰기·긴 작업·짧은 argv 실행·설정 읽기를 `Inner.backend: Arc<dyn GitBackend>`로 부른다. `GitRunner`를 직접 쓰는 곳(PATH 보정·`spawn_shell`·askpass 환경·conventions·ai)은 docs/reuse.md 참고. 완료 기준: `cargo test --workspace`(CliBackend = 기존 함수 같은 결과 테스트), `cargo check -p gc-core --no-default-features`(워크스페이스 전체는 `gc-backend`가 `CliBackend`를 쓰므로 해당 없음), `e2e`·`e2e:app` 통과.
+- 27b capabilities IPC: `supports`를 UI에 노출해 지원 안 되는 작업(메뉴·버튼)을 숨긴다. `git.unsupported`를 UI 사전에 추가.
+- 27c `GixBackend`: 조회 우선 구현 + 같은 임시 저장소에서 두 백엔드 결과를 비교하는 테스트. 쓰기는 argv 허용 목록만 해석하고 나머지는 Unsupported, push는 git2 보완 검토. (남은 과제: `cli`를 끄면 프로세스 실행 코드가 컴파일에서 빠지도록 `GitRunner` 의존 분리)
+- 27d Tauri Android 빌드: `src-tauri`에서 android 타깃은 `gix` feature, updater·window-state·네이티브 메뉴·askpass·`spawn_shell`(사용자 셸 명령, trait 밖) 등을 cfg로 분리.
+- 27e 태블릿 레이아웃: React 유지, 좁은 화면·터치.
 
 ## 26. PR 리뷰 (진행 중)
 

@@ -10,7 +10,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use gc_core::GitRunner;
+use gc_core::{CliBackend, GitBackend, GitRunner};
 use serde_json::Value;
 
 mod ai;
@@ -44,6 +44,9 @@ impl Emit for NullEmit {
 }
 
 pub struct Inner {
+    /// git 호출 전부(조회·쓰기·긴 작업)가 지나는 백엔드. 지금은 `git: GitRunner`를 감싼 `CliBackend`
+    backend: Arc<dyn GitBackend>,
+    /// 프로세스·OS에 묶인 기능 전용 (`path_override`·`path_cell`·`spawn_shell`, gh·ai·conventions의 PATH 보정). git 호출에는 쓰지 않는다. `backend` 안의 runner와 같은 복제여야 한다
     git: GitRunner,
     emit: Arc<dyn Emit>,
     askpass: askpass::Askpass,
@@ -94,6 +97,7 @@ impl Backend {
 
     pub fn with_parts(git: GitRunner, askpass: askpass::Askpass, emit: Arc<dyn Emit>, config_dir: PathBuf, initial_repo: Option<String>) -> Self {
         Self(Arc::new(Inner {
+            backend: Arc::new(CliBackend::new(git.clone())),
             git,
             emit,
             askpass,
