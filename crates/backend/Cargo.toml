@@ -7,9 +7,16 @@ edition.workspace = true
 name = "git403-server"
 path = "src/bin/server.rs"
 
+[features]
+default = ["cli"]
+# git 실행 파일을 띄우는 `CliBackend`(데스크탑). 끄면 gc-core의 프로세스 실행 코드가 빠진다
+cli = ["gc-core/cli"]
+# 순수 Rust(gitoxide) `GixBackend`(Android 대비). `cli`와 같이 켜면 `cli`가 쓰인다
+gix = ["gc-core/gix"]
+
 [dependencies]
 gc-i18n = { path = "../i18n" }
-gc-core = { path = "../core" }
+gc-core = { path = "../core", default-features = false }
 gc-graph = { path = "../graph" }
 gc-hosting = { path = "../hosting" }
 gc-ai = { path = "../ai" }

@@ -414,7 +414,7 @@ fn gh_err(out: &std::process::Output) -> String {
 
 impl Backend {
     fn gh(&self) -> Gh {
-        Gh::new(self.git.path_override())
+        Gh::new(self.path_env())
     }
 
     /// 저장소의 (원격 이름, 원격). 추적 원격 → origin.

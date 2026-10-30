@@ -122,10 +122,17 @@ impl Backend {
     }
 
     /// 셸 명령 한 줄을 start_job과 같은 규칙(작업 번호·이벤트)으로 실행한다.
+    #[cfg(feature = "cli")]
     pub(crate) fn start_shell(&self, repo: PathBuf, command: String) -> Res<u64> {
         let (tx, rx) = mpsc::unbounded_channel();
         let spawned = self.git.spawn_shell(&repo, &command, tx).map_err(|e| e.ipc())?;
         Ok(self.track_job(spawned, rx))
+    }
+
+    /// 셸 명령은 프로세스를 띄우므로 순수 Rust 백엔드(`cli` 없음)에서는 지원하지 않는다.
+    #[cfg(not(feature = "cli"))]
+    pub(crate) fn start_shell(&self, _repo: PathBuf, _command: String) -> Res<u64> {
+        Err(gc_core::Error::Unsupported("shell".into()).ipc())
     }
 
     /// 끝날 때까지 오래 걸리는 GUI 도구(difftool·mergetool)용. 바로 돌아오고, 끝나면 이벤트 `detached-done [token, err?]`

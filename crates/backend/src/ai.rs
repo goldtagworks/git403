@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use parking_lot::Mutex;
 use serde_json::Value;
@@ -64,8 +65,7 @@ impl Ai {
     /// AI 실행. 입력 크기 검사(자르지 않음)·방식 감지·선택·호출은 전부 spawn한 작업 안에서 하고, **token은 그 전에 등록**한다
     /// (감지 중 취소도 먹는다). 등록보다 먼저 온 취소는 `Tasks::cancelled`가 기억한다. 동의 전에는 거부한다.
     /// 커밋·PR 작업이고 `repo`가 있으면(설정·저장소에서 끄지 않았다면) 저장소 규칙을 모아 입력에 붙인다(`conventions.rs`) — 결과에 `sources`가 붙는다.
-    pub async fn run(&self, git: &gc_core::GitRunner, repo: Option<PathBuf>, task: gc_ai::Task, parts: Vec<gc_ai::Part>, token: String, opts: gc_ai::Opts) -> Res<Value> {
-        let (git, path_env) = (git.clone(), git.path_override().map(String::from));
+    pub async fn run(&self, git: Arc<dyn gc_core::GitBackend>, path_env: Option<String>, repo: Option<PathBuf>, task: gc_ai::Task, parts: Vec<gc_ai::Part>, token: String, opts: gc_ai::Opts) -> Res<Value> {
         let settings = self.settings().await?;
         if !settings.of(settings.provider).consent {
             return Err(gc_i18n::coded!("ai.consentRequired", "Consent to use AI is required").json());
@@ -80,7 +80,7 @@ impl Ai {
                 let mut sources = Vec::new();
                 if let Some(repo) = repo.filter(|_| settings.conventions) {
                     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from);
-                    if let Some(c) = crate::conventions::collect(&git, &repo, task, home).await {
+                    if let Some(c) = crate::conventions::collect(&*git, &repo, task, home).await {
                         parts.push(gc_ai::Part { label: gc_ai::CONVENTIONS_LABEL.into(), text: c.text });
                         sources = c.sources;
                     }

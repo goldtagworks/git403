@@ -212,16 +212,21 @@ impl Backend {
             "global_ignore_ensure" => {
                 json(blocking(|| gc_core::ensure_global_ignore(&gc_core::home_dir()?).map(|p| p.to_string_lossy().into_owned())).await?)
             }
+            #[cfg(feature = "cli")]
             "ssh_keys" => {
                 let dir = gc_core::home_dir().map_err(err)?.join(".ssh");
                 json(gc_core::list_keys(&dir).await.map_err(err)?)
             }
             // `~/.ssh/<name>`에 새 ed25519 키. 같은 이름 파일이 있으면 거부.
+            #[cfg(feature = "cli")]
             "ssh_generate" => {
                 let (name, passphrase, comment) = (a.get::<String>("name")?, a.get::<String>("passphrase")?, a.get::<String>("comment")?);
                 let dir = gc_core::home_dir().map_err(err)?.join(".ssh");
                 json(gc_core::generate_key(&dir, &name, &passphrase, &comment).await.map_err(err)?)
             }
+            // ssh-keygen을 쓰는 키 관리는 프로세스를 띄우므로 순수 Rust 백엔드(`cli` 없음)에서는 미지원
+            #[cfg(not(feature = "cli"))]
+            "ssh_keys" | "ssh_generate" => Err(gc_core::Error::Unsupported("ssh".into()).ipc()),
             // ---- 호스팅 계정 · PR ----
             "accounts_list" => {
                 let accts = self.hosting.accounts();
@@ -240,7 +245,7 @@ impl Backend {
             "remote_info" => json(self.hosting.remote_info(git, &a.repo()?).await?),
             "author_avatars" => {
                 let (repo, items) = (a.repo()?, a.get::<Vec<gc_hosting::AvatarQuery>>("items")?);
-                json(self.hosting.author_avatars(git, self.git.path_override(), &repo, items).await?)
+                json(self.hosting.author_avatars(git, self.path_env(), &repo, items).await?)
             }
             "pr_create" => {
                 let (account, repo, head, base, title, body, draft) = (
@@ -280,12 +285,12 @@ impl Backend {
                 // activity: 최근 활동(타임라인)도 받을지. 생략 = 받음. 끄면 응답이 훨씬 빠르다
                 let activity = a.get::<Option<bool>>("activity")?.unwrap_or(true);
                 let bound = self.gh_bound_token(a.get::<Option<PathBuf>>("localRepo")?.as_deref(), &repo).await?;
-                json(self.hosting.pr_inbox(account, &repo, me, closed, activity, self.git.path_override(), bound).await?)
+                json(self.hosting.pr_inbox(account, &repo, me, closed, activity, self.path_env(), bound).await?)
             }
             "pr_detail" => {
                 let (account, repo, number) = (a.get::<Option<Account>>("account")?, a.get::<RemoteRepo>("repo")?, a.get::<u64>("number")?);
                 let bound = self.gh_bound_token(a.get::<Option<PathBuf>>("localRepo")?.as_deref(), &repo).await?;
-                json(self.hosting.pr_detail(account, &repo, number, self.git.path_override(), bound).await?)
+                json(self.hosting.pr_detail(account, &repo, number, self.path_env(), bound).await?)
             }
             // PR 리뷰 게시: event = COMMENT|APPROVE|REQUEST_CHANGES, comments[{path,line,startLine?,side?,body}] → 리뷰 URL
             "pr_review_submit" => {
@@ -293,7 +298,7 @@ impl Backend {
                 let (commit_id, event, body) = (a.get::<String>("commitId")?, a.get::<String>("event")?, a.get::<String>("body")?);
                 let comments = a.get::<Vec<gc_hosting::ReviewComment>>("comments")?;
                 let bound = self.gh_bound_token(a.get::<Option<PathBuf>>("localRepo")?.as_deref(), &repo).await?;
-                json(self.hosting.pr_review_submit(account, &repo, number, &commit_id, &event, &body, &comments, self.git.path_override(), bound).await?)
+                json(self.hosting.pr_review_submit(account, &repo, number, &commit_id, &event, &body, &comments, self.path_env(), bound).await?)
             }
             // ---- gh(GitHub CLI) 계정: 표시·전환·저장소 연결 (docs/reuse.md gh 절) ----
             "gh_accounts" => json(self.gh_accounts(a.get::<Option<String>>("host")?).await?),
@@ -327,7 +332,7 @@ impl Backend {
             "settings_import_apply" => json(self.settings_import_apply(a.get("json")?, a.get("sections")?, a.get("ui")?).await?),
             // ---- AI ----
             // 쓸 방식이 없으면 `active`가 None이고 UI가 AI 메뉴를 숨긴다.
-            "ai_status" => json(self.ai.status(self.git.path_override()).await?),
+            "ai_status" => json(self.ai.status(self.path_env()).await?),
             "ai_settings_set" => {
                 // provider 생략 = 선택된 공급자의 설정. select: true면 그 공급자를 선택
                 let (provider, model, method, consent) = (a.get("provider")?, a.get("model")?, a.get("method")?, a.get("consent")?);
@@ -351,7 +356,7 @@ impl Backend {
                 let opts = gc_ai::Opts { model: a.get("model")?, effort: a.get("effort")? };
                 // 선택: repo(저장소 경로) — 있으면 커밋·PR 작업에 그 저장소의 규칙을 붙인다
                 let repo = a.get::<Option<PathBuf>>("repo")?;
-                self.ai.run(&self.git, repo, task, parts, token, opts).await
+                self.ai.run(self.backend.clone(), self.path_env().map(String::from), repo, task, parts, token, opts).await
             }
             "ai_cancel" => {
                 self.ai.cancel(a.get("token")?);
@@ -360,7 +365,7 @@ impl Backend {
             // ---- 외부 앱 ----
             "open_in" => {
                 let (repo, what, app, path) = (a.repo()?, a.get::<String>("what")?, a.get::<Option<String>>("app")?, a.get::<Option<String>>("path")?);
-                open::open_in(&self.git, repo, what, app, path).await?;
+                open::open_in(self.path_env(), repo, what, app, path).await?;
                 Ok(Value::Null)
             }
             // ---- 긴 작업 ----

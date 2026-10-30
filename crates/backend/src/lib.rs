@@ -10,8 +10,13 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use gc_core::{CliBackend, GitBackend, GitRunner};
+use gc_core::GitBackend;
+#[cfg(feature = "cli")]
+use gc_core::{CliBackend, GitRunner};
 use serde_json::Value;
+
+#[cfg(not(any(feature = "cli", feature = "gix")))]
+compile_error!("gc-backend에는 feature `cli`(기본, git 실행 파일) 또는 `gix`(순수 Rust) 중 하나가 필요하다");
 
 mod ai;
 pub mod askpass;
@@ -44,9 +49,11 @@ impl Emit for NullEmit {
 }
 
 pub struct Inner {
-    /// git 호출 전부(조회·쓰기·긴 작업)가 지나는 백엔드. 지금은 `git: GitRunner`를 감싼 `CliBackend`
+    /// git 호출 전부(조회·쓰기·긴 작업)가 지나는 백엔드. feature `cli`(기본)면 `git: GitRunner`를 감싼 `CliBackend`, 아니면 `GixBackend`
     backend: Arc<dyn GitBackend>,
-    /// 프로세스·OS에 묶인 기능 전용 (`path_override`·`path_cell`·`spawn_shell`, gh·ai·conventions의 PATH 보정). git 호출에는 쓰지 않는다. `backend` 안의 runner와 같은 복제여야 한다
+    /// 프로세스·OS에 묶인 기능 전용 (`path_override`·`path_cell`·`spawn_shell`, gh·ai의 PATH 보정). git 호출에는 쓰지 않는다. `backend` 안의 runner와 같은 복제여야 한다.
+    /// feature `cli`일 때만 있다 (없으면 PATH 보정 없음, 셸 명령 작업은 미지원)
+    #[cfg(feature = "cli")]
     git: GitRunner,
     emit: Arc<dyn Emit>,
     askpass: askpass::Askpass,
@@ -78,26 +85,51 @@ impl std::ops::Deref for Backend {
 impl Backend {
     /// askpass 포트를 열어 git·ssh가 **현재 실행 파일**을 인증 도우미로 부르게 한다
     /// (호스트 `main`은 시작할 때 `askpass::helper_main()`을 먼저 불러야 한다).
+    ///
+    /// feature `gix`(`cli` 없음)에서는 git 프로세스를 띄우지 않으므로 askpass 환경도 없다.
     pub fn new(emit: Arc<dyn Emit>, config_dir: PathBuf, initial_repo: Option<String>) -> Self {
-        let mut runner = GitRunner::default();
-        let mut ask = askpass::Askpass::default();
-        if let (Ok((a, port)), Ok(exe)) = (askpass::Askpass::bind(), std::env::current_exe()) {
-            let exe = exe.to_string_lossy().into_owned();
-            runner = runner
-                .with_env("GIT_ASKPASS", exe.clone())
-                .with_env("SSH_ASKPASS", exe)
-                .with_env("SSH_ASKPASS_REQUIRE", "force")
-                .with_env(askpass::PORT_ENV, port.to_string());
-            ask = a;
-        }
-        let b = Self::with_parts(runner, ask, emit, config_dir, initial_repo);
+        #[cfg(feature = "cli")]
+        let b = {
+            let mut runner = GitRunner::default();
+            let mut ask = askpass::Askpass::default();
+            if let (Ok((a, port)), Ok(exe)) = (askpass::Askpass::bind(), std::env::current_exe()) {
+                let exe = exe.to_string_lossy().into_owned();
+                runner = runner
+                    .with_env("GIT_ASKPASS", exe.clone())
+                    .with_env("SSH_ASKPASS", exe)
+                    .with_env("SSH_ASKPASS_REQUIRE", "force")
+                    .with_env(askpass::PORT_ENV, port.to_string());
+                ask = a;
+            }
+            Self::with_parts(runner, ask, emit, config_dir, initial_repo)
+        };
+        #[cfg(not(feature = "cli"))]
+        let b = Self::with_parts(Default::default(), emit, config_dir, initial_repo);
         b.path_done.send_replace(false); // 실제 앱만 PATH 확인을 기다린다 (`start`가 true로)
         b
     }
 
+    #[cfg(feature = "cli")]
     pub fn with_parts(git: GitRunner, askpass: askpass::Askpass, emit: Arc<dyn Emit>, config_dir: PathBuf, initial_repo: Option<String>) -> Self {
+        Self::assemble(Arc::new(CliBackend::new(git.clone())), git, askpass, emit, config_dir, initial_repo)
+    }
+
+    #[cfg(not(feature = "cli"))]
+    pub fn with_parts(askpass: askpass::Askpass, emit: Arc<dyn Emit>, config_dir: PathBuf, initial_repo: Option<String>) -> Self {
+        Self::assemble(Arc::new(gc_core::gix_backend::GixBackend::new()), askpass, emit, config_dir, initial_repo)
+    }
+
+    fn assemble(
+        backend: Arc<dyn GitBackend>,
+        #[cfg(feature = "cli")] git: GitRunner,
+        askpass: askpass::Askpass,
+        emit: Arc<dyn Emit>,
+        config_dir: PathBuf,
+        initial_repo: Option<String>,
+    ) -> Self {
         Self(Arc::new(Inner {
-            backend: Arc::new(CliBackend::new(git.clone())),
+            backend,
+            #[cfg(feature = "cli")]
             git,
             emit,
             askpass,
@@ -118,7 +150,7 @@ impl Backend {
         let emit = self.emit.clone();
         self.askpass.serve(move |req| emit.emit("askpass", serde_json::to_value(req).unwrap_or(Value::Null)));
         // GUI로 실행하면 로그인 셸의 PATH(homebrew·nvm 등)가 없다. 시작을 막지 않게 백그라운드에서 물어 GitRunner에 채운다.
-        #[cfg(unix)]
+        #[cfg(all(unix, feature = "cli"))]
         {
             let (cell, done) = (self.git.path_cell(), self.path_done.clone());
             tokio::spawn(async move {
@@ -131,7 +163,7 @@ impl Backend {
                 done.send_replace(true);
             });
         }
-        #[cfg(not(unix))]
+        #[cfg(not(all(unix, feature = "cli")))]
         self.path_done.send_replace(true);
     }
 
@@ -147,6 +179,14 @@ impl Backend {
 }
 
 impl Inner {
+    /// gh·ai·외부 앱 실행에 쓸 PATH (로그인 셸에서 얻은 값). `cli`가 아니면 보정 없음.
+    pub(crate) fn path_env(&self) -> Option<&str> {
+        #[cfg(feature = "cli")]
+        return self.git.path_override();
+        #[cfg(not(feature = "cli"))]
+        None
+    }
+
     /// 종료 때 자식 프로세스를 전부 정리한다. 종료가 `process::exit`로 끝나면 tokio 태스크 drop·`kill_on_drop`이
     /// 돌지 않고, 자식은 별도 프로세스 그룹이라 터미널 신호도 못 받는다. 그래서 동기로 직접 죽인다. 여러 번 불려도 안전하다.
     pub fn shutdown(&self) {
@@ -157,7 +197,7 @@ impl Inner {
     }
 }
 
-#[cfg(all(test, unix))]
+#[cfg(all(test, unix, feature = "cli"))]
 mod tests {
     use super::*;
     use tokio::sync::mpsc;

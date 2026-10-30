@@ -6,7 +6,7 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use gc_core::GitRunner;
+use gc_core::GitBackend;
 use serde::Serialize;
 use serde_json::Value;
 
@@ -59,11 +59,12 @@ struct Item {
 }
 
 /// 저장소 규칙을 모은다. 저장소에서 껐거나(`git config git403.aiConventions false`) 모은 게 없으면 None.
-pub(crate) async fn collect(git: &GitRunner, repo: &Path, task: gc_ai::Task, home: Option<PathBuf>) -> Option<Collected> {
+pub(crate) async fn collect(git: &dyn GitBackend, repo: &Path, task: gc_ai::Task, home: Option<PathBuf>) -> Option<Collected> {
     if !matches!(task, gc_ai::Task::Commit | gc_ai::Task::Pr) {
         return None;
     }
-    let cfg = |args: &'static [&'static str]| async move { git.query(repo, args).await.ok().map(|o| String::from_utf8_lossy(&o).trim().to_string()).filter(|s| !s.is_empty()) };
+    // lock을 잡지 않는 읽기 명령만 (GIT_OPTIONAL_LOCKS 없이 돈다 — status·diff류 금지)
+    let cfg = |args: &'static [&'static str]| async move { git.run(repo, args, &[]).await.ok().map(|o| String::from_utf8_lossy(&o).trim().to_string()).filter(|s| !s.is_empty()) };
     if cfg(&["config", "--local", "--get", "git403.aiConventions"]).await.is_some_and(|v| matches!(v.to_lowercase().as_str(), "false" | "0" | "no" | "off")) {
         return None;
     }
@@ -603,7 +604,7 @@ mod tests {
     }
 
     async fn run(root: &Path, task: gc_ai::Task, home: Option<&Path>) -> Option<Collected> {
-        collect(&GitRunner::new("git"), root, task, home.map(Path::to_path_buf)).await
+        collect(&gc_core::CliBackend::new(gc_core::GitRunner::new("git")), root, task, home.map(Path::to_path_buf)).await
     }
 
     #[test]
