@@ -209,7 +209,7 @@ const defaultPrs: Pr[] = [
   { number: 5, title: "pull 중 UI 멈춤 수정", url: "https://github.com/demo/git403/pull/5", head: "hotfix/pull-lock", base: "main", author: "박머지" },
 ];
 
-// PR 리뷰(26): window.__inbox(InboxPr[]), __inboxClosed(state closed일 때), __prDetail({번호: Partial<PrDetail>}), __inboxFail(오류 문구), __detailFail, __slowInbox(ms), __slowDetail(ms). gitCalls에 pr_inbox·pr_detail 기록
+// PR 리뷰(26): window.__inbox(InboxPr[]), __inboxClosed(state closed일 때), __prDetail({번호: Partial<PrDetail>}), __inboxFail(오류 문구), __detailFail, __slowInbox(ms), __slowDetail(ms), __activity({번호: Activity[]}, activity:true 조회에만 붙음). gitCalls에 pr_inbox·pr_detail 기록
 const ago = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
 const inbox = (n: number, o: Partial<InboxPr>): InboxPr => ({ number: n, title: "", url: `https://github.com/demo/git403/pull/${n}`, head: `feature/p${n}`, base: "main", author: "이리뷰", authorAvatar: "", draft: false, createdAt: ago(5), updatedAt: ago(1), additions: 10, deletions: 2, labels: [], reviewers: [], approvals: 0, myReview: "none", reRequested: false, headSha: `a${n}b2c3d4e5f6`, isMine: false, reviewRequested: false, ...o });
 const defaultInbox: InboxPr[] = [
@@ -221,6 +221,8 @@ const defaultInbox: InboxPr[] = [
   inbox(5, { title: "pull 중 UI 멈춤 수정", author: "박머지", head: "hotfix/pull-lock", createdAt: ago(80) }),
   inbox(42, { title: "이미지 캐시 크기 제한", author: "Riley", additions: 87, deletions: 12, labels: ["perf", "cache"], myReview: "approved", approvals: 2, createdAt: ago(11) }),
 ];
+// activity:true일 때만 활동을 채운다. window.__activity = {번호: Activity[]}, 없으면 작성자가 갱신 시각에 코멘트한 한 건
+const withActivity = (l: InboxPr[], on: boolean): InboxPr[] => l.map((p) => (on ? { ...p, activity: (window as any).__activity?.[p.number] ?? [{ kind: "commented", actor: p.author, at: p.updatedAt }], activityTotal: 1 } : p));
 const defaultDetail = (n: number): PrDetail => ({
   body: "다크 모드에서 설정 화면의 셀 배경과 글자 색이 시스템 색과 달라 보이던 것을 색 토큰으로 맞췄습니다.\n\n- 셀 배경\n- 구분선",
   mergeable: "MERGEABLE", ci: "SUCCESS", approvals: n === 128 ? 1 : 0, requiredApprovals: 2, unresolvedThreads: n === 128 ? 1 : 0, files: 4, additions: 48, deletions: 21, baseSha: "base123456789", headSha: `a${n}b2c3d4e5f6`,
@@ -717,7 +719,7 @@ function handle(cmd: string, args: any): any {
       const ms = (cmd === "pr_inbox" ? w.__slowInbox : w.__slowDetail) ?? 0;
       const fail = cmd === "pr_inbox" ? w.__inboxFail : w.__detailFail;
       const n = (args as { number?: number }).number ?? 0;
-      return new Promise((resolve, reject) => setTimeout(() => (fail ? reject(fail) : resolve(cmd === "pr_inbox" ? ((args as { state?: string }).state === "closed" ? w.__inboxClosed ?? [] : w.__inbox ?? defaultInbox) : { ...defaultDetail(n), ...(w.__prDetail?.[n] ?? {}) })), ms));
+      return new Promise((resolve, reject) => setTimeout(() => (fail ? reject(fail) : resolve(cmd === "pr_inbox" ? withActivity(((args as { state?: string }).state === "closed" ? w.__inboxClosed ?? [] : w.__inbox ?? defaultInbox), (args as { activity?: boolean }).activity === true) : { ...defaultDetail(n), ...(w.__prDetail?.[n] ?? {}) })), ms));
     }
     // PR 리뷰 게시(26c): 호출 인자를 기록. window.__submitFail(오류 문구), __submit422(true면 GitHub 422 문구 — 첫 줄 코멘트 위치 포함), 성공하면 리뷰 URL
     if (cmd === "pr_review_submit") {

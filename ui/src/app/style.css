@@ -917,7 +917,7 @@ mark.hl { background: color-mix(in srgb, var(--accent) 28%, transparent); color:
 .guide-api .link { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--accent); font-size: 12px; font-weight: 400; text-align: left; word-break: break-all; }
 .guide-checks label { display: flex; align-items: baseline; gap: 6px; word-break: keep-all; }
 .guide-checks label.done span { color: var(--muted); text-decoration: line-through; }
-@media (prefers-reduced-motion: reduce) { .guide-spin { animation-duration: 3s; } }
+@media (prefers-reduced-motion: reduce) { .guide-spin, .prr-icon.busy svg { animation-duration: 3s; } }
 
 /* diff 머리줄 도구줄 (25e): entities/diff/DiffView.tsx. 좁으면(.diff 컨테이너 폭) Blame·히스토리·공백 무시·줄바꿈은 ⋯ 메뉴로 */
 .diff-tools { margin-left: auto; display: flex; align-items: center; gap: 6px; flex: none; }
@@ -989,6 +989,13 @@ html[data-big] .ib-canvases { grid-template-columns: repeat(auto-fit, minmax(min
 .prr-tabs button:disabled { opacity: 0.5; }
 .prr-tabs .count { margin-left: 5px; font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums; color: var(--muted); }
 .prr-icon { border: 0; background: transparent; color: var(--muted); padding: 4px; border-radius: 6px; display: inline-flex; }
+.prr-icon:disabled { cursor: default; }
+.prr-icon.busy svg { animation: guide-spin 0.8s linear infinite; }
+.prr-sub { display: flex; align-items: center; gap: 8px; padding: 0 10px 4px; font-size: 11px; color: var(--muted); }
+.prr-sub label { display: inline-flex; align-items: center; gap: 4px; }
+.prr-ago { margin-left: auto; font-variant-numeric: tabular-nums; }
+.prr-item-act { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prr-hidden { flex-direction: row; align-items: center; flex-wrap: wrap; font-size: 12px; }
 .prr-icon:hover { background: var(--hover); color: var(--fg); }
 .prr-search { display: flex; align-items: center; gap: 6px; margin: 4px 10px 8px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--muted); }
 .prr-search input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 5px 0; outline: none; }

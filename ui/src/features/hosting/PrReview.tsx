@@ -7,7 +7,7 @@ import { contextMenu } from "../../shared/ui/menu";
 import { ctx, ops, prBus } from "../../shared/model/ops";
 import { bigView } from "../../shared/model/bigview";
 import { firstCommitAfterMyReview, prReview, relTime, reviewProgress, usePrReview } from "../../shared/model/prreview";
-import { dateFmt, intlTag, t, useLocale } from "../../shared/i18n/i18n";
+import { dateFmt, intlTag, t, useLocale, type Key } from "../../shared/i18n/i18n";
 import { countRender } from "../../shared/lib/profile";
 import { Markdown, MdPreview } from "../../shared/ui/Markdown";
 import { prPopup, type PopItem } from "../../shared/model/prpopup";
@@ -34,7 +34,9 @@ const isTokenErr = (e: unknown) => {
   const c = errCode(e);
   return c ? ["hosting.noToken", "hosting.noSavedToken", "hosting.unauthorized", "hosting.store"].includes(c) : /token|토큰/i.test(String(e)); // 코드 없는 오류(gh stderr 인증 실패 등)는 문구로 폴백
 };
-type Load<T> = { key: string; data: T | null; error: string | null; token?: boolean };
+type Load<T> = { key: string; data: T | null; error: string | null; token?: boolean; at?: number };
+const ACT_KEY = "prr.activity"; // 목록에 최근 활동 한 줄 (켜면 activity:true로 조회 — 응답이 많이 느리다)
+const AUTO_MS = 5 * 60_000; // 화면이 보이는 동안 이 간격으로 조용히 새로고침
 
 /** `App`이 `.workspace` 안에 한 번 둔다. 저장소가 바뀌면 닫는다 */
 /** 커밋 우클릭 "그래프에서 보기" → PR 화면을 닫고 그래프에서 그 커밋을 고른다(main.tsx `reveal`: 더 읽어 찾고, 없으면 경고) */
@@ -48,7 +50,7 @@ export const PrReviewHost = memo(function PrReviewHost({ repo, onSelectCommit }:
   return open ? <PrReviewScreen repo={repo} /> : null;
 });
 
-const inboxCache = new Map<string, InboxPr[]>(); // `${repo}:${state}` → 마지막으로 받은 목록 (세션 메모리)
+const inboxCache = new Map<string, { data: InboxPr[]; at: number }>(); // `${repo}:${state}:${activity ? 1 : 0}` → 마지막으로 받은 목록·시각 (세션 메모리)
 const inTab = (p: InboxPr, tab: Tab) => (tab === "review" ? p.reviewRequested || p.reRequested : tab === "mine" ? p.isMine : true);
 const matches = (p: InboxPr, q: string) => !q || `#${p.number} ${p.number} ${p.title} ${p.author} ${p.head} ${p.base}`.toLowerCase().includes(q);
 
@@ -72,7 +74,21 @@ function PrReviewScreen({ repo }: { repo: string }) {
   const [tab, setTab] = useState<Tab>("review");
   const [query, setQuery] = useState("");
   const [state, setState] = useState<"open" | "closed">("open"); // 닫힘 = 닫힘·머지됨 최근 50개
+  const [activity, setActivity] = useState(() => {
+    try {
+      return localStorage.getItem(ACT_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [fetching, setFetching] = useState(false); // 조회 중(캐시를 보여 주는 중 포함) — 새로고침 버튼 표시
+  const lastTry = useRef(0);
   const seq = useRef(0);
+  useEffect(() => {
+    try {
+      localStorage.setItem(ACT_KEY, activity ? "1" : "0");
+    } catch {}
+  }, [activity]);
   // 목록 접기(레일)·폭: 저장. 바뀔 때만 이 화면이 다시 그려진다 (드래그 중에는 Splitter가 DOM style만 고친다)
   const [collapsed, setCollapsed] = useState(() => {
     try {
@@ -115,26 +131,31 @@ function PrReviewScreen({ repo }: { repo: string }) {
 
   const load = useCallback(async () => {
     const mine = ++seq.current;
+    lastTry.current = Date.now();
+    setFetching(true);
     // 원격 정보를 못 읽으면 "GitHub 원격 없음"이 아니라 오류 + 다시 시도
     let infos: RemoteInfo[];
     try {
       infos = await api.remoteInfo(repo);
     } catch (e) {
-      if (mine === seq.current) (setTarget(undefined), setInbox({ key: `${repo}:${state}`, data: null, error: String(e) }));
+      if (mine === seq.current) (setTarget(undefined), setFetching(false), setInbox({ key: `${repo}:${state}:${activity ? 1 : 0}`, data: null, error: String(e) }));
       return;
     }
     if (mine !== seq.current) return;
     const gh = infos.find((i) => i.provider === "github") ?? null;
     setTarget(gh);
-    if (!gh) return;
-    const key = `${repo}:${state}`;
-    // 받아 둔 목록이 있으면 먼저 보이고 뒤에서 새로 받는다 (GitHub 응답이 수 초 걸린다)
-    setInbox((p) => (p && p.key === key ? { ...p, error: null } : inboxCache.has(key) ? { key, data: inboxCache.get(key)!, error: null } : null));
-    api.prInbox(gh.account, gh.repo, gh.account?.username ?? null, state, false, ctx.repo || undefined).then(
-      (data) => mine === seq.current && (inboxCache.set(key, data), setInbox({ key, data, error: null })),
-      (e) => mine === seq.current && setInbox((p) => ({ key, data: p?.key === key ? p.data : null, error: String(e), token: isTokenErr(e) })),
+    if (!gh) return setFetching(false);
+    const key = `${repo}:${state}:${activity ? 1 : 0}`;
+    // 받아 둔 목록이 있으면 먼저 보이고 뒤에서 새로 받는다 (GitHub 응답이 수 초 걸린다). 활동 토글만 바뀌면 반대쪽 캐시라도 먼저 보인다
+    // 갱신 시각은 같은 key의 캐시에서만 (반대쪽 캐시는 활동 정보가 달라 "갱신됨"으로 보이면 안 된다)
+    const exact = inboxCache.get(key);
+    const seen = exact ?? inboxCache.get(`${repo}:${state}:${activity ? 0 : 1}`);
+    setInbox((p) => (p && p.key === key ? { ...p, error: null } : seen ? { key, data: seen.data, at: exact?.at, error: null } : null));
+    api.prInbox(gh.account, gh.repo, gh.account?.username ?? null, state, activity, ctx.repo || undefined).then(
+      (data) => mine === seq.current && (inboxCache.set(key, { data, at: Date.now() }), setFetching(false), setInbox({ key, data, error: null, at: Date.now() })),
+      (e) => mine === seq.current && (setFetching(false), setInbox((p) => ({ key, data: p?.key === key ? p.data : seen?.data ?? null, at: p?.key === key ? p.at : exact?.at, error: String(e), token: isTokenErr(e) }))),
     );
-  }, [repo, state]);
+  }, [repo, state, activity]);
   useEffect(() => {
     load();
     const off = prBus.on(load);
@@ -142,6 +163,22 @@ function PrReviewScreen({ repo }: { repo: string }) {
       seq.current++;
       off();
     };
+  }, [load]);
+
+  // 자동 새로고침: 화면이 보이는 동안 5분마다(마지막 시도 기준, 실패해도 데이터 유지·오류 표시). 숨겨지면 타이머를 멈추고, 돌아오면 5분 지났을 때 즉시
+  useEffect(() => {
+    let id: ReturnType<typeof setInterval> | undefined;
+    const tick = () => Date.now() - lastTry.current >= AUTO_MS && load();
+    const sync = () => {
+      clearInterval(id);
+      id = undefined;
+      if (document.visibilityState !== "visible") return;
+      tick();
+      id = setInterval(tick, 30_000);
+    };
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => (clearInterval(id), document.removeEventListener("visibilitychange", sync));
   }, [load]);
 
   // Esc: 닫기 (시트·메뉴가 열려 있으면 그쪽만, 입력창은 포커스만 푼다). 크게 보기와 같이 capture 단계
@@ -176,6 +213,9 @@ function PrReviewScreen({ repo }: { repo: string }) {
     if (items && selected == null && first) prReview.select(first.number);
   }, [items, selected, shown, pinned]);
 
+  // 현재 탭(·내 PR 묶음 규칙)을 통과했지만 검색어 때문에 가려진 수. 검색어가 없으면 0
+  const hidden = useMemo(() => (q && items ? items.filter((p) => inTab(p, tab) && !(tab !== "mine" && p.isMine)).length - shown.length : 0), [items, tab, q, shown]);
+  const clearFilters = useCallback(() => setQuery(""), []);
   const counts = useMemo(() => ({ review: (items ?? []).filter((p) => inTab(p, "review")).length, mine: (items ?? []).filter((p) => p.isMine).length, all: items?.length ?? 0 }), [items]);
   const current = items?.find((p) => p.number === selected) ?? null;
   // 나: 연결 계정 이름, 없으면(gh 로그인) 내가 올린 PR의 작성자
@@ -210,9 +250,16 @@ function PrReviewScreen({ repo }: { repo: string }) {
               </button>
             ))}
           </div>
-          <button className="prr-icon" title={t("pr.refresh")} aria-label={t("pr.refresh")} onClick={() => load()}><Icon name="fetch" size={14} /></button>
+          <button className={`prr-icon${fetching ? " busy" : ""}`} title={t("pr.refresh")} aria-label={t("pr.refresh")} aria-busy={fetching} disabled={fetching} onClick={() => load()}><Icon name="fetch" size={14} /></button>
           <button className="prr-icon" title={t("prr.list.collapse", { key: listKey })} aria-label={t("prr.list.collapse", { key: listKey })} onClick={toggleList}><Icon name="chevronLeft" size={14} /></button>
           <button className="prr-close" title={t("prr.close")} aria-label={t("prr.close")} onClick={() => prReview.close()}><Icon name="dismiss" size={13} /><span>{t("prr.closeLabel")}</span><kbd className="big-kbd">Esc</kbd></button>
+        </div>
+        <div className="prr-sub">
+          <label title={t("prr.activity.hint")}>
+            <input type="checkbox" checked={activity} onChange={(e) => setActivity(e.target.checked)} />
+            {t("prr.activity")}
+          </label>
+          {inbox?.at != null && <Ago at={inbox.at} />}
         </div>
         <label className="prr-search">
           <Icon name="search" size={13} />
@@ -243,8 +290,14 @@ function PrReviewScreen({ repo }: { repo: string }) {
           )}
           {items && !shown.length && !pinned.length && <p className="prr-note">{items.length ? (q ? t("prr.noMatch") : t("prr.emptyTab")) : t("prr.emptyAll")}</p>}
           {shown.map((p) => (
-            <Item key={p.number} p={p} on={p.number === selected} remote={target?.remote ?? ""} repo={repo} />
+            <Item key={p.number} p={p} on={p.number === selected} remote={target?.remote ?? ""} repo={repo} act={activity} />
           ))}
+          {hidden > 0 && (
+            <p className="prr-note prr-hidden" role="status">
+              {t("prr.hidden", { n: hidden })}
+              <button onClick={clearFilters}>{t("prr.hidden.clear")}</button>
+            </p>
+          )}
         </div>
       </aside>
       {listSplit}
@@ -287,8 +340,19 @@ const MineRow = memo(function MineRow({ p, on, remote }: { p: InboxPr; on: boole
   );
 });
 
-const Item = memo(function Item({ p, on, remote, repo }: { p: InboxPr; on: boolean; remote: string; repo: string }) {
+/** "n분 전 갱신" — 30초마다 이 조각만 다시 그린다 (목록·그래프는 그대로) */
+const Ago = memo(function Ago({ at }: { at: number }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => tick((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  return <small className="prr-ago">{t("prr.updated", { when: relTime(new Date(at).toISOString(), intlTag()) })}</small>;
+});
+
+const Item = memo(function Item({ p, on, remote, repo, act }: { p: InboxPr; on: boolean; remote: string; repo: string; act: boolean }) {
   const st = status(p);
+  const last = act ? p.activity?.[0] : undefined;
   return (
     <div
       role="option"
@@ -315,6 +379,11 @@ const Item = memo(function Item({ p, on, remote, repo }: { p: InboxPr; on: boole
           <span title={t("prr.card.approve")}>✓ {p.approvals}</span>
           {p.labels.map((l) => <span key={l} className="prr-label">{l}</span>)}
         </div>
+        {last && (
+          <div className="prr-item-act">
+            {t(`prr.act.${last.kind}` as Key, { who: last.actor })} · <time dateTime={last.at}>{relTime(last.at, intlTag())}</time>
+          </div>
+        )}
       </div>
     </div>
   );

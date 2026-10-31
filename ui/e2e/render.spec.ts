@@ -940,3 +940,15 @@ test("모바일: 상세·diff·파일 이동·뒤로·브랜치 시트는 커밋
   for (const id of ["MobileShell", "MobilePane"]) expect(scrolled[id], id).toBe(still[id]);
   await ctx.close();
 });
+
+test("PR 목록의 'n분 전 갱신' 타이머는 목록·그래프를 다시 그리지 않는다 (Ago 조각만)", async ({ page }) => {
+  await page.clock.install();
+  await page.keyboard.press("ControlOrMeta+p");
+  await page.getByRole("dialog", { name: "빠른 실행" }).getByRole("textbox").fill("PR 리뷰");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".prr .prr-ago")).toBeVisible();
+  const before = await renders(page);
+  await page.clock.runFor(120_000); // 30초 틱 4번 (5분 자동 새로고침 전)
+  const after = await renders(page);
+  for (const id of ["CommitGraph", "Sidebar", "Details", "Toolbar", "PrReview"]) expect(after[id], id).toBe(before[id]);
+});

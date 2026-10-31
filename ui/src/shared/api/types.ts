@@ -176,7 +176,10 @@ export interface InboxPr {
   createdAt: string; updatedAt: string; additions: number; deletions: number; labels: string[]; reviewers: string[]; approvals: number;
   myReview: "none" | "approved" | "commented" | "changes_requested"; reRequested: boolean; headSha: string; isMine: boolean; reviewRequested: boolean;
   state?: "OPEN" | "CLOSED" | "MERGED"; closedAt?: string | null; mergedAt?: string | null;
+  /** activity:true로 조회했을 때만(최신순 최대 8개) */
+  activity?: Activity[]; activityTotal?: number;
 }
+export interface Activity { kind: "approved" | "changes_requested" | "commented" | "review_requested" | "pushed" | "merged" | "closed" | "reopened"; actor: string; at: string }
 export interface PrTimelineItem { kind: "commit" | "review" | "comment"; author: string; avatar?: string; at: string; sha?: string | null; state?: string | null; body?: string | null }
 export interface PrThread { path: string; line: number | null; resolved: boolean; comments: { author: string; avatar?: string; body: string; at: string }[] }
 export interface PrDetail {

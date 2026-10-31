@@ -77,7 +77,7 @@ test("탭 필터와 검색(번호·제목·작성자·브랜치)", async ({ page
   await expect(item(page, /#131/)).toBeVisible();
   await q.fill("없는검색어");
   await expect(item(page, /.*/)).toHaveCount(1); // 묶음만 남는다
-  await expect(screen(page).locator(".prr-items > .prr-note")).toHaveCount(0);
+  await expect(screen(page).locator(".prr-items > .prr-note:not(.prr-hidden)")).toHaveCount(0);
   await q.fill("");
   await expect(item(page, /#126/)).toContainText("초안");
 });
@@ -1952,4 +1952,103 @@ test.describe("오류 코드 번역(en)", () => {
     await expect(alert).not.toContainText("raw message");
     await expect(alert.getByRole("button", { name: "Connect account…" })).toBeVisible();
   });
+});
+
+// ---- 26e 목록 보강: 최근 활동·숨김 안내·새로고침 상태·자동 새로고침 ----
+const lastInbox = async (page: Page) => JSON.parse((await callsOf(page, "pr_inbox")).at(-1)![1]);
+
+test("최근 활동 토글: 기본 꺼짐(activity:false), 켜면 activity:true로 조회·행에 활동 한 줄, 저장돼 다시 열어도 유지", async ({ page }) => {
+  await open(page, { __activity: { 131: [{ kind: "changes_requested", actor: "Alex", at: new Date(Date.now() - 2 * 3600_000).toISOString() }] } });
+  await palette(page);
+  const toggle = screen(page).getByRole("checkbox", { name: "최근 활동" });
+  await expect(item(page, /#131/)).toBeVisible();
+  await expect(toggle).not.toBeChecked();
+  expect((await lastInbox(page)).activity).toBe(false);
+  await expect(screen(page).locator(".prr-item-act")).toHaveCount(0);
+  await toggle.check();
+  await expect(item(page, /#131/).locator(".prr-item-act")).toContainText("Alex 변경 요청 ·");
+  await expect(item(page, /#128/).locator(".prr-item-act")).toContainText("Jamie 코멘트 ·"); // mock 기본: 작성자 코멘트
+  expect((await lastInbox(page)).activity).toBe(true);
+  expect(await page.evaluate(() => localStorage.getItem("prr.activity"))).toBe("1");
+  await page.keyboard.press("Escape");
+  await palette(page);
+  await expect(screen(page).getByRole("checkbox", { name: "최근 활동" })).toBeChecked();
+  await expect(item(page, /#131/).locator(".prr-item-act")).toBeVisible();
+  await screen(page).getByRole("checkbox", { name: "최근 활동" }).uncheck();
+  await expect(screen(page).locator(".prr-item-act")).toHaveCount(0);
+  expect((await lastInbox(page)).activity).toBe(false);
+});
+
+test("숨김 안내: 현재 탭 안에서 검색어에 가려진 개수만(검색어 없으면 없음, 내 PR 묶음 제외), 검색 지우기는 탭 유지", async ({ page }) => {
+  await open(page);
+  await palette(page);
+  const note = screen(page).locator(".prr-hidden");
+  const q = screen(page).getByPlaceholder("번호·제목·작성자·브랜치");
+  await expect(item(page, /#131/)).toBeVisible();
+  await expect(note).toHaveCount(0); // 리뷰 대기 탭이 다른 PR을 가려도 검색어가 없으면 안내 없음
+  await q.fill("로그인"); // 리뷰 대기 탭: 131·128 중 128만 일치 → 1개 가려짐
+  await expect(note).toContainText("1개가 검색에 가려짐");
+  await q.fill("zzzz"); // 묶음의 내 PR은 세지 않는다
+  await expect(note).toContainText("2개가 검색에 가려짐");
+  await note.getByRole("button", { name: "검색 지우기" }).click();
+  await expect(q).toHaveValue("");
+  await expect(note).toHaveCount(0);
+  await expect(screen(page).getByRole("tab", { name: /^리뷰 대기/ })).toHaveAttribute("aria-selected", "true"); // 탭 유지
+  await screen(page).getByRole("tab", { name: /^전체/ }).click();
+  await q.fill("로그인"); // 전체 탭: 내 PR 제외 6개 중 1개 일치
+  await expect(note).toContainText("5개가 검색에 가려짐");
+});
+
+test("새로고침: 조회 중에는 버튼이 돌고 비활성, 캐시를 보여 주는 중에도, 끝나면 'n분 전 갱신'", async ({ page }) => {
+  await open(page);
+  await palette(page);
+  const btn = screen(page).getByRole("button", { name: "Pull Request 새로고침" });
+  await expect(item(page, /#131/)).toBeVisible();
+  await expect(btn).toBeEnabled();
+  await expect(screen(page).locator(".prr-ago")).toContainText("갱신");
+  await page.evaluate(() => ((window as any).__slowInbox = 1500));
+  await btn.click();
+  await expect(btn).toBeDisabled();
+  await expect(btn).toHaveClass(/busy/);
+  expect(await btn.locator("svg").evaluate((e) => getComputedStyle(e).animationName)).toBe("guide-spin");
+  await expect(item(page, /#131/)).toBeVisible(); // 받아 둔 데이터는 그대로
+  await expect(btn).toBeEnabled({ timeout: 4000 });
+  // 닫았다 열면 캐시를 먼저 보이고, 그동안에도 표시
+  await page.keyboard.press("Escape");
+  await palette(page);
+  await expect(item(page, /#131/)).toBeVisible();
+  await expect(screen(page).getByRole("button", { name: "Pull Request 새로고침" })).toBeDisabled();
+  await expect(screen(page).getByRole("button", { name: "Pull Request 새로고침" })).toBeEnabled({ timeout: 4000 });
+});
+
+test("자동 새로고침: 5분마다 조용히, 숨겨지면 멈추고 돌아오면 5분 지났을 때 즉시, 실패해도 데이터 유지", async ({ page }) => {
+  await page.clock.install();
+  await open(page);
+  await palette(page);
+  await expect(item(page, /#131/)).toBeVisible();
+  const n = async () => (await callsOf(page, "pr_inbox")).length;
+  expect(await n()).toBe(1);
+  await page.clock.runFor(4 * 60_000);
+  expect(await n()).toBe(1);
+  await page.clock.runFor(61_000);
+  await expect.poll(n).toBe(2);
+  const hide = (v: "hidden" | "visible") => page.evaluate((s) => (Object.defineProperty(document, "visibilityState", { configurable: true, get: () => s }), document.dispatchEvent(new Event("visibilitychange"))), v);
+  await hide("hidden");
+  await page.clock.runFor(12 * 60_000);
+  expect(await n()).toBe(2); // 숨겨진 동안은 안 받는다
+  await page.evaluate(() => ((window as any).__inboxFail = "boom"));
+  await hide("visible"); // 5분 넘게 지났으니 즉시
+  await expect.poll(n).toBe(3);
+  await expect(screen(page).locator(".prr-items [role=alert]")).toContainText("boom");
+  await expect(item(page, /#131/)).toBeVisible(); // 실패해도 데이터 유지
+});
+
+test("목록 보강 스크린샷(라이트·다크): 활동 줄·숨김 안내·갱신 글", async ({ page }, info) => {
+  await open(page);
+  await palette(page);
+  await screen(page).getByRole("checkbox", { name: "최근 활동" }).check();
+  await expect(item(page, /#131/).locator(".prr-item-act")).toBeVisible();
+  await screen(page).getByPlaceholder("번호·제목·작성자·브랜치").fill("로그인");
+  await expect(screen(page).locator(".prr-hidden")).toBeVisible();
+  await page.screenshot({ path: `e2e/results/screens/pr-activity-${info.project.name}.png` });
 });
