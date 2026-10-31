@@ -9,6 +9,8 @@
 - CI: `.github/workflows/ci.yml`(Rust·mock E2E, macOS·ubuntu·windows), `vscode.yml`(VSIX 4종 + Linux xvfb 스모크). 푸시는 gh 계정 goldtagworks로.
 - 사용자가 이 Mac에서 작업 중일 때는 창 뜨는 테스트(e2e:app, VS Code 스모크)를 묻고 돌린다.
 
+- **다음 세션 첫 할 일 (27g 마무리)**: 에뮬레이터 `git403-phone`에서 실제 GitHub 저장소로 설정 > 계정에 토큰 추가(Keystore 봉인 저장 `secrets.enc` 생성·평문 없음 확인) → https clone → 수정·커밋 → push → 원격 반영 확인. 테스트용 저장소·토큰은 사용자에게 받는다. 27g(1)~(4)는 mock·교차 테스트·로컬 http-backend와 에뮬레이터(커밋·강제 종료·키보드)로 확인됨, 실제 GitHub 인증 push와 Keystore 실제 암복호만 미확인.
+
 다음 후보
 - VS Code 마켓플레이스 배포 준비: publisher `git403` 등록·PAT, `vsce publish` CI 잡, CHANGELOG, 아이콘·README 스크린샷.
 - 실제 앱 OS 연동 중 아직 확인 안 한 것 (`e2e:native`에 단계로 추가하는 방식):
