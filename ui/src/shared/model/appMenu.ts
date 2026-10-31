@@ -108,7 +108,7 @@ export function appMenuModel(s: AppMenuState, d: AppMenuDeps): MenuEntry[] {
     submenu: [
       { label: t("toolbar.fetch"), op: "fetch", action: idle(ops.fetch), disabled: no, accelerator: key(`${MOD}+Shift+F`) },
       { label: t("toolbar.pull"), op: "pull", action: idle(ops.pullQuick), disabled: no, accelerator: key(`${MOD}+Shift+L`) },
-      { label: t("toolbar.pullOpts"), op: "pull", action: idle(ops.pull), disabled: no },
+      { label: t("toolbar.pullOpts"), op: "pull_opts", action: idle(ops.pull), disabled: no },
       { label: t("toolbar.push"), op: "push", action: idle(ops.pushQuick), disabled: no, accelerator: key(`${MOD}+Shift+P`) },
       { label: t("toolbar.pushOpts"), op: "push", action: idle(ops.push), disabled: no },
       sep,

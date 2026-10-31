@@ -12,6 +12,7 @@ import { atCommit, stashMenu } from "../../shared/model/menus";
 import { pick, useActive } from "../../shared/model/selection";
 import { PrSection } from "../../features/hosting/PrSection";
 import type { Ref, RefKind, Submodule, Worktree } from "../../shared/api/types";
+import { isMobile } from "../../shared/lib/platform";
 
 const SECTIONS: { kind: RefKind; label: Key; icon: IconName }[] = [
   { kind: "local", label: "sidebar.branches", icon: "branch" },
@@ -88,12 +89,12 @@ function refMenu(r: Ref, repo: string): MenuEntry[] {
         ...(r.head
           ? [
               { label: t("toolbar.pull"), op: "pull", action: ops.pullQuick },
-              { label: t("toolbar.pullOpts"), op: "pull", action: ops.pull },
+              { label: t("toolbar.pullOpts"), op: "pull_opts", action: ops.pull },
               { label: t("toolbar.push"), op: "push", action: ops.pushQuick },
               { label: t("toolbar.pushOpts"), op: "push", action: ops.push },
             ]
           : []),
-        { label: t("sidebar.setUpstream"), op: "branch", action: () => ops.setUpstream(r.name) },
+        { label: t("sidebar.setUpstream"), op: "upstream", action: () => ops.setUpstream(r.name) },
         { separator: true },
         { label: t("sidebar.checkout"), op: "switch", action: () => ops.checkout(r.name), disabled: r.head },
         { label: t("sidebar.merge"), op: "merge", action: () => ops.merge(r.name), disabled: r.head },
@@ -393,7 +394,7 @@ export const Sidebar = memo(function Sidebar({ repo, refs, submodules, worktrees
         <input
           ref={filterRef}
           value={q}
-          placeholder={t("sidebar.filter", { key: /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘⌥F" : "Ctrl+Alt+F" })}
+          placeholder={isMobile ? t("sidebar.filterLabel") : t("sidebar.filter", { key: /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘⌥F" : "Ctrl+Alt+F" })}
           aria-label={t("sidebar.filterLabel")}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === "Escape" && (q ? setQ("") : e.currentTarget.blur())}

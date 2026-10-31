@@ -47,7 +47,7 @@ export function QuickLaunch({ recent, onOpen, onClose }: { recent: string[]; onO
       ...(bigView.avail || bigView.open ? [{ label: t("quick.big"), run: bigView.toggle }] : []), // 보여 줄 diff가 없으면 항목을 숨긴다
       { label: "Fetch", op: "fetch", run: ops.fetch },
       { label: "Pull", op: "pull", run: ops.pullQuick },
-      { label: "Pull…", hint: t("quick.h3"), op: "pull", run: ops.pull },
+      { label: "Pull…", hint: t("quick.h3"), op: "pull_opts", run: ops.pull },
       { label: "Push", op: "push", run: ops.pushQuick },
       { label: "Push…", hint: t("quick.h3"), op: "push", run: ops.push },
       { label: t("prr.title"), run: () => ops.prReview() },

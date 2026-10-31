@@ -1327,7 +1327,11 @@ html[data-mobile] { touch-action: manipulation; -webkit-tap-highlight-color: tra
 html[data-mobile] :where(button, select, input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"])) { min-height: 44px; }
 html[data-mobile] :where(.sheet-actions, .commit-btns) button, html[data-mobile] .sheet-body > form :where(button:not(.tool-ico, .tool-txt)) { min-height: 44px; }
 html[data-mobile] input[type="checkbox"], html[data-mobile] input[type="radio"] { width: 22px; height: 22px; }
-html[data-mobile] .sidebar { font-size: 15px; }
+html[data-mobile] .sidebar { font-size: 15px; overflow: auto; }
+/* 모바일엔 섹션 높이 조절이 없다: 섹션은 내용 높이, 시트·서랍 전체가 스크롤 (저장된 grow·분할선 무시) */
+html[data-mobile] .sidebar > section { flex: none !important; min-height: 0; overflow: visible; }
+html[data-mobile] .sidebar > section > .section-body { overflow: visible; }
+html[data-mobile] .sidebar > section::before { display: none; }
 html[data-mobile] .sidebar button { padding-top: 10px; padding-bottom: 10px; }
 html[data-mobile] .palette li, html[data-mobile] .files li { min-height: 44px; }
 /* 터치에는 hover가 없고 손을 뗀 뒤에도 :hover가 남는다(sticky hover): hover 배경은 끄고 눌림(:active)만 보인다 */

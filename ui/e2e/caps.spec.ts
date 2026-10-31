@@ -61,7 +61,7 @@ test("지원 작업이 제한되면 툴바 버튼·메뉴 막대·빠른 실행�
 });
 
 test("지원 제한 화면의 툴바 드롭다운에서 미지원 항목이 빠진다", async ({ page }) => {
-  await start(page, { all: false, ops: ["fetch", "pull"] });
+  await start(page, { all: false, ops: ["fetch", "pull", "pull_opts"] }); // "Pull…"은 op pull_opts (gix는 --rebase·--autostash를 못 받아 숨김)
   await page.locator(".toolbar").getByRole("button", { name: "Pull 옵션" }).click();
   await expect(page.getByRole("menuitem", { name: "옵션 선택해서 Pull…" })).toBeVisible();
 });

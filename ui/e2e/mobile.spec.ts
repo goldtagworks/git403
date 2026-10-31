@@ -6,7 +6,7 @@ const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KH
 const ROOT = "/data/user/0/app.git403/files/repos";
 const GIX = {
   all: false,
-  ops: ["read_log", "head_commit", "read_refs", "read_status", "changed_files", "file_diff", "worktree_diff", "file_blob", "commit_message", "committer", "stage", "unstage", "commit", "clone"],
+  ops: ["read_log", "head_commit", "read_refs", "read_status", "changed_files", "file_diff", "worktree_diff", "file_blob", "commit_message", "committer", "stage", "unstage", "commit", "clone", "fetch", "branch", "switch", "pull"],
 };
 const PHONES = [{ width: 390, height: 844 }, { width: 412, height: 915 }];
 const TABLETS = [{ width: 1280, height: 800 }, { width: 800, height: 1280 }];
@@ -138,7 +138,8 @@ for (const size of [...PHONES, ...TABLETS]) {
     await press(page, "로그 파서");
     const menu = page.getByRole("menu");
     await expect(menu.getByRole("menuitem", { name: "SHA 복사" })).toBeVisible();
-    for (const n of [/새 브랜치/, /cherry-pick/, /머지/, /revert/, /Reset/i, /태그/]) await expect(menu.getByRole("menuitem", { name: n })).toHaveCount(0);
+    await expect(menu.getByRole("menuitem", { name: /새 브랜치/ })).toBeVisible(); // 27g(1): gix branch·switch
+    for (const n of [/cherry-pick/, /머지/, /revert/, /Reset/i, /태그/]) await expect(menu.getByRole("menuitem", { name: n })).toHaveCount(0);
     expect((await menu.getByRole("menuitem").first().boundingBox())!.height).toBeGreaterThanOrEqual(44);
     const box = (await menu.boundingBox())!;
     expect(Math.abs(box.y + box.height - size.height)).toBeLessThan(2); // 화면 바닥에 붙는다
@@ -172,6 +173,9 @@ for (const size of [...PHONES, ...TABLETS]) {
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
     for (const n of ["main", "feature", "원격", "태그", "스태시"]) await expect(sheet.getByText(n, { exact: false }).first()).toBeVisible();
     for (const n of ["보기", "Pull Request", "서브모듈"]) await expect(sheet.getByText(n, { exact: true })).toHaveCount(0); // 서랍·시트엔 브랜치·태그·원격·스태시만
+    await expect(sheet.getByRole("textbox")).toHaveAttribute("placeholder", "사이드바 필터"); // 단축키 안내 없음
+    // 섹션은 내용 높이: 마지막 원격 브랜치까지 섹션 안쪽 스크롤 없이 이어진다
+    for (const sec of await sheet.locator("section[data-sec] > .section-body").all()) expect(await sec.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
     await shot(page, "branches", size, info);
     await page.goBack(); // Android 뒤로: 시트만 닫힌다
     await expect(sheet).toHaveCount(0);

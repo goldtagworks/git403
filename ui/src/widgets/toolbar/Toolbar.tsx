@@ -172,7 +172,7 @@ export const Toolbar = memo(function Toolbar(p: Props) {
       <div className="spacer" data-tauri-drag-region />
 
       <Tool op="fetch" icon="fetch" label={t("toolbar.fetch")} onClick={ops.fetch} disabled={none || p.busy} why={none ? needRepo : busyWhy} />
-      <Tool op="pull" icon="pull" label={t("toolbar.pull")} onClick={ops.pullQuick} menu={() => [{ label: t("toolbar.pullOpts"), op: "pull", action: ops.pull }]} badge={p.status?.behind} disabled={none || p.busy} why={none ? needRepo : busyWhy} />
+      <Tool op="pull" icon="pull" label={t("toolbar.pull")} onClick={ops.pullQuick} menu={() => [{ label: t("toolbar.pullOpts"), op: "pull_opts", action: ops.pull }]} badge={p.status?.behind} disabled={none || p.busy} why={none ? needRepo : busyWhy} />
       <Tool op="push" icon="push" label={t("toolbar.push")} onClick={ops.pushQuick} menu={() => [{ label: t("toolbar.pushOpts"), op: "push", action: ops.push }, { separator: true }, { label: t("toolbar.createPr"), action: () => ops.createPr(), disabled: !p.status?.branch }]} badge={p.status?.ahead} disabled={none || p.busy} why={none ? needRepo : busyWhy} />
       <div className="tool-sep" />
       <Tool op="branch" icon="newBranch" label={t("toolbar.branch")} onClick={() => ops.createBranch()} disabled={none} why={needRepo} />

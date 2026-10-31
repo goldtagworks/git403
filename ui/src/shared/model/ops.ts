@@ -470,8 +470,9 @@ export const ops = {
     const set = (await api.git(ctx.repo, ["config", "--get", "pull.rebase"]).catch(() => "")).trim();
     // 추적 브랜치를 명시한다 — branch.<b>.merge가 여러 줄이면 맨 `git pull`은 "Cannot fast-forward to multiple branches"로 멈춘다.
     const up = ctx.status?.upstream, i = up?.indexOf("/") ?? -1;
+    // 모바일(gix)은 `--ff-only`만 받는다 — `pull.rebase=true`면 gix가 거절한다
     const target = up && i > 0 ? [up.slice(0, i), up.slice(i + 1)] : [];
-    ctx.job("Pull", ["pull", "--progress", ...(set ? ["--autostash"] : ["--ff-only"]), ...target], { remote: true, track: "pull" });
+    ctx.job("Pull", ["pull", "--progress", ...(set && !isMobile ? ["--autostash"] : ["--ff-only"]), ...target], { remote: true, track: "pull" });
   },
   pull: async () => {
     const r = await prompt({
