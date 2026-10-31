@@ -72,3 +72,25 @@ test("git.unsupported 오류는 번역된 문구로 보인다", async ({ page })
   await page.locator(".toolbar").getByRole("button", { name: "Push", exact: true }).click();
   await expect(page.getByText("이 환경에서는 지원하지 않는 작업입니다: push")).toBeVisible();
 });
+
+test("gix push는 단순 모양만: Push 대화상자에 태그·강제 체크가 없고, 원격 브랜치 삭제·태그 push는 숨는다 (op push_tags·push_force·push_delete·push_tag)", async ({ page }) => {
+  await start(page, { all: false, ops: ["read_log", "read_refs", "read_status", "push", "tag", "branch"] });
+  await page.locator(".toolbar").getByRole("button", { name: "Push 옵션" }).click();
+  await page.getByRole("menuitem", { name: "옵션 선택해서 Push…" }).click();
+  const dlg = page.getByRole("dialog");
+  await expect(dlg.getByText("태그도 모두 push")).toHaveCount(0);
+  await expect(dlg.getByText("강제 push (--force-with-lease)")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.locator('.sidebar section[data-sec="remote"]').getByText("main", { exact: true }).click({ button: "right" });
+  await expect(page.getByRole("menu")).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: /삭제/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+});
+
+test("데스크탑(all:true)은 Push 대화상자에 태그·강제 체크가 그대로 있다", async ({ page }) => {
+  await start(page);
+  await page.locator(".toolbar").getByRole("button", { name: "Push 옵션" }).click();
+  await page.getByRole("menuitem", { name: "옵션 선택해서 Push…" }).click();
+  await expect(page.getByRole("dialog").getByText("태그도 모두 push")).toBeVisible();
+  await expect(page.getByRole("dialog").getByText("강제 push (--force-with-lease)")).toBeVisible();
+});

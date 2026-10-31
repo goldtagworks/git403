@@ -126,7 +126,7 @@ function refMenu(r: Ref, repo: string): MenuEntry[] {
         { separator: true },
         { label: t("sidebar.prInto"), action: () => ops.createPr(undefined, r.name), disabled: !ops.head() },
         { separator: true },
-        { label: t("sidebar.deleteRemote"), op: "push", action: () => ops.deleteRemoteBranch(r.name) },
+        { label: t("sidebar.deleteRemote"), op: "push_delete", action: () => ops.deleteRemoteBranch(r.name) },
         { separator: true },
         { label: t("sidebar.copyName"), action: () => ops.copy(r.name) },
         ...hideEntry(r, repo),
@@ -134,7 +134,7 @@ function refMenu(r: Ref, repo: string): MenuEntry[] {
       ];
     case "tag":
       return [
-        { label: "Push", op: "push", action: () => ops.pushTag(r.name) },
+        { label: "Push", op: "push_tag", action: () => ops.pushTag(r.name) },
         { separator: true },
         { label: t("sidebar.merge"), op: "merge", action: () => ops.merge(r.name) },
         { label: t("sidebar.rebase"), op: "rebase", action: () => ops.rebase(r.name) },

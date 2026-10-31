@@ -6,7 +6,7 @@ const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KH
 const ROOT = "/data/user/0/app.git403/files/repos";
 const GIX = {
   all: false,
-  ops: ["read_log", "head_commit", "read_refs", "read_status", "changed_files", "file_diff", "worktree_diff", "file_blob", "commit_message", "committer", "stage", "unstage", "commit", "clone", "fetch", "branch", "switch", "pull"],
+  ops: ["read_log", "head_commit", "read_refs", "read_status", "changed_files", "file_diff", "worktree_diff", "file_blob", "commit_message", "committer", "stage", "unstage", "commit", "clone", "fetch", "branch", "switch", "pull", "push"],
 };
 const PHONES = [{ width: 390, height: 844 }, { width: 412, height: 915 }];
 const TABLETS = [{ width: 1280, height: 800 }, { width: 800, height: 1280 }];

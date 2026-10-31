@@ -589,7 +589,7 @@ async fn capabilities가_구현한_작업만_나열한다() {
     for op in ["read_log", "read_status", "commit", "clone"] {
         assert!(g.supports(&gc_core::Op(op)));
     }
-    for op in ["push", "blame", "discard", "file_log", "rebase_interactive"] {
+    for op in ["merge", "blame", "discard", "file_log", "rebase_interactive"] {
         assert!(!g.supports(&gc_core::Op(op)), "{op}");
     }
     let d = tempfile::tempdir().unwrap();
@@ -731,7 +731,7 @@ async fn fetch가_같다() {
     assert_eq!(refs(a.path()), refs(b2.path()));
     // 해석하지 않는 인자는 Unsupported
     let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-    for argv in [&["fetch", "--all", "--prune"][..], &["pull"], &["push"], &["fetch", "--tags"]] {
+    for argv in [&["fetch", "--all", "--prune"][..], &["pull"], &["push", "--force"], &["fetch", "--tags"]] {
         assert!(matches!(g.spawn_job(d, argv, None, tx.clone()), Err(gc_core::Error::Unsupported(_))), "{argv:?}");
     }
     // 없는 원격은 오류
@@ -1838,10 +1838,10 @@ async fn pull은_맞지_않는_모양과_조건을_거절한다() {
 #[tokio::test]
 async fn capabilities가_27g1_작업을_나열한다() {
     let g = GixBackend::new();
-    for op in ["fetch", "branch", "switch", "pull"] {
+    for op in ["fetch", "branch", "switch", "pull", "push"] {
         assert!(g.supports(&gc_core::Op(op)), "{op}");
     }
-    for op in ["push", "merge", "stash", "checkout"] {
+    for op in ["merge", "stash", "checkout"] {
         assert!(!g.supports(&gc_core::Op(op)), "{op}");
     }
 }

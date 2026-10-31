@@ -46,6 +46,10 @@ required-features = ["cli", "gix"]
 name = "gix_cross"
 required-features = ["cli", "gix"]
 
+[[test]]
+name = "gix_push"
+required-features = ["cli", "gix"]
+
 [dependencies]
 async-trait = "0.1"
 gc-i18n = { path = "../i18n" }
@@ -68,3 +72,5 @@ libc = { version = "0.2", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
+# 시험의 HTTP 서버는 평문(http)이다. 운영에서는 gix가 http로는 자격 증명을 안 보내므로(`AuthenticationRefused`) 인증 성공 시험에만 켠다.
+gix-transport = { version = "0.62", features = ["http-client-insecure-credentials"] }

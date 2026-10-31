@@ -373,6 +373,7 @@ const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const confirm = (message: string, title: string) => ask(message, { title, kind: "warning" });
 
 import { isMac, isMobile, isWin } from "../lib/platform";
+import { supports } from "../lib/caps";
 export { isMac, isWin };
 /** 파일을 파일 관리자에서 선택해 보여 주는 항목의 이름 (OS별) */
 export const revealLabel = () => t(isMac ? "ops.reveal.mac" : isWin ? "ops.reveal.win" : "ops.reveal.other");
@@ -503,8 +504,8 @@ export const ops = {
         { kind: "select", name: "branch", label: t("ops.f.branch"), options: locals(), value: head() ?? undefined },
         { kind: "select", name: "remote", label: t("ops.f.remote"), options: remotes() },
         { kind: "check", name: "track", label: t("ops.push.track"), value: !ctx.status?.upstream },
-        { kind: "check", name: "tags", label: t("ops.push.tags") },
-        { kind: "check", name: "force", label: t("ops.push.force") },
+        ...(supports("push_tags") ? [{ kind: "check", name: "tags", label: t("ops.push.tags") } as Field] : []),
+        ...(supports("push_force") ? [{ kind: "check", name: "force", label: t("ops.push.force") } as Field] : []),
       ],
       submit: "Push",
       danger: (v) => !!v.force,
@@ -628,7 +629,7 @@ export const ops = {
       fields: [
         { kind: "text", name: "name", label: t("ops.f.name"), placeholder: "v1.0.0" },
         { kind: "text", name: "message", label: t("ops.tag.message"), placeholder: "" },
-        { kind: "check", name: "push", label: t("ops.tag.pushAfter") },
+        ...(supports("push_tag") ? [{ kind: "check", name: "push", label: t("ops.tag.pushAfter") } as Field] : []),
       ],
       submit: t("ops.create"),
     });
@@ -642,7 +643,7 @@ export const ops = {
     const r = await prompt({
       title: t("ops.tag.delete"),
       message: t("ops.tag.deleting", { name }),
-      fields: [{ kind: "check", name: "remote", label: t("ops.tag.remoteToo") }],
+      fields: supports("push_delete") ? [{ kind: "check", name: "remote", label: t("ops.tag.remoteToo") }] : [],
       submit: t("ops.deleteBtn"),
       danger: true,
     });
