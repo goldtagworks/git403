@@ -7,6 +7,7 @@
 //! 모든 gix 호출은 블로킹이라 `spawn_blocking`에서 돈다(저장소는 호출마다 연다).
 
 mod argv;
+mod auth;
 mod branch;
 mod cfgwrite;
 mod clone;
@@ -23,6 +24,8 @@ mod switch;
 mod textdiff;
 mod tree;
 mod write;
+
+pub use auth::{set_token_source, TokenSource};
 
 use std::path::Path;
 

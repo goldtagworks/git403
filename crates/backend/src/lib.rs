@@ -127,6 +127,10 @@ impl Backend {
         config_dir: PathBuf,
         initial_repo: Option<String>,
     ) -> Self {
+        #[cfg(target_os = "android")]
+        gc_hosting::init_secret_dir(&config_dir);
+        #[cfg(feature = "gix")]
+        gc_core::gix_backend::set_token_source(Some(Arc::new(hosting::AccountTokens(hosting::Hosting::new(&config_dir).accounts()))));
         Self(Arc::new(Inner {
             backend,
             #[cfg(feature = "cli")]

@@ -29,6 +29,19 @@ pub(crate) struct Hosting {
     avatars: Arc<AvatarCache>,
 }
 
+/// gix 인증용: 원격 호스트에 연결된 앱 계정의 (사용자 이름, 토큰). 저장된 토큰이 없으면 None.
+#[cfg(feature = "gix")]
+pub(crate) struct AccountTokens(pub Accounts<Keychain>);
+
+#[cfg(feature = "gix")]
+impl gc_core::gix_backend::TokenSource for AccountTokens {
+    fn token(&self, host: &str) -> Option<(String, String)> {
+        let account = self.0.list().ok()?.into_iter().find(|a| a.on_host(host))?;
+        let token = self.0.token(&account).ok()??;
+        Some((account.username, token))
+    }
+}
+
 impl Hosting {
     pub fn new(config_dir: &Path) -> Self {
         Self { path: config_dir.join("accounts.json"), avatars: Default::default() }

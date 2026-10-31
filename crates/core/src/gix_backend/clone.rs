@@ -125,7 +125,11 @@ fn clone(url: gix::url::Url, stored: &str, dest: &Path, dir: &str, stop: &Atomic
 
 fn clone_into(url: gix::url::Url, stored: &str, dest: &Path, stop: &AtomicBool) -> Result<()> {
     let mut prep = gix::prepare_clone(url, dest).map_err(fail)?;
-    let (mut checkout, _) = prep.fetch_then_checkout(gix::progress::Discard, stop).map_err(fail)?;
+    prep = prep.configure_connection(|conn| {
+        conn.set_credentials(super::auth::authenticator(conn.remote().repo().clone()));
+        Ok(())
+    });
+    let (mut checkout, _) = prep.fetch_then_checkout(gix::progress::Discard, stop).map_err(super::auth::map_error)?;
     if stop.load(Ordering::SeqCst) {
         return Err(Error::Cancelled);
     }

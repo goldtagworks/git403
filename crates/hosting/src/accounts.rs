@@ -8,15 +8,17 @@ pub trait SecretStore: Send + Sync {
     fn delete(&self, key: &str) -> Result<()>;
 }
 
-/// 서비스 "git403", 사용자 `<provider>:<host>:<username>`
+/// 서비스 "git403", 사용자 `<provider>:<host>:<username>`. Android에는 keyring 백엔드가 없어(메모리 mock) 앱 전용 폴더의 `FileSecrets`를 쓴다.
 pub struct Keychain;
 
+#[cfg(not(target_os = "android"))]
 impl Keychain {
     fn entry(key: &str) -> Result<keyring::Entry> {
         keyring::Entry::new("git403", key).map_err(|e| Error::Store(e.to_string()))
     }
 }
 
+#[cfg(not(target_os = "android"))]
 impl SecretStore for Keychain {
     fn set(&self, key: &str, secret: &str) -> Result<()> {
         Self::entry(key)?.set_password(secret).map_err(|e| Error::Store(e.to_string()))
@@ -33,6 +35,96 @@ impl SecretStore for Keychain {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(Error::Store(e.to_string())),
         }
+    }
+}
+
+/// Android: `init_secret_dir`로 정한 앱 전용 폴더의 `FileSecrets`.
+#[cfg(target_os = "android")]
+static SECRET_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// 앱 시작 때 한 번(앱 전용 내부 저장소 폴더). Android 전용.
+#[cfg(target_os = "android")]
+pub fn init_secret_dir(dir: &std::path::Path) {
+    let _ = SECRET_DIR.set(dir.to_path_buf());
+}
+
+#[cfg(target_os = "android")]
+impl Keychain {
+    fn file() -> Result<FileSecrets> {
+        SECRET_DIR.get().map(|d| FileSecrets { path: d.join("secrets.json") }).ok_or_else(|| Error::Store("secret store is not initialized".into()))
+    }
+}
+
+#[cfg(target_os = "android")]
+impl SecretStore for Keychain {
+    fn set(&self, key: &str, secret: &str) -> Result<()> {
+        Self::file()?.set(key, secret)
+    }
+    fn get(&self, key: &str) -> Result<Option<String>> {
+        Self::file()?.get(key)
+    }
+    fn delete(&self, key: &str) -> Result<()> {
+        Self::file()?.delete(key)
+    }
+}
+
+/// 토큰을 JSON 파일 하나(`{키: 토큰}`)에 저장한다. 파일 권한 0600(소유자만), 쓸 때 임시 파일 → fsync → rename → 폴더 fsync.
+/// OS 키체인이 없는 곳(Android: 앱 전용 내부 저장소라 다른 앱이 못 읽는다)용이며 한 프로세스 안에서는 잠금으로 직렬화한다.
+pub struct FileSecrets {
+    pub path: PathBuf,
+}
+
+static FILE_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
+
+impl FileSecrets {
+    fn load(&self) -> Result<std::collections::BTreeMap<String, String>> {
+        match std::fs::read_to_string(&self.path) {
+            Ok(t) => serde_json::from_str(&t).map_err(|e| Error::Store(e.to_string())),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Default::default()),
+            Err(e) => Err(Error::Store(e.to_string())),
+        }
+    }
+
+    fn store(&self, map: &std::collections::BTreeMap<String, String>) -> Result<()> {
+        use std::io::Write;
+        let io = |e: std::io::Error| Error::Store(e.to_string());
+        let dir = self.path.parent().ok_or_else(|| Error::Store("no parent directory".into()))?;
+        std::fs::create_dir_all(dir).map_err(io)?;
+        let tmp = self.path.with_extension("json.tmp");
+        let _ = std::fs::remove_file(&tmp);
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create_new(true);
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut opts, 0o600);
+        let mut f = opts.open(&tmp).map_err(io)?;
+        f.write_all(serde_json::to_string(map).map_err(|e| Error::Store(e.to_string()))?.as_bytes()).and_then(|()| f.sync_all()).map_err(io)?;
+        std::fs::rename(&tmp, &self.path).map_err(io)?;
+        #[cfg(unix)]
+        if let Ok(d) = std::fs::File::open(dir) {
+            let _ = d.sync_all();
+        }
+        Ok(())
+    }
+}
+
+impl SecretStore for FileSecrets {
+    fn set(&self, key: &str, secret: &str) -> Result<()> {
+        let _g = FILE_LOCK.lock();
+        let mut m = self.load()?;
+        m.insert(key.to_owned(), secret.to_owned());
+        self.store(&m)
+    }
+    fn get(&self, key: &str) -> Result<Option<String>> {
+        let _g = FILE_LOCK.lock();
+        Ok(self.load()?.get(key).cloned())
+    }
+    fn delete(&self, key: &str) -> Result<()> {
+        let _g = FILE_LOCK.lock();
+        let mut m = self.load()?;
+        if m.remove(key).is_some() {
+            self.store(&m)?;
+        }
+        Ok(())
     }
 }
 
@@ -110,6 +202,25 @@ mod tests {
             self.0.lock().unwrap().remove(k);
             Ok(())
         }
+    }
+
+    #[test]
+    fn file_secrets는_0600으로_저장하고_지운다() {
+        let dir = std::env::temp_dir().join(format!("gc-hosting-fs-{}", std::process::id()));
+        let fs = FileSecrets { path: dir.join("secrets.json") };
+        assert_eq!(fs.get("a").unwrap(), None);
+        fs.set("a", "t1").unwrap();
+        fs.set("b", "t2").unwrap();
+        fs.set("a", "t3").unwrap();
+        assert_eq!(fs.get("a").unwrap().as_deref(), Some("t3"));
+        #[cfg(unix)]
+        assert_eq!(std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(&fs.path).unwrap().permissions()) & 0o777, 0o600);
+        fs.delete("a").unwrap();
+        fs.delete("nope").unwrap();
+        assert_eq!(fs.get("a").unwrap(), None);
+        assert_eq!(fs.get("b").unwrap().as_deref(), Some("t2"));
+        assert!(!dir.join("secrets.json.tmp").exists());
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[tokio::test]

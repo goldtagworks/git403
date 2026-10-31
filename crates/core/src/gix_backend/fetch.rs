@@ -122,11 +122,9 @@ pub(super) fn fetch_remote(repo: &Path, remote: Option<&str>, specs: Option<&[St
     if specs.is_none() {
         opts.extra_refspecs.push(gix::refspec::parse("HEAD".into(), gix::refspec::parse::Operation::Fetch).map_err(fail)?.to_owned());
     }
-    let prepare = remote
-        .connect(Direction::Fetch)
-        .map_err(fail)?
-        .prepare_fetch(gix::progress::Discard, opts)
-        .map_err(fail)?;
+    let mut conn = remote.connect(Direction::Fetch).map_err(super::auth::map_error)?;
+    conn.set_credentials(super::auth::authenticator(r.clone()));
+    let prepare = conn.prepare_fetch(gix::progress::Discard, opts).map_err(super::auth::map_error)?;
     let outcome = prepare.receive(gix::progress::Discard, stop).map_err(fail)?;
     if stop.load(Ordering::SeqCst) {
         return Err(Error::Cancelled);

@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Once};
 use std::time::Duration;
 
-use gc_core::gix_backend::GixBackend;
+use gc_core::gix_backend::{set_token_source, GixBackend, TokenSource};
 use gc_core::{CliBackend, Error, GitBackend, GitRunner, JobEvent};
 
 /// 사용자의 전역 설정(키체인 도우미 등)이 시험에 끼지 않게 한다. 환경은 프로세스 공유라 모든 시험이 맨 먼저 부른다.
@@ -660,7 +660,7 @@ async fn 받을_수_없는_모양과_설정은_거절한다() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn 인증은_url의_자격_증명을_쓰고_실패하면_git처럼_128이다() {
+async fn 인증은_url의_자격_증명을_쓰고_실패하면_hosting_unauthorized다() {
     let base = base();
     let auth = Some(("user", "secret"));
     // 맞는 토큰: 성공하고 결과가 CLI와 같다
@@ -687,7 +687,7 @@ async fn 인증은_url의_자격_증명을_쓰고_실패하면_git처럼_128이�
         let (code, cli_err, res, err, _, b) = run(creds).await;
         assert_eq!(code, Some(128), "{cli_err}");
         match res {
-            Err(Error::Exit { code: Some(128), stderr }) => assert!(stderr.starts_with("fatal: "), "{stderr}"),
+            Err(Error::Coded(c)) => assert_eq!(c.code, "hosting.unauthorized", "{c:?}"),
             other => panic!("{creds:?}: {other:?} {err:?}"),
         }
         assert!(!git(&b.remote(), &["log", "--format=%s", "main"]).contains("c2"));
@@ -716,4 +716,126 @@ async fn 취소하면_원격은_바뀌지_않거나_끝까지_올라간다() {
         }
         git(&env.remote(), &["fsck", "--strict", "--no-dangling"]);
     }
+}
+
+// ---------- 앱 계정 토큰 ----------
+
+/// 시험용 `TokenSource`: `host:port` → (사용자, 토큰). 포트가 시험마다 달라 서로 겹치지 않는다.
+struct Tokens(std::sync::Mutex<HashMap<String, (String, String)>>);
+
+impl TokenSource for Tokens {
+    fn token(&self, host: &str) -> Option<(String, String)> {
+        self.0.lock().unwrap().get(host).cloned()
+    }
+}
+
+fn tokens() -> &'static Tokens {
+    static T: std::sync::OnceLock<&'static Tokens> = std::sync::OnceLock::new();
+    T.get_or_init(|| {
+        let t: &'static Tokens = Box::leak(Box::new(Tokens(Default::default())));
+        struct Forward(&'static Tokens);
+        impl TokenSource for Forward {
+            fn token(&self, host: &str) -> Option<(String, String)> {
+                self.0.token(host)
+            }
+        }
+        set_token_source(Some(Arc::new(Forward(t))));
+        t
+    })
+}
+
+/// `dir` 아래 모든 파일(.git 포함)의 바이트에 `needle`이 없어야 한다.
+fn assert_absent(dir: &Path, needle: &str) {
+    fn walk(p: &Path, needle: &[u8], hits: &mut Vec<PathBuf>) {
+        for e in fs::read_dir(p).unwrap().flatten() {
+            let path = e.path();
+            if path.is_dir() {
+                walk(&path, needle, hits);
+            } else if let Ok(b) = fs::read(&path) {
+                if b.windows(needle.len()).any(|w| w == needle) {
+                    hits.push(path);
+                }
+            }
+        }
+    }
+    let mut hits = Vec::new();
+    walk(dir, needle.as_bytes(), &mut hits);
+    assert!(hits.is_empty(), "토큰이 파일에 남았다: {hits:?}");
+}
+
+fn port_of(e: &Env) -> u16 {
+    e._server.as_ref().unwrap().port
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn 계정_토큰으로_clone_fetch_pull_push가_되고_토큰은_어디에도_남지_않는다() {
+    let base = base();
+    let t = tokens();
+    let env = env_of(base.path(), Kind::Http, Some(("kim", "s3cr3t-tok")), None);
+    t.0.lock().unwrap().insert(format!("127.0.0.1:{}", port_of(&env)), ("kim".into(), "s3cr3t-tok".into()));
+    let url = format!("http://127.0.0.1:{}/o.git", port_of(&env));
+    let g = GixBackend::new();
+    let mut all_lines: Vec<String> = Vec::new();
+    let mut keep = |ev: &[JobEvent]| {
+        for e in ev {
+            match e {
+                JobEvent::Stdout { line } | JobEvent::Progress { line } => all_lines.push(line.clone()),
+                JobEvent::Finished { .. } => {}
+            }
+        }
+    };
+    // clone
+    let parent = tempfile::tempdir().unwrap();
+    let (ev, res) = run_job(&g, parent.path(), &["clone", "--progress", "--", &url, "cl"], None).await;
+    keep(&ev);
+    res.unwrap_or_else(|e| panic!("clone: {e:?}"));
+    let cl = parent.path().join("cl");
+    assert_eq!(git(&cl, &["config", "remote.origin.url"]).trim(), url);
+    // 전역 설정이 없는 시험 환경이라 reflog용 신원을 넣어 준다(gix fetch는 reflog를 쓰려면 committer가 필요하다)
+    git(&cl, &["config", "user.name", "k"]);
+    git(&cl, &["config", "user.email", "k@k"]);
+    // push (work → 원격), 그 다음 clone 쪽에서 fetch·pull
+    let work = env.work();
+    let (ev, res) = run_job(&g, &work, &["push", "--progress", "origin", "main"], None).await;
+    keep(&ev);
+    res.unwrap_or_else(|e| panic!("push: {e:?}"));
+    assert!(git(&env.remote(), &["log", "--format=%s", "main"]).starts_with("c2"));
+    let (ev, res) = run_job(&g, &cl, &["fetch"], None).await;
+    keep(&ev);
+    res.unwrap_or_else(|e| panic!("fetch: {e:?}"));
+    assert_eq!(git(&cl, &["rev-parse", "origin/main"]), git(&work, &["rev-parse", "main"]));
+    let (ev, res) = run_job(&g, &cl, &["pull", "--progress", "--ff-only"], None).await;
+    keep(&ev);
+    res.unwrap_or_else(|e| panic!("pull: {e:?}"));
+    assert_eq!(git(&cl, &["rev-parse", "HEAD"]), git(&work, &["rev-parse", "main"]));
+    // 토큰 비노출: 작업 저장소·복제본의 모든 파일(설정·reflog·객체), 이벤트 줄
+    for d in [&cl, &work] {
+        assert_absent(d, "s3cr3t-tok");
+    }
+    assert!(all_lines.iter().all(|l| !l.contains("s3cr3t-tok")), "{all_lines:?}");
+
+    // 틀린 토큰: 인증 오류, 원격은 그대로, 오류 문구에 토큰이 없다
+    let bad = env_of(base.path(), Kind::Http, Some(("kim", "right")), None);
+    t.0.lock().unwrap().insert(format!("127.0.0.1:{}", port_of(&bad)), ("kim".into(), "wr0ng-tok".into()));
+    let (ev, res) = run_job(&g, &bad.work(), &["push", "--progress", "origin", "main"], None).await;
+    match &res {
+        Err(Error::Coded(c)) => assert_eq!(c.code, "hosting.unauthorized"),
+        other => panic!("{other:?}"),
+    }
+    assert!(!format!("{res:?} {ev:?}").contains("wr0ng-tok"));
+    assert!(!git(&bad.remote(), &["log", "--format=%s", "main"]).contains("c2"));
+    let (_, res) = run_job(&g, &bad.work(), &["fetch"], None).await;
+    assert!(matches!(&res, Err(Error::Coded(c)) if c.code == "hosting.unauthorized"), "{res:?}");
+    let parent2 = tempfile::tempdir().unwrap();
+    let burl = format!("http://127.0.0.1:{}/o.git", port_of(&bad));
+    let (_, res) = run_job(&g, parent2.path(), &["clone", "--", &burl, "x"], None).await;
+    assert!(matches!(&res, Err(Error::Coded(c)) if c.code == "hosting.unauthorized"), "{res:?}");
+    assert!(!parent2.path().join("x").exists(), "실패한 복제의 폴더가 남았다");
+    assert_absent(&bad.work(), "wr0ng-tok");
+
+    // 우선순위: URL의 자격 증명이 앱 계정보다 먼저(계정 토큰이 틀려도 URL 쪽이 맞으면 성공)
+    let both = env_of(base.path(), Kind::Http, Some(("kim", "right")), Some(("kim", "right")));
+    t.0.lock().unwrap().insert(format!("127.0.0.1:{}", port_of(&both)), ("kim".into(), "wr0ng-tok".into()));
+    let (_, res) = run_job(&g, &both.work(), &["push", "--progress", "origin", "main"], None).await;
+    res.unwrap_or_else(|e| panic!("URL 자격 증명 우선: {e:?}"));
 }

@@ -5,7 +5,9 @@ mod avatar;
 mod graphql;
 mod remote;
 
-pub use accounts::{Accounts, Keychain, SecretStore};
+#[cfg(target_os = "android")]
+pub use accounts::init_secret_dir;
+pub use accounts::{Accounts, FileSecrets, Keychain, SecretStore};
 pub use avatar::{author_avatars, AvatarCache, AvatarQuery, AvatarResult};
 pub use graphql::{pr_detail, pr_inbox, Activity, InboxPr, PrDetail, ReviewThread, ThreadComment, TimelineItem};
 pub use api::{create_pr, list_prs, page_limit, pr_review_submit, verify, Pr, ReviewComment};

@@ -228,13 +228,13 @@ fn push(repo: &Path, args: Args, ssh_batch: Option<bool>, stop: &AtomicBool, eve
         log.push(s.clone());
         let _ = events.send(JobEvent::Progress { line: s });
     };
-    let mut conn = remote.connect(Direction::Push).map_err(|e| connect_error(e, &shown))?;
-    let mut auth = conn.configured_credentials_for_current_url();
+    let mut conn = remote.connect(Direction::Push).map_err(super::auth::map_error)?;
+    let mut auth = super::auth::authenticator(r.clone());
     let transport_url = conn.transport_mut().to_url().into_owned();
     if let Some(opts) = r.transport_options(transport_url.as_bstr(), remote.name().map(|n| n.as_bstr())).map_err(fail)? {
         conn.transport_mut().configure(&*opts).map_err(fail)?;
     }
-    let hs = gix::protocol::handshake(conn.transport_mut(), Service::ReceivePack, &mut auth, Vec::new(), &mut gix::progress::Discard).map_err(|e| connect_error(e, &shown))?;
+    let hs = gix::protocol::handshake(conn.transport_mut(), Service::ReceivePack, &mut auth, Vec::new(), &mut gix::progress::Discard).map_err(super::auth::map_error)?;
     if stopped() {
         return Err(Error::Cancelled);
     }
@@ -385,15 +385,6 @@ fn push(repo: &Path, args: Args, ssh_batch: Option<bool>, stop: &AtomicBool, eve
         }
     }
     Ok(())
-}
-
-/// 연결·인증 단계 오류를 git이 내는 종류로 바꾼다: 인증 실패는 128 `Authentication failed`.
-fn connect_error(e: impl std::fmt::Display + std::fmt::Debug, shown: &str) -> Error {
-    let text = format!("{e:?} {e}").to_ascii_lowercase();
-    if ["credentials", "authenticat", "unauthorized", "terminal prompts", "prompt"].iter().any(|k| text.contains(k)) {
-        return Error::Exit { code: Some(128), stderr: format!("fatal: Authentication failed for '{shown}'") };
-    }
-    fail(e)
 }
 
 fn reject_hint(reason: &str, head_is_dst: bool) -> Vec<&'static str> {
