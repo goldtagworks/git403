@@ -12,6 +12,7 @@ mod cfgwrite;
 mod clone;
 mod common;
 mod diff;
+mod durable;
 mod fetch;
 mod log;
 mod refs;

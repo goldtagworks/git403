@@ -133,6 +133,10 @@ fn clone_into(url: gix::url::Url, stored: &str, dest: &Path, stop: &AtomicBool) 
     check_filters(checkout.repo())?;
     // 체크아웃은 멈추지 않는다(gix는 중단하면 일부만 쓰고 Ok를 돌려준다)
     checkout.main_worktree(gix::progress::Discard, &AtomicBool::new(false)).map_err(fail)?;
-    open(dest)?;
+    // gix는 fsync를 안 하므로 `.git` 전체(pack·ref·설정·인덱스)를 디스크에 내린다(durable.rs)
+    let repo = open(dest)?;
+    if super::durable::enabled(&repo, super::durable::Part::Reference) {
+        super::durable::tree(repo.git_dir())?;
+    }
     Ok(())
 }

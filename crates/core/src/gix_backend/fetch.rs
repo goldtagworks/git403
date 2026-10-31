@@ -131,6 +131,19 @@ pub(super) fn fetch_remote(repo: &Path, remote: Option<&str>, specs: Option<&[St
     if stop.load(Ordering::SeqCst) {
         return Err(Error::Cancelled);
     }
+    // gix는 fsync를 안 하므로 받은 pack(→ 그 다음 ref) 순으로 디스크에 내린다(durable.rs)
+    {
+        use gix::remote::fetch::Status;
+        let (edits, bundle) = match &outcome.status {
+            Status::Change { update_refs, write_pack_bundle, .. } => (&update_refs.edits, Some(write_pack_bundle)),
+            Status::NoPackReceived { update_refs, .. } => (&update_refs.edits, None),
+        };
+        if let Some(b) = bundle {
+            let paths: Vec<&Path> = [b.data_path.as_deref(), b.index_path.as_deref()].into_iter().flatten().collect();
+            super::durable::pack_files(&r, &paths)?;
+        }
+        super::durable::refs(&r, edits)?;
+    }
     if specs.is_none() {
         follow_remote_head(&r, &label, &outcome)?;
     }
@@ -165,8 +178,8 @@ fn follow_remote_head(r: &gix::Repository, label: &str, outcome: &gix::remote::f
     let who = r.committer().transpose().map_err(fail)?.map(|c| c.to_owned()).transpose().map_err(fail)?;
     let edit = gix::refs::transaction::RefEdit::update(name.as_str().try_into().map_err(fail)?, gix::refs::Target::Symbolic(local.as_str().try_into().map_err(fail)?), gix::refs::transaction::PreviousValue::MustNotExist, "remote: created from HEAD");
     let mut buf = Default::default();
-    r.edit_references_as(Some(edit), who.as_ref().map(|w| w.to_ref(&mut buf))).map_err(fail)?;
-    Ok(())
+    let done = r.edit_references_as(Some(edit), who.as_ref().map(|w| w.to_ref(&mut buf))).map_err(fail)?;
+    super::durable::refs(r, &done)
 }
 
 /// 갱신된 ref를 진행 줄로 알린다.

@@ -154,6 +154,9 @@ impl ConfigLock {
             self.stage()?;
         }
         std::fs::rename(&self.lock, &self.path).map_err(fail)?;
+        if let Some(d) = self.path.parent() {
+            super::durable::dir(d);
+        }
         self.done = true;
         Ok(())
     }
@@ -200,6 +203,8 @@ pub(crate) fn append_head_log(r: &gix::Repository, old: gix::ObjectId, new: gix:
     let mut all = std::fs::read(&path).unwrap_or_default();
     all.extend_from_slice(&line);
     lock.write_all(&all).map_err(fail)?;
+    super::durable::lock_file(&mut lock)?;
     lock.commit().map_err(|e| fail(e.error))?;
+    super::durable::dir(path.parent().unwrap_or(&path));
     Ok(())
 }

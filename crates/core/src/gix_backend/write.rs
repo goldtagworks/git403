@@ -107,7 +107,12 @@ pub(super) fn modify_index(r: &gix::Repository, f: impl FnOnce(&mut gix::index::
     index.remove_tree();
     let mut w = std::io::BufWriter::with_capacity(64 * 1024, lock);
     index.write_to(&mut w, gix::index::write::Options { extensions: gix::index::write::Extensions::None, skip_hash: false }).map_err(fail)?;
-    w.into_inner().map_err(fail)?.commit().map_err(fail)?;
+    let mut lock = w.into_inner().map_err(fail)?;
+    if super::durable::enabled(r, super::durable::Part::Index) {
+        super::durable::lock_file(&mut lock)?;
+    }
+    lock.commit().map_err(fail)?;
+    super::durable::dir(r.index_path().parent().unwrap_or(&path));
     Ok(())
 }
 
@@ -138,6 +143,7 @@ pub(super) fn stage(repo: &Path, paths: &[String]) -> Result<()> {
                 index.remove_entries(|_, p, _| p == path.as_bstr());
                 let Some((mode, data)) = read_worktree_file(&r, path.as_ref(), true)? else { continue }; // 삭제
                 let id = r.write_blob(&data).map_err(fail)?.detach();
+                super::durable::object(&r, id)?;
                 let mode = match (mode, old_mode) {
                     (0o120000, _) => Mode::SYMLINK,
                     // core.symlinks=false: 링크가 일반 파일로 체크아웃되므로 기존 링크 모드를 유지한다
@@ -217,7 +223,9 @@ fn write_dir(r: &gix::Repository, d: &Dir) -> Result<gix::ObjectId> {
         let key = |e: &TreeEntry| [e.filename.to_vec(), if e.mode.is_tree() { b"/".to_vec() } else { Vec::new() }].concat();
         key(a).cmp(&key(b))
     });
-    Ok(r.write_object(&gix::objs::Tree { entries }).map_err(fail)?.detach())
+    let id = r.write_object(&gix::objs::Tree { entries }).map_err(fail)?.detach();
+    super::durable::object(r, id)?;
+    Ok(id)
 }
 
 /// 인덱스 → 트리. intent-to-add 항목은 git처럼 뺀다.
@@ -312,6 +320,7 @@ pub(super) fn commit(repo: &Path, message: &str, amend: bool) -> Result<()> {
     };
     let commit = gix::objs::Commit { tree, parents: parents.iter().copied().collect(), author, committer: committer.clone(), encoding: None, message: message.as_str().into(), extra_headers: Vec::new() };
     let id = r.write_object(&commit).map_err(fail)?.detach();
+    super::durable::object(&r, id)?;
     let subject = message.lines().next().unwrap_or("");
     let (label, expected) = match (&head, amend) {
         (None, _) => ("commit (initial)", gix::refs::transaction::PreviousValue::MustNotExist),
@@ -319,8 +328,8 @@ pub(super) fn commit(repo: &Path, message: &str, amend: bool) -> Result<()> {
         (Some(h), false) => ("commit", gix::refs::transaction::PreviousValue::MustExistAndMatch(gix::refs::Target::Object(h.id))),
     };
     let edit = gix::refs::transaction::RefEdit::update("HEAD".try_into().map_err(fail)?, id, expected, format!("{label}: {subject}")).with_deref(true);
-    r.edit_references_as(Some(edit), Some(committer.to_ref(&mut Default::default()))).map_err(fail)?;
-    Ok(())
+    let done = r.edit_references_as(Some(edit), Some(committer.to_ref(&mut Default::default()))).map_err(fail)?;
+    super::durable::refs(&r, &done)
 }
 
 fn new_author(r: &gix::Repository) -> Result<gix::actor::Signature> {

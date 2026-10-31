@@ -119,7 +119,8 @@ fn create(r: &gix::Repository, name: &str, start_label: &str, id: gix::ObjectId,
     let edit = create_edit(r, name, start_label, id)?;
     let who = committer(r)?;
     let staged = track.map(|t| stage_tracking(r, name, t)).transpose()?;
-    r.edit_references_as(Some(edit), Some(who.to_ref(&mut Default::default()))).map_err(fail)?;
+    let done = r.edit_references_as(Some(edit), Some(who.to_ref(&mut Default::default()))).map_err(fail)?;
+    super::durable::refs(r, &done)?;
     match staged {
         Some((lock, msg)) => lock.commit().map(|()| msg),
         None => Ok(Vec::new()),
@@ -186,7 +187,8 @@ fn delete(r: &gix::Repository, name: &str, force: bool) -> Result<Vec<u8>> {
     lock.stage()?;
     let edit = RefEdit::delete(full, PreviousValue::MustExistAndMatch(Target::Object(id)));
     let mut buf = Default::default();
-    r.edit_references_as(Some(edit), who.as_ref().map(|w| w.to_ref(&mut buf))).map_err(fail)?;
+    let done = r.edit_references_as(Some(edit), who.as_ref().map(|w| w.to_ref(&mut buf))).map_err(fail)?;
+    super::durable::refs(r, &done)?;
     lock.commit()?;
     Ok(format!("Deleted branch {name} (was {short}).\n").into_bytes())
 }
@@ -253,14 +255,17 @@ fn rename(r: &gix::Repository, old: &str, new: &str) -> Result<Vec<u8>> {
     if is_head {
         edits.push(RefEdit::update("HEAD".try_into().map_err(fail)?, Target::Symbolic(new_full), PreviousValue::Any, msg.as_str()));
     }
-    r.edit_references_as(edits, Some(who.to_ref(&mut Default::default()))).map_err(fail)?;
+    let done = r.edit_references_as(edits, Some(who.to_ref(&mut Default::default()))).map_err(fail)?;
+    super::durable::refs(r, &done)?;
     // 트랜잭션이 성공한 뒤에 옛 reflog를 새 로그 앞에 붙인다(옛 로그는 ref 삭제와 함께 이미 지워졌다)
     if let Some(mut all) = old_log {
         use std::io::Write;
         all.extend(std::fs::read(&to).unwrap_or_default());
         let mut f = gix::lock::File::acquire_to_update_resource(&to, gix::lock::acquire::Fail::Immediately, None, 0).map_err(fail)?;
         f.write_all(&all).map_err(fail)?;
+        super::durable::lock_file(&mut f)?;
         f.commit().map_err(|e| fail(e.error))?;
+        super::durable::dir(to.parent().unwrap_or(&to));
     }
     if is_head {
         append_head_log(r, id, id, &who, &msg)?;

@@ -156,9 +156,12 @@ fn pull(repo: &Path, args: &Args, ssh_batch: Option<bool>, stop: &AtomicBool, ev
     // ref 잠금을 먼저 잡고(실패하면 작업 트리는 그대로) 작업 트리를 옮긴 뒤 커밋한다. 커밋이 실패하면 작업 트리를 되돌린다.
     let prepared = r.refs.transaction().prepare(Some(edit), gix::lock::acquire::Fail::Immediately, gix::lock::acquire::Fail::Immediately).map_err(fail)?;
     move_to(&r, tip_tree)?;
-    if let Err(e) = prepared.commit(Some(who.to_ref(&mut Default::default()))) {
-        let _ = move_trees(&r, tip_tree, head_tree);
-        return Err(fail(e));
+    match prepared.commit(Some(who.to_ref(&mut Default::default()))) {
+        Ok(done) => super::durable::refs(&r, &done)?,
+        Err(e) => {
+            let _ = move_trees(&r, tip_tree, head_tree);
+            return Err(fail(e));
+        }
     }
     let _ = events.send(JobEvent::Progress { line: "Fast-forward".to_owned() });
     Ok(())

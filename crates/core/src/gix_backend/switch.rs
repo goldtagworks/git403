@@ -109,9 +109,12 @@ pub(super) fn run(repo: &Path, args: &[&str]) -> Result<Vec<u8>> {
     // ref 잠금을 먼저 모두 잡는다(실패하면 작업 트리는 아직 그대로)
     let prepared = r.refs.transaction().prepare(std::mem::take(&mut edits), gix::lock::acquire::Fail::Immediately, gix::lock::acquire::Fail::Immediately).map_err(fail)?;
     move_to(&r, to_tree)?;
-    if let Err(e) = prepared.commit(Some(who.to_ref(&mut Default::default()))) {
-        let _ = move_trees(&r, to_tree, from_tree);
-        return Err(fail(e));
+    match prepared.commit(Some(who.to_ref(&mut Default::default()))) {
+        Ok(done) => super::durable::refs(&r, &done)?,
+        Err(e) => {
+            let _ = move_trees(&r, to_tree, from_tree);
+            return Err(fail(e));
+        }
     }
     if symbolic {
         append_head_log(&r, head, id, &who, &format!("checkout: moving from {from} to {to_name}"))?;

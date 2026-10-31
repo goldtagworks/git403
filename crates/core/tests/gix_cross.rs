@@ -2258,3 +2258,49 @@ async fn config_쓰기는_링크를_따라가고_권한을_유지하고_crlf를_
     assert!(unsupported(g.run(m.path(), &["config", "--local", "alpha.x", "2"], &[]).await));
     assert!(unsupported(g.run(m.path(), &["config", "--local", "--unset", "alpha.x"], &[]).await));
 }
+
+#[tokio::test]
+async fn 빈_loose_ref를_만나면_git과_같은_종류로_실패하거나_무시한다() {
+    let tmp = fixture();
+    let d = tmp.path();
+    let (c, g) = backends();
+    // 거절(Unsupported)은 항상 안전하다. 그 밖에는 성공/실패가 git과 같아야 한다.
+    let unsupported_or_same = |rc: &gc_core::Result<Vec<u8>>, rg: &gc_core::Result<Vec<u8>>| matches!(rg, Err(gc_core::Error::Unsupported(_))) || rc.is_ok() == rg.is_ok();
+    // (1) 다른 브랜치의 ref가 0바이트
+    let a = copy_repo(d);
+    write(a.path(), ".git/refs/heads/broken", b"");
+    for argv in [&["branch", "x"][..], &["branch", "-d", "broken"], &["branch", "-D", "broken"], &["branch", "broken2", "broken"], &["switch", "broken"], &["switch", "-c", "n"]] {
+        let (b1, b2) = (copy_repo(a.path()), copy_repo(a.path()));
+        let (rc, rg) = (c.run(b1.path(), argv, &[]).await, g.run(b2.path(), argv, &[]).await);
+        assert!(unsupported_or_same(&rc, &rg), "broken: {argv:?}: {rc:?} vs {rg:?}");
+    }
+    // (2) HEAD가 가리키는 ref가 0바이트 (사고 상황)
+    let h = copy_repo(d);
+    git(h.path(), &["switch", "-q", "-c", "phone2"]);
+    write(h.path(), ".git/refs/heads/phone2", b"");
+    for argv in [&["branch", "x"][..], &["switch", "main"], &["switch", "-c", "n"], &["branch", "-m", "phone2", "p3"], &["branch", "-d", "main"]] {
+        let (b1, b2) = (copy_repo(h.path()), copy_repo(h.path()));
+        let (rc, rg) = (c.run(b1.path(), argv, &[]).await, g.run(b2.path(), argv, &[]).await);
+        assert!(unsupported_or_same(&rc, &rg), "head broken: {argv:?}: {rc:?} vs {rg:?}");
+        // 실패하면 저장소가 더 나빠지지 않는다(빈 ref가 그대로)
+        if rg.is_err() {
+            assert_eq!(fs::read(b2.path().join(".git/refs/heads/phone2")).unwrap(), b"");
+        }
+    }
+    let (b1, b2) = (copy_repo(h.path()), copy_repo(h.path()));
+    let (_, rc) = run_job(&c, b1.path(), &["fetch"]).await;
+    let (_, rg) = run_job(&g, b2.path(), &["fetch"]).await;
+    println!("fetch with broken HEAD ref: cli={:?} gix={:?}", rc.is_ok(), rg);
+    // 상태: git은 안 태어난 브랜치처럼 보여 주지만 gix는 128로 실패한다(문서의 한계). 실패하되 저장소는 그대로.
+    assert!(c.read_status(h.path()).await.is_ok());
+    assert!(matches!(g.read_status(h.path()).await, Err(gc_core::Error::Exit { code: Some(128), .. })));
+    assert_eq!(fs::read(h.path().join(".git/refs/heads/phone2")).unwrap(), b"");
+    for (name, f) in [("read_refs", 0), ("read_log", 1), ("read_status", 2)] {
+        let (rc, rg) = match f {
+            0 => (c.read_refs(h.path()).await.is_ok(), g.read_refs(h.path()).await.is_ok()),
+            1 => (c.read_log(h.path(), 10, &[]).await.is_ok(), g.read_log(h.path(), 10, &[]).await.is_ok()),
+            _ => (c.read_status(h.path()).await.is_ok(), g.read_status(h.path()).await.is_ok()),
+        };
+        println!("{name}: cli={rc} gix={rg}");
+    }
+}
