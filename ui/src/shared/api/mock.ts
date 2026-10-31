@@ -483,11 +483,17 @@ function handle(cmd: string, args: any): any {
       return (window as any).__slowAsk ? new Promise((r) => setTimeout(() => r(ans), (window as any).__slowAsk)) : ans; // E2E: __slowAsk(ms) = 확인창이 떠 있는 시간
     }
     if (cmd === "worktree_diff") {
+      (window as any).__diffCalls = ((window as any).__diffCalls ?? 0) + 1; // E2E: worktree_diff 호출 횟수
       const out = (eolSeen(args), (window as any).__fileDiff ?? diff((args as { path: string }).path));
       return (window as any).__diffDelay ? new Promise((r) => setTimeout(() => r(out), (window as any).__diffDelay)) : out; // E2E: window.__diffDelay(ms)가 있으면 worktree_diff 응답을 늦춘다
     }
-    if (cmd === "stage") return move((args as { paths: string[] }).paths, true);
-    if (cmd === "unstage") return move((args as { paths: string[] }).paths, false);
+    // E2E: window.__stageDelay(ms)면 stage·unstage 응답이 늦다, 호출은 window.__stageLog에 [cmd, paths]로 남는다
+    if (cmd === "stage" || cmd === "unstage") {
+      const w = window as any;
+      (w.__stageLog ??= []).push([cmd, (args as { paths: string[] }).paths]);
+      const go = () => move((args as { paths: string[] }).paths, cmd === "stage");
+      return w.__stageDelay ? new Promise((r) => setTimeout(() => r(go()), w.__stageDelay)) : go();
+    }
     if (cmd === "trash_files" || cmd === "restore_file") {
       gitCalls.push([cmd, JSON.stringify(args)]);
       const f = (window as any).__fileOpFail; // E2E: 오류 코드 JSON 문자열이면 그대로 던진다

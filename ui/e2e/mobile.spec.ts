@@ -345,6 +345,65 @@ for (const size of [...PHONES, ...TABLETS]) {
     await expect(page.getByRole("dialog", { name: "설정" }).getByLabel("이름").first()).toBeVisible(); // Git 설정 그룹
   });
 
+  test(`${tag}: 변경 화면 — diff를 보고 돌아와도 메시지가 남고, 연타해도 stage가 한 번에 하나, 커밋 연타는 한 번`, async ({ page }) => {
+    await start(page, size, () => ((window as any).__stageDelay = 300));
+    await openRepo(page);
+    await openChanges(page);
+    const pane = page.locator(".m-pane");
+    await pane.getByRole("textbox", { name: "커밋 메시지" }).fill("쓰던 메시지");
+    await rowOf(page, "스테이지 안 됨", "Toolbar.tsx").locator("button").first().tap();
+    await expect(pane.locator("pre.diff.unified")).toBeVisible();
+    await pane.getByRole("button", { name: "뒤로" }).tap();
+    await expect(pane.getByRole("textbox", { name: "커밋 메시지" })).toHaveValue("쓰던 메시지");
+    // 진행 중에는 버튼이 비활성이고 같은 요청이 겹치지 않는다
+    const all = pane.getByRole("button", { name: "모두 스테이지" });
+    await all.evaluate((b: HTMLButtonElement) => (b.click(), b.click()));
+    await expect(pane.getByRole("button", { name: "스테이지 ui/src/Toolbar.tsx", exact: true })).toBeDisabled();
+    await expect(pane.getByRole("heading", { name: "스테이지됨 3" })).toBeVisible();
+    expect(await page.evaluate(() => (window as any).__stageLog.length)).toBe(1);
+    // 커밋 이중 제출
+    await pane.getByRole("button", { name: "커밋", exact: true }).evaluate((b: HTMLButtonElement) => (b.click(), b.click()));
+    await expect.poll(() => page.evaluate(() => (window as any).__git.filter((c: string[]) => c[0] === "commit").length)).toBeGreaterThan(0);
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => (window as any).__git.filter((c: string[]) => c[0] === "commit").length)).toBe(1);
+  });
+
+  test(`${tag}: 변경 화면 — 작성자를 저장하고 돌아오면 안내가 지워진다`, async ({ page }) => {
+    await start(page, size, () => ((window as any).__cfg = { global: {}, local: {} }));
+    await openRepo(page);
+    await openChanges(page);
+    const pane = page.locator(".m-pane");
+    const box = pane.getByRole("textbox", { name: "커밋 메시지" });
+    await box.fill("메시지");
+    await pane.getByRole("button", { name: "커밋", exact: true }).tap();
+    await expect(pane.getByRole("alert")).toBeVisible();
+    await page.evaluate(() => ((window as any).__cfg.global = { "user.name": "나", "user.email": "me@example.com" }));
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(pane.getByRole("alert")).toHaveCount(0);
+  });
+
+  test(`${tag}: 보던 파일이 사라지면 한 번만 변경 목록으로, 다른 파일의 상태 갱신에는 diff를 다시 읽지 않는다`, async ({ page }) => {
+    await start(page, size);
+    await openRepo(page);
+    await openChanges(page);
+    const pane = page.locator(".m-pane");
+    const ipc = (cmd: string, path: string) => page.evaluate(([c, p]) => (window as any).__TAURI_INTERNALS__.invoke(c, { repo: "x", paths: [p] }), [cmd, path]);
+    await rowOf(page, "스테이지 안 됨", "Toolbar.tsx").locator("button").first().tap();
+    await expect(pane.locator("pre.diff.unified")).toBeVisible();
+    const calls = () => page.evaluate(() => (window as any).__diffCalls);
+    const n = await calls();
+    await ipc("stage", "notes.md"); // 다른 파일의 변경
+    await expect(page.locator(".local-row .count-pill")).toHaveText("3");
+    await page.waitForTimeout(300);
+    await expect(pane.locator("pre.diff.unified")).toBeVisible();
+    expect(await calls()).toBe(n);
+    await ipc("stage", "ui/src/Toolbar.tsx"); // 보던 파일이 목록에서 사라짐
+    await ipc("unstage", "notes.md"); // 곧바로 또 갱신돼도
+    await expect(pane.getByRole("region", { name: "스테이지 안 됨" })).toBeVisible();
+    await page.waitForTimeout(300);
+    await expect(pane.getByRole("region", { name: "스테이지 안 됨" })).toBeVisible(); // 폰도 저장소가 닫히지 않는다
+  });
+
   if (phone) {
     test(`${tag}: 변경 화면 뒤로 가기 — diff → 변경 목록 → 커밋 목록 → 저장소 목록`, async ({ page }) => {
       await start(page, size);
