@@ -18,8 +18,12 @@ import { GuidePanel, GuideTabs, useGuidePanelOpen, useGuideView, useStagedGuide 
 import { AiSources } from "../../features/ai/AiSources";
 import type { AiSource, Status, StatusFile } from "../../shared/api/types";
 
-type Side = "unstaged" | "staged";
-const statusChar = (f: StatusFile, side: Side) => (f.untracked ? "?" : f.conflict ? "!" : side === "staged" ? f.index : f.worktree);
+export type Side = "unstaged" | "staged";
+export const statusChar = (f: StatusFile, side: Side) => (f.untracked ? "?" : f.conflict ? "!" : side === "staged" ? f.index : f.worktree);
+
+/** 스테이지 안 됨 / 스테이지됨 목록에 드는 파일 (모바일 변경 화면도 같은 규칙) */
+export const isUnstaged = (f: StatusFile) => f.untracked || f.conflict || f.worktree !== ".";
+export const isStaged = (f: StatusFile) => !f.untracked && !f.conflict && f.index !== ".";
 
 /** DU·UD·DD처럼 한쪽이 삭제한 충돌 (mergetool은 이런 파일에서 대화형으로 물어본다) */
 const isDeleteConflict = (f: StatusFile) => f.conflict && (f.index === "D" || f.worktree === "D");
@@ -49,8 +53,8 @@ export const ChangesView = memo(function ChangesView({
   const ignoreEol = useSyncExternalStore(onPrefs, () => pref("ignoreEol"));
   const ignoreWs = useSyncExternalStore(onPrefs, () => pref("ignoreWs"));
 
-  const unstaged = useMemo(() => status.files.filter((f) => f.untracked || f.conflict || f.worktree !== "."), [status]);
-  const staged = useMemo(() => status.files.filter((f) => !f.untracked && !f.conflict && f.index !== "."), [status]);
+  const unstaged = useMemo(() => status.files.filter(isUnstaged), [status]);
+  const staged = useMemo(() => status.files.filter(isStaged), [status]);
   const selFile = (sel?.side === "staged" ? staged : unstaged).find((f) => f.path === sel?.path) ?? null;
 
   // 현재 보는 목록 안에서만 이동 (끝에서 다른 목록으로 넘어가지 않는다)

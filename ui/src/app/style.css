@@ -1428,3 +1428,16 @@ html[data-mobile] .row:not(.selected):hover { background: none; }
 .m-settings-body button { min-height: 44px; }
 .m-settings-body .swatch { width: 40px; height: 40px; min-height: 40px; }
 .m-settings-body .accents { flex-wrap: wrap; gap: 10px; }
+/* 모바일 변경 화면(작업 중 행): 두 목록 + 아래 커밋 상자 */
+.m-group-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
+.m-group-head .m-files-head { margin: 0; }
+.m-files .m-frow { display: flex; align-items: center; }
+.m-files .m-frow > button:first-child { flex: 1; min-width: 0; }
+.m-files .m-frow > .m-fbtn { flex: none; width: 44px; min-height: 44px; font-size: 24px; line-height: 1; color: var(--accent-fg); }
+.m-commit { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px 16px; background: var(--surface); border-top: 1px solid var(--border); }
+.m-commit textarea { width: 100%; box-sizing: border-box; min-height: 88px; max-height: 40vh; font: inherit; font-size: 16px; line-height: 1.45; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; resize: none; }
+.m-commit-row { display: flex; align-items: center; gap: 12px; }
+.m-reason { flex: 1; min-width: 0; font-size: 13px; }
+.m-commit-row button { flex: none; min-width: 96px; font-weight: 600; }
+.m-notice { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 10px; font-size: 14px; color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 55%, transparent); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.m-notice span { flex: 1; min-width: 0; word-break: keep-all; }

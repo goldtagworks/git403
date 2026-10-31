@@ -1,14 +1,16 @@
 import { memo, useCallback, useEffect, useState } from "react";
 import { t, useLocale } from "../../shared/i18n/i18n";
-import type { Commit, GraphView, Ref, Status } from "../../shared/api/types";
+import { WORKTREE, type Commit, type GraphView, type Ref, type Status } from "../../shared/api/types";
 import type { IssueRule } from "../../shared/lib/issues";
 import { useTablet } from "../../shared/lib/platform";
 import { countRender } from "../../shared/lib/profile";
-import { ops } from "../../shared/model/ops";
+import { ctx, ops } from "../../shared/model/ops";
 import { Icon } from "../../shared/ui/Icon";
 import { showMenu, type MenuEntry } from "../../shared/ui/menu";
 import { CommitGraph } from "../commit-graph/CommitGraph";
 import { Sidebar } from "../sidebar/Sidebar";
+import type { Side } from "../changes/ChangesView";
+import { ChangesPane } from "./ChangesPane";
 import { CommitPane } from "./CommitPane";
 import { nav, useDepth, useSheet } from "./nav";
 import { RepoList } from "./RepoList";
@@ -48,16 +50,18 @@ export const MobileShell = memo(function MobileShell(p: Props) {
   const panel = useSheet();
   const { view, onClose } = p;
   // 파일 선택은 커밋 id와 함께 기억해서 다른 커밋을 고르면 저절로 풀린다
-  const [picked, setPicked] = useState<{ id: string; path: string } | null>(null);
-  const file = depth >= DEPTH.diff && picked?.id === p.selected ? picked.path : null;
+  const [picked, setPicked] = useState<{ id: string; path: string; side?: Side } | null>(null);
+  const shown = depth >= DEPTH.diff && picked?.id === p.selected ? picked : null;
+  const file = shown?.path ?? null;
+  const worktree = p.selected === WORKTREE; // 작업 중 행: 오른쪽 칸·상세 자리가 변경 화면
 
   // 저장소가 열리면 기록 한 칸(커밋 목록), 닫히면 걷는다. 뒤로 가서 깊이 0이 되면 저장소를 닫는다
   const open = !!view;
   useEffect(() => void (open ? nav.depth === 0 && nav.push(DEPTH.list) : nav.reset()), [open]);
   useEffect(() => nav.onPop((d) => d === 0 && onClose()), [onClose]);
 
-  const onFile = useCallback((path: string) => {
-    setPicked({ id: p.selected!, path });
+  const onFile = useCallback((path: string, side?: Side) => {
+    setPicked({ id: p.selected!, path, side });
     if (nav.depth < DEPTH.diff) nav.push(DEPTH.diff);
   }, [p.selected]);
   // 목록 행을 누르면: 폰은 상세 화면, 태블릿은 오른쪽 칸이 그 커밋으로(diff를 보고 있었으면 상세로)
@@ -65,6 +69,8 @@ export const MobileShell = memo(function MobileShell(p: Props) {
     if (nav.depth >= DEPTH.diff) nav.back();
     if (nav.depth === DEPTH.list && !tablet) nav.push(DEPTH.detail);
   }, [tablet]);
+  // 커밋이 만들어지면 목록으로 돌아가고, 다시 읽어 새 HEAD가 선택된다(선택을 비우면 loadAll이 HEAD를 고른다)
+  const onCommitted = useCallback(() => (nav.toList(), p.onPick(null), ctx.reload()), [p.onPick]);
   const select = useCallback((id: string) => (p.onPick(id), nav.closeSheet()), [p.onPick]);
 
   if (!view) return <div className="m-root"><RepoList repos={p.repos} pending={p.pending} onOpen={p.onOpenRepo} onForget={p.onForget} /></div>;
@@ -100,10 +106,12 @@ export const MobileShell = memo(function MobileShell(p: Props) {
   );
   const list = (
     <div className="m-list">
-      <CommitGraph view={view} refs={p.refs} theme={p.theme} selected={p.selected} onSelect={p.onPick} onMore={p.onMore} localCount={0} onOpen={onOpen} />
+      <CommitGraph view={view} refs={p.refs} theme={p.theme} selected={p.selected} onSelect={p.onPick} onMore={p.onMore} localCount={p.status?.files.length ?? 0} onOpen={onOpen} />
     </div>
   );
-  const pane = (
+  const pane = worktree ? (
+    <ChangesPane repo={p.repo} status={p.status} file={shown} back={!tablet || !!file} onBack={nav.back} onFile={onFile} onDone={onCommitted} />
+  ) : (
     <CommitPane repo={p.repo} commit={p.commit} rules={p.rules} file={file} back={!tablet || !!file} onBack={nav.back} onFile={onFile} />
   );
 

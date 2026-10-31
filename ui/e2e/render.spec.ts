@@ -941,6 +941,38 @@ test("모바일: 상세·diff·파일 이동·뒤로·브랜치 시트는 커밋
   await ctx.close();
 });
 
+// 모바일 변경 화면(27g(2)): 메시지 입력은 커밋 상자만, 스테이지·언스테이지는 셸·변경 화면까지만 다시 그리고 커밋 목록은 건드리지 않는다(작업 중 행 개수가 그대로일 때)
+test("모바일 변경 화면: 메시지 입력은 CommitBox만, 스테이지·언스테이지는 CommitGraph를 다시 그리지 않는다", async ({ browser }) => {
+  const ctx = await browser.newContext({
+    userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36",
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    locale: "ko-KR",
+  });
+  const page = await ctx.newPage();
+  await page.addInitScript(() => {
+    localStorage.setItem("autoFetch", "0");
+    (window as any).__reposRoot = "/data/repos";
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /^api-server/ }).tap();
+  await expect(page.locator(".commits .row").first()).toBeVisible();
+  await page.locator(".local-row").tap();
+  const pane = page.locator(".m-pane");
+  await expect(pane.getByRole("region", { name: "스테이지 안 됨" })).toBeVisible();
+  const before = await renders(page);
+  await pane.getByRole("textbox", { name: "커밋 메시지" }).pressSequentially("메시지 입력 중");
+  const typed = await renders(page);
+  for (const id of ["MobileShell", "MobilePane", "MobileChanges", "CommitGraph"]) expect(typed[id] ?? 0, id).toBe(before[id] ?? 0);
+  expect(typed.MobileCommitBox, "MobileCommitBox").toBeGreaterThan(before.MobileCommitBox ?? 0);
+  await pane.getByRole("button", { name: "스테이지 ui/src/Toolbar.tsx", exact: true }).tap();
+  await expect(pane.getByRole("heading", { name: "스테이지 안 됨 1" })).toBeVisible();
+  const staged = await renders(page);
+  expect(staged.CommitGraph ?? 0, "CommitGraph").toBe(typed.CommitGraph ?? 0);
+  expect(staged.CommitRow ?? 0, "CommitRow").toBe(typed.CommitRow ?? 0);
+  await ctx.close();
+});
+
 test("PR 목록의 'n분 전 갱신' 타이머는 목록·그래프를 다시 그리지 않는다 (Ago 조각만)", async ({ page }) => {
   await page.clock.install();
   await page.keyboard.press("ControlOrMeta+p");

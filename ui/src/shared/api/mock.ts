@@ -65,9 +65,11 @@ const refFull = (r: Ref) => ({ local: "refs/heads/", remote: "refs/remotes/", ta
 const spike: Commit = { id: sha("s1"), parents: [sha("m3")], author: "김개발", email: "dev@demo.dev", time: 1_760_000_000 + 3600, subject: "스파이크 실험", body: "" };
 const spikeRef: Ref = { kind: "local", name: "wip/spike", target: sha("s1"), head: false, message: null, ahead: 0, behind: 0 };
 const multiRef: Ref = { kind: "tag", name: "v0.2.0-rc", target: sha("m3"), head: false, message: null, ahead: 0, behind: 0 };
-const allRefs = () => [...refs, ...((window as any).__spike ? [spikeRef] : []), ...((window as any).__multiRef ? [multiRef] : [])];
+// E2E: window.__commitAdds = true 면 `commit`이 그래프 맨 위에 새 커밋을 만들고 HEAD가 그걸 가리킨다(모바일 커밋 화면 — 목록 맨 위에 새 커밋)
+let made: Commit | null = null;
+const allRefs = () => [...refs.map((r) => (made && r.kind === "local" && r.head ? { ...r, target: made.id } : r)), ...((window as any).__spike ? [spikeRef] : []), ...((window as any).__multiRef ? [multiRef] : [])];
 const baseView = (): GraphView =>
-  (window as any).__spike ? { commits: [spike, ...commits], layout: { ...view.layout, rows: [{ lane: 1, color: 3, edges: [{ from: 1, to: 0, color: 3 }] }, ...view.layout.rows] } } : view;
+  made ? { commits: [made, ...commits], layout: { ...view.layout, rows: [{ lane: 0, color: 0, edges: [{ from: 0, to: 0, color: 0 }] }, ...view.layout.rows] } } : (window as any).__spike ? { commits: [spike, ...commits], layout: { ...view.layout, rows: [{ lane: 1, color: 3, edges: [{ from: 1, to: 0, color: 3 }] }, ...view.layout.rows] } } : view;
 const graphWithout = (hidden: string[]): GraphView => {
   const base = baseView();
   if (!hidden.length) return base;
@@ -533,6 +535,7 @@ function handle(cmd: string, args: any): any {
     if (cmd === "last_message") return "그래프 곡선 렌더링\n\n본문";
     if (cmd === "commit") {
       gitCalls.push(["commit", (args as { message: string }).message]);
+      if ((window as any).__commitAdds) made = { id: sha("n1"), parents: [commits[0].id], author: "데모 사용자", email: "demo@example.com", time: 1_760_000_000 + 7200, subject: (args as { message: string }).message.split("\n")[0], body: "" };
       status = { ...status, files: status.files.filter((f) => f.index === "." || f.worktree !== "."), ahead: status.ahead + 1 };
       status = { ...status, files: status.files.map((f) => ({ ...f, index: "." })) };
       emit("repo-changed", { worktree: true, refs: false });

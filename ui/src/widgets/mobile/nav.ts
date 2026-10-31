@@ -28,6 +28,8 @@ export const nav = {
   /** 시트 열기·닫기: 열 때 기록을 한 칸 쌓고, 닫을 때 한 칸 되돌린다(뒤로 버튼은 시트부터 닫는다) */
   openSheet: () => !cur.s && (history.pushState((cur = { d: cur.d, n: cur.n + 1, s: 1 }), ""), subs.forEach((f) => f())),
   closeSheet: () => cur.s && history.back(),
+  /** 커밋 목록(첫 기록)까지 한꺼번에 돌아간다 */
+  toList: () => cur.n > 1 && history.go(1 - cur.n),
   /** 저장소를 닫아 목록으로 돌아갈 때 쌓인 기록을 모두 걷는다 */
   reset: () => cur.n > 0 && history.go(-cur.n),
   /** popstate로 깊이가 바뀐 뒤 부른다(새 깊이) */

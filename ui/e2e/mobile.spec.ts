@@ -40,6 +40,17 @@ const noDesktopShell = async (page: Page) => {
   await expect(page.locator(".commits-head")).toBeHidden(); // 열 머리글은 그리지 않는다
 };
 
+const hold = async (page: Page, sel: string) => {
+  await page.locator(sel).first().dispatchEvent("pointerdown", { pointerType: "touch", isPrimary: true, bubbles: true, clientX: 100, clientY: 100 });
+  await page.waitForTimeout(650);
+};
+const openChanges = async (page: Page) => {
+  await page.locator(".local-row").tap();
+  await expect(page.locator(".m-pane").getByRole("region", { name: "스테이지 안 됨" })).toBeVisible();
+};
+const rowOf = (page: Page, list: string, name: string) => page.locator(".m-pane").getByRole("list", { name: list, exact: true }).locator("li", { hasText: name });
+const names = (page: Page, list: string) => page.locator(".m-pane").getByRole("list", { name: list, exact: true }).locator(".m-fname").allTextContents();
+
 for (const size of [...PHONES, ...TABLETS]) {
   const tag = `${size.width}x${size.height}`;
   const phone = size.width < 600;
@@ -124,7 +135,7 @@ for (const size of [...PHONES, ...TABLETS]) {
     await expect(bar.getByRole("button", { name: /^api-server/ })).toBeVisible();
     await expect(bar.getByRole("button", { name: "브랜치 선택" })).toContainText("main");
     // 행: 제목 + (작성자 · 상대 날짜) 두 줄, 터치 타깃 44px 이상
-    const row = page.locator(".commits .row").first();
+    const row = page.locator(".commits .row:not(.local-row)").first();
     expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     await expect(row.locator(".c-l2")).toContainText("김개발");
     // 글자가 잘리지 않는다: 가로 스크롤이 없다
@@ -186,7 +197,171 @@ for (const size of [...PHONES, ...TABLETS]) {
     await expect(page.locator(".commits .row.selected")).toContainText("그래프");
   });
 
+  test(`${tag}: 작업 중 행은 변경이 있을 때만 목록 맨 위에 보인다`, async ({ page }, info) => {
+    await start(page, size);
+    await openRepo(page);
+    const row = page.locator(".local-row");
+    await expect(row).toContainText("로컬 변경사항");
+    await expect(row.locator(".count-pill")).toHaveText("3");
+    expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect((await row.boundingBox())!.y).toBeLessThan((await page.locator(".commits .row:not(.local-row)").first().boundingBox())!.y);
+    await shot(page, "worktree-row", size, info);
+  });
+
+  test(`${tag}: 변경이 없으면 작업 중 행이 없다`, async ({ page }) => {
+    await start(page, size, () => ((window as any).__clean = true));
+    await openRepo(page);
+    await expect(page.locator(".local-row")).toHaveCount(0);
+  });
+
+  test(`${tag}: 작업 중 행을 누르면 변경 화면 — 두 목록, 스테이지·언스테이지·모두`, async ({ page }, info) => {
+    await start(page, size);
+    await openRepo(page);
+    await openChanges(page);
+    const pane = page.locator(".m-pane");
+    if (phone) await expect(page.locator(".commits")).toBeHidden();
+    else {
+      await expect(page.locator(".commits")).toBeVisible();
+      await expect(pane.getByRole("button", { name: "뒤로" })).toHaveCount(0); // 두 칸의 목록엔 ← 가 없다
+    }
+    await expect(pane.getByRole("heading", { name: "스테이지 안 됨 2" })).toBeVisible();
+    await expect(pane.getByRole("heading", { name: "스테이지됨 1" })).toBeVisible();
+    expect(await names(page, "스테이지 안 됨")).toEqual(["Toolbar.tsx", "notes.md"]);
+    expect(await names(page, "스테이지됨")).toEqual(["status.rs"]);
+    for (const b of await pane.getByRole("button", { name: /^(스테이지|언스테이지) / }).all()) expect((await b.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await shot(page, "changes", size, info);
+    // 행 끝 버튼
+    await pane.getByRole("button", { name: "스테이지 ui/src/Toolbar.tsx", exact: true }).tap();
+    await expect(pane.getByRole("heading", { name: "스테이지 안 됨 1" })).toBeVisible();
+    expect(await names(page, "스테이지됨")).toEqual(["Toolbar.tsx", "status.rs"]);
+    await pane.getByRole("button", { name: "언스테이지 ui/src/Toolbar.tsx", exact: true }).tap();
+    expect(await names(page, "스테이지 안 됨")).toEqual(["Toolbar.tsx", "notes.md"]);
+    // 모두
+    await pane.getByRole("button", { name: "모두 스테이지" }).tap();
+    await expect(pane.getByRole("heading", { name: "스테이지됨 3" })).toBeVisible();
+    await expect(pane.getByRole("button", { name: "모두 스테이지" })).toHaveCount(0);
+    await expect(page.locator(".local-row .count-pill")).toHaveText("3");
+    await pane.getByRole("button", { name: "모두 언스테이지" }).tap();
+    await expect(pane.getByRole("heading", { name: "스테이지 안 됨 3" })).toBeVisible();
+    await expect(pane.getByRole("heading", { name: "스테이지됨 0" })).toBeVisible();
+  });
+
+  test(`${tag}: 길게 누르면 스테이지·언스테이지 시트가 뜨고, 미지원 작업은 어디에도 없다`, async ({ page }, info) => {
+    await start(page, size);
+    await openRepo(page);
+    await openChanges(page);
+    const pane = page.locator(".m-pane");
+    await hold(page, ".m-pane .m-frow button:first-child");
+    const menu = page.getByRole("menu");
+    await expect(menu.getByRole("menuitem")).toHaveText(["스테이지"]); // 되돌리기·스태시·무시·외부 도구 등 없음
+    expect((await menu.getByRole("menuitem").first().boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await shot(page, "changes-sheet", size, info);
+    await page.waitForTimeout(450);
+    await menu.getByRole("menuitem", { name: "스테이지" }).tap();
+    await expect(pane.getByRole("heading", { name: "스테이지 안 됨 1" })).toBeVisible();
+    await hold(page, ".m-pane .m-group:nth-child(2) .m-frow button:first-child");
+    await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText(["언스테이지"]);
+    await page.waitForTimeout(450);
+    await page.mouse.click(5, 5);
+    for (const n of [/되돌리기|버리기/, /스냅샷/, /패치/, /휴지통/, /Blame/i, /외부|도구/, /무시/, /LFS/i]) await expect(page.locator(".m-pane, .dom-menu").getByText(n)).toHaveCount(0);
+  });
+
+  test(`${tag}: 파일을 누르면 diff(한 줄 모드) — hunk 버튼 없음, ‹ › 로 같은 목록 안에서 이동, 뒤로는 변경 목록으로`, async ({ page }, info) => {
+    await start(page, size);
+    await openRepo(page);
+    await openChanges(page);
+    const pane = page.locator(".m-pane");
+    await rowOf(page, "스테이지 안 됨", "Toolbar.tsx").locator("button").first().tap();
+    await expect(pane.locator(".m-bar-title")).toHaveText("Toolbar.tsx");
+    await expect(pane.locator("pre.diff.unified")).toBeVisible();
+    await expect(pane.locator("pre.diff.split")).toHaveCount(0);
+    await expect(pane.locator(".hunk-btn")).toHaveCount(0); // hunk 단위 스테이지·버리기는 gix에 없다
+    await expect(pane.getByRole("button", { name: "이전 파일" })).toBeDisabled();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await shot(page, "changes-diff", size, info);
+    await pane.getByRole("button", { name: "다음 파일" }).tap();
+    await expect(pane.locator(".m-bar-title")).toHaveText("notes.md");
+    await expect(pane.getByRole("button", { name: "다음 파일" })).toBeDisabled(); // 스테이지됨 목록으로 넘어가지 않는다
+    await pane.getByRole("button", { name: "뒤로" }).tap();
+    await expect(pane.getByRole("region", { name: "스테이지 안 됨" })).toBeVisible();
+    // 스테이지됨 파일도 연다
+    await rowOf(page, "스테이지됨", "status.rs").locator("button").first().tap();
+    await expect(pane.locator(".m-bar-title")).toHaveText("status.rs");
+    await expect(pane.locator("pre.diff.unified")).toBeVisible();
+  });
+
+  test(`${tag}: 커밋 상자 — 이유 표시·비활성, 커밋하면 인자가 가고 목록으로 돌아가 새 커밋이 맨 위`, async ({ page }, info) => {
+    await start(page, size, () => ((window as any).__commitAdds = true));
+    await openRepo(page);
+    await openChanges(page);
+    const pane = page.locator(".m-pane");
+    const box = pane.getByRole("textbox", { name: "커밋 메시지" });
+    const btn = pane.getByRole("button", { name: "커밋", exact: true });
+    await expect(btn).toBeDisabled();
+    await expect(pane.getByRole("status")).toHaveText("커밋 메시지를 입력하세요");
+    expect((await btn.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect((await box.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    // 상자는 화면 바닥에 붙는다(키보드 inset은 네이티브가 준다)
+    const bb = (await btn.boundingBox())!;
+    expect(bb.y + bb.height).toBeLessThanOrEqual(size.height);
+    expect(size.height - (bb.y + bb.height)).toBeLessThan(40);
+    await box.fill("첫 줄 제목\n\n본문 둘째 단락");
+    await expect(btn).toBeEnabled();
+    await shot(page, "commit-box", size, info);
+    // 스테이지된 게 없으면 메시지가 있어도 못 누르고 이유가 바뀐다
+    await pane.getByRole("button", { name: "모두 언스테이지" }).tap();
+    await expect(btn).toBeDisabled();
+    await expect(pane.getByRole("status")).toHaveText("스테이지한 파일이 없습니다");
+    await pane.getByRole("button", { name: "모두 스테이지" }).tap();
+    await expect(btn).toBeEnabled();
+    await btn.tap();
+    await expect.poll(() => page.evaluate(() => (window as any).__git.filter((c: string[]) => c[0] === "commit"))).toEqual([["commit", "첫 줄 제목\n\n본문 둘째 단락"]]);
+    if (phone) {
+      await expect(page.locator(".m-pane")).toHaveCount(0); // 목록으로 돌아온다
+      await expect(page.locator(".commits")).toBeVisible();
+    } else await expect(pane.getByRole("textbox", { name: "커밋 메시지" })).toHaveCount(0); // 오른쪽 칸은 새 커밋 상세
+    await expect(page.locator(".commits .row:not(.local-row)").first()).toContainText("첫 줄 제목");
+    await expect(page.locator(".commits .row.selected")).toContainText("첫 줄 제목");
+    await expect(page.locator(".toast")).toContainText("커밋 완료");
+    await shot(page, "committed", size, info);
+  });
+
+  test(`${tag}: 작성자가 없으면 커밋 시도 전에 설정 안내 + 설정 열기 (오류 토스트 없이)`, async ({ page }, info) => {
+    await start(page, size, () => ((window as any).__cfg = { global: {}, local: {} }));
+    await openRepo(page);
+    await openChanges(page);
+    const pane = page.locator(".m-pane");
+    await pane.getByRole("textbox", { name: "커밋 메시지" }).fill("작성자 없이");
+    await pane.getByRole("button", { name: "커밋", exact: true }).tap();
+    const note = pane.getByRole("alert");
+    await expect(note).toContainText("설정 > Git에서 이름·이메일을 저장하세요");
+    expect(await page.evaluate(() => (window as any).__git.filter((c: string[]) => c[0] === "commit"))).toEqual([]); // 커밋 시도 자체를 안 한다
+    await expect(page.locator(".toast")).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await shot(page, "no-author", size, info);
+    await note.getByRole("button", { name: "설정 열기" }).tap();
+    await expect(page.getByRole("dialog", { name: "설정" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "설정" }).getByLabel("이름").first()).toBeVisible(); // Git 설정 그룹
+  });
+
   if (phone) {
+    test(`${tag}: 변경 화면 뒤로 가기 — diff → 변경 목록 → 커밋 목록 → 저장소 목록`, async ({ page }) => {
+      await start(page, size);
+      await openRepo(page);
+      await openChanges(page);
+      const pane = page.locator(".m-pane");
+      await rowOf(page, "스테이지 안 됨", "Toolbar.tsx").locator("button").first().tap();
+      await expect(pane.locator("pre.diff.unified")).toBeVisible();
+      await page.goBack(); // Android 뒤로: diff → 변경 목록
+      await expect(pane.getByRole("region", { name: "스테이지 안 됨" })).toBeVisible();
+      await pane.getByRole("button", { name: "뒤로" }).tap(); // 상단바 ← 도 같다
+      await expect(page.locator(".m-pane")).toHaveCount(0);
+      await expect(page.locator(".commits")).toBeVisible();
+      await page.goBack();
+      await expect(page.getByRole("list", { name: "저장소 목록" })).toBeVisible();
+    });
+
     test(`${tag}: 폰 흐름 — 목록 → 커밋 상세 → diff → 이전/다음 파일 → 뒤로 → 뒤로 → 저장소 목록`, async ({ page }, info) => {
       await start(page, size);
       await openRepo(page);
@@ -237,6 +412,23 @@ for (const size of [...PHONES, ...TABLETS]) {
       await expect(page.getByRole("list", { name: "저장소 목록" })).toBeVisible();
     });
   } else {
+    test(`${tag}: 변경 화면 태블릿 — 오른쪽 칸에서 목록 → diff → ← 복귀, 다른 커밋을 누르면 그 상세`, async ({ page }) => {
+      await start(page, size);
+      await openRepo(page);
+      await openChanges(page);
+      const pane = page.locator(".m-pane");
+      await rowOf(page, "스테이지 안 됨", "Toolbar.tsx").locator("button").first().tap();
+      await expect(pane.locator("pre.diff.unified")).toBeVisible();
+      await expect(page.locator(".commits")).toBeVisible();
+      await pane.getByRole("button", { name: "뒤로" }).tap();
+      await expect(pane.getByRole("region", { name: "스테이지 안 됨" })).toBeVisible();
+      await rowOf(page, "스테이지 안 됨", "Toolbar.tsx").locator("button").first().tap();
+      await page.locator(".commits").getByText("Initial commit").tap(); // diff를 보던 칸이 그 커밋 상세로
+      await expect(pane.getByRole("heading", { name: "Initial commit" })).toBeVisible();
+      await page.locator(".local-row").tap();
+      await expect(pane.getByRole("region", { name: "스테이지 안 됨" })).toBeVisible();
+    });
+
     test(`${tag}: 태블릿 두 칸 — 왼쪽 목록, 오른쪽 상세 → 파일 → diff → ← 로 복귀, ☰ 서랍`, async ({ page }, info) => {
       await start(page, size);
       await openRepo(page);
