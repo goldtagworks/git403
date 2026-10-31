@@ -404,6 +404,27 @@ for (const size of [...PHONES, ...TABLETS]) {
     await expect(pane.getByRole("region", { name: "스테이지 안 됨" })).toBeVisible(); // 폰도 저장소가 닫히지 않는다
   });
 
+  test(`${tag}: 변경 화면을 떠났다 돌아와도 메시지 초안이 남고, 다른 저장소엔 섞이지 않는다`, async ({ page }) => {
+    await start(page, size);
+    await openRepo(page);
+    await openChanges(page);
+    const pane = page.locator(".m-pane");
+    await pane.getByRole("textbox", { name: "커밋 메시지" }).fill("저장소 A 초안");
+    if (phone) await page.goBack(); // 변경 화면을 떠나 목록으로
+    await page.locator(".commits").getByText("Initial commit").tap(); // 커밋 상세로(태블릿은 같은 칸이 바뀐다)
+    await expect(pane.getByRole("heading", { name: "Initial commit" })).toBeVisible();
+    if (phone) await page.goBack();
+    await page.locator(".local-row").tap();
+    await expect(pane.getByRole("textbox", { name: "커밋 메시지" })).toHaveValue("저장소 A 초안");
+    // 다른 저장소
+    if (phone) await page.goBack();
+    await page.locator(".m-bar").first().getByRole("button", { name: /^api-server/ }).tap();
+    await page.getByRole("menuitem", { name: "design-system" }).tap();
+    await expect(page.locator(".m-bar").first().getByRole("button", { name: /^design-system/ })).toBeVisible();
+    await page.locator(".local-row").tap();
+    await expect(pane.getByRole("textbox", { name: "커밋 메시지" })).toHaveValue("");
+  });
+
   if (phone) {
     test(`${tag}: 변경 화면 뒤로 가기 — diff → 변경 목록 → 커밋 목록 → 저장소 목록`, async ({ page }) => {
       await start(page, size);
@@ -526,6 +547,27 @@ for (const size of [...PHONES, ...TABLETS]) {
     });
   }
 }
+
+test("폰: 키보드가 올라와 보이는 영역이 줄어도 대화상자는 그 안에 들어가고 버튼 줄이 보인다", async ({ page }, info) => {
+  const size = { width: 390, height: 200 }; // 키보드 높이만큼 줄어든 보이는 영역
+  await start(page, PHONES[0], () => ((window as any).__reposRoot = ROOT));
+  await openRepo(page);
+  await page.setViewportSize(size);
+  await page.getByRole("button", { name: "더보기" }).tap();
+  await page.getByRole("menuitem", { name: "브랜치", exact: true }).tap();
+  const dlg = page.getByRole("dialog");
+  await expect(dlg).toBeVisible();
+  await dlg.getByRole("textbox").first().focus();
+  const box = (await dlg.boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(size.height);
+  for (const b of await dlg.locator(".sheet-actions button").all()) {
+    const r = (await b.boundingBox())!;
+    expect(r.y + r.height).toBeLessThanOrEqual(size.height);
+    expect(r.height).toBeGreaterThanOrEqual(44);
+  }
+  await shot(page, "dialog-keyboard", size, info);
+});
 
 test("gix가 거절하는 조회(서브모듈·worktree·commit-graph)는 오류 토스트·배너 없이 조용히 빈다", async ({ page }) => {
   await start(page, PHONES[0], () => ((window as any).__unsupported = ["load_submodules", "load_worktrees", "ensure_commit_graph", "lfs_status"]));

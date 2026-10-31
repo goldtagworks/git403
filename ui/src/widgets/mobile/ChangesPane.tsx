@@ -13,6 +13,8 @@ import { contextMenu } from "../../shared/ui/menu";
 import { isStaged, isUnstaged, statusChar, type Side } from "../changes/ChangesView";
 
 const NONE: StatusFile[] = [];
+/** 저장소별 커밋 메시지 초안(세션 메모리). 변경 화면을 떠났다 와도 남고 다른 저장소엔 안 섞인다. 데스크탑처럼 앱을 다시 켜면 없다 */
+const drafts = new Map<string, string>();
 const baseName = (p: string) => p.slice(p.lastIndexOf("/") + 1);
 
 interface Props {
@@ -62,8 +64,6 @@ export const ChangesPane = memo(function ChangesPane({ repo, status, file, back,
     if (!file || selFile) return void (left.current = false);
     if (status && !left.current) ((left.current = true), onBack());
   }, [file, status, selFile]);
-  // 메시지는 diff를 보고 와도 남는다(CommitBox는 diff 화면에서 언마운트). 입력마다 다시 그리지 않게 ref
-  const msg = useRef("");
   // stage·unstage는 한 번에 하나(연타해도 동시에 실행하지 않는다)
   const working = useRef(false);
   const [busy, setBusy] = useState(false);
@@ -135,16 +135,16 @@ export const ChangesPane = memo(function ChangesPane({ repo, status, file, back,
         {group("unstaged", unstaged)}
         {group("staged", staged)}
       </div>
-      <CommitBox repo={repo} msg={msg} canCommit={staged.length > 0} onDone={onDone} />
+      <CommitBox key={repo} repo={repo} canCommit={staged.length > 0} onDone={onDone} />
     </section>
   );
 });
 
 /** 아래 커밋 상자: 여러 줄 메시지 + 커밋. 입력 상태는 여기만 가진다. 작성자가 없으면 시도 전에 설정 안내 */
-const CommitBox = memo(function CommitBox({ repo, msg: kept, canCommit, onDone }: { repo: string; msg: { current: string }; canCommit: boolean; onDone: () => void }) {
+const CommitBox = memo(function CommitBox({ repo, canCommit, onDone }: { repo: string; canCommit: boolean; onDone: () => void }) {
   useLocale();
   countRender("MobileCommitBox");
-  const [msg, setMsg] = useState(kept.current);
+  const [msg, setMsg] = useState(() => drafts.get(repo) ?? "");
   const [busy, setBusy] = useState(false);
   const sending = useRef(false); // state는 같은 프레임의 두 번째 탭을 못 막는다
   const [noAuthor, setNoAuthor] = useState(false);
@@ -161,7 +161,7 @@ const CommitBox = memo(function CommitBox({ repo, msg: kept, canCommit, onDone }
       await api.commit(repo, msg.trim(), false);
       ctx.notify(t("changes.committed"), { kind: "success", detail: msg.trim().split("\n")[0] });
       setMsg("");
-      kept.current = "";
+      drafts.delete(repo);
       onDone();
     } catch (e) {
       ctx.error(String(e));
@@ -170,7 +170,7 @@ const CommitBox = memo(function CommitBox({ repo, msg: kept, canCommit, onDone }
       setBusy(false);
     }
   };
-  const edit = (v: string) => (kept.current = v, setMsg(v));
+  const edit = (v: string) => (v ? drafts.set(repo, v) : drafts.delete(repo), setMsg(v));
   // 안내가 떠 있는 동안, 설정에서 작성자를 저장하고 돌아오면(입력란을 누르거나 앱으로 돌아오면) 다시 확인해 지운다
   const recheck = () => void (noAuthor && ops.authorRead().then((a) => a.name.trim() && a.email.trim() && setNoAuthor(false), () => {}));
   useEffect(() => {

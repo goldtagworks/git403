@@ -1441,3 +1441,9 @@ html[data-mobile] .row:not(.selected):hover { background: none; }
 .m-commit-row button { flex: none; min-width: 96px; font-weight: 600; }
 .m-notice { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 10px; font-size: 14px; color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 55%, transparent); background: color-mix(in srgb, var(--warn) 14%, transparent); }
 .m-notice span { flex: 1; min-width: 0; word-break: keep-all; }
+/* 모바일 대화상자(시트 포함): 키보드(ime inset)로 보이는 영역이 줄어도 그 영역(고정 배경 = 보이는 영역) 안에 들어간다.
+   vh는 키보드를 빼지 않을 수 있어 퍼센트로 잡고, 넘치면 본문이 스크롤하고 버튼 줄(.sheet-actions)은 늘 보인다 */
+html[data-mobile] .sheet-backdrop { padding: 12px; }
+html[data-mobile] .sheet-backdrop.top { padding-top: 12px; }
+html[data-mobile] .sheet, html[data-mobile] .sheet.wide, html[data-mobile] .sheet.inspector { max-height: 100%; max-width: 100%; box-sizing: border-box; }
+html[data-mobile] .sheet.inspector { height: auto; }
