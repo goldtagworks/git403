@@ -119,7 +119,7 @@ export const CommitPane = memo(function CommitPane({ repo, commit, rules, file, 
               <button onClick={() => onFile(f.path)} onContextMenu={contextMenu(() => fileMenu(f.path, commit.id))}>
                 <span className={`status s-${f.status}`}>{f.status}</span>
                 <span className="m-fname">{baseName(f.path)}</span>
-                <span className="m-fdir">{f.path.slice(0, f.path.length - baseName(f.path).length - 1)}</span>
+                <span className="m-fdir">{f.path.slice(0, Math.max(0, f.path.lastIndexOf("/")))}</span>
               </button>
             </li>
           ))}

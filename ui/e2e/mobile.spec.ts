@@ -279,6 +279,19 @@ test("gix가 거절하는 조회(서브모듈·worktree·commit-graph)는 오류
   await expect(page.locator(".toast, [role=alert]")).toHaveCount(0);
 });
 
+test("자동 fetch는 gix가 받는 `fetch`만 보낸다 (--all·--prune·--tags·--progress 없이)", async ({ page }) => {
+  await start(page, PHONES[0], () => localStorage.setItem("autoFetch", "5"));
+  await openRepo(page);
+  await expect.poll(async () => page.evaluate(() => ((window as any).__git as string[][]).filter((c) => c[0] === "start_job").map((c) => JSON.parse(c[1]).args))).toContainEqual(["fetch"]);
+});
+
+test("최상위 파일은 폴더 줄이 비고, 하위 파일은 폴더만 보인다", async ({ page }) => {
+  await start(page, PHONES[0], () => ((window as any).__changedFiles = [{ path: "README", oldPath: null, status: "M" }, { path: "src/lib.rs", oldPath: null, status: "M" }]));
+  await openRepo(page);
+  await page.locator(".commits").getByText("로그 파서").tap();
+  await expect(page.locator(".m-pane .m-fdir")).toHaveText(["", "src"]);
+});
+
 test("데스크탑 UA에서는 모바일 규칙·화면이 켜지지 않는다", async ({ browser }) => {
   const ctx = await browser.newContext({ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124.0 Safari/537.36", viewport: { width: 820, height: 1180 } });
   const page = await ctx.newPage();
