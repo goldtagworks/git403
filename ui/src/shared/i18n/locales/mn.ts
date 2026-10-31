@@ -854,6 +854,8 @@ export const mn: Record<Key, string> = {
   "status.releaseNotes": "Хувилбарын тэмдэглэл харах",
   "toast.less": "Хураах",
   "toast.more": "Дэлгэрэнгүй",
+  "toast.connectAccount": "Бүртгэл холбох",
+  "hosting.introMobile": "https-ээр clone, fetch, pull, push хийхийн тулд хандалтын токен холбоно уу. Токен зөвхөн аппын хувийн фолдерт хадгалагдана. Ижил үйлчилгээ, хостод дахин холбовол одоо байгаа бүртгэл солигдоно.",
   "toast.label": "Мэдэгдлүүд",
   "theme.accent.system": "Систем",
   "theme.accent.blue": "Цэнхэр",

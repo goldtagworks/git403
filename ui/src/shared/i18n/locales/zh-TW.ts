@@ -854,6 +854,8 @@ export const zhTW: Record<Key, string> = {
   "status.releaseNotes": "檢視版本資訊",
   "toast.less": "收合",
   "toast.more": "詳細資料",
+  "toast.connectAccount": "連接帳號",
+  "hosting.introMobile": "連接存取權杖後，即可透過 https 複製、fetch、pull 與 push。權杖只會儲存在應用程式的私有資料夾中。重新連接相同的服務與主機會取代現有帳號。",
   "toast.label": "通知",
   "theme.accent.system": "系統",
   "theme.accent.blue": "藍色",

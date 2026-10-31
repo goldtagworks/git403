@@ -854,6 +854,8 @@ export const zhCN: Record<Key, string> = {
   "status.releaseNotes": "查看发行说明",
   "toast.less": "收起",
   "toast.more": "详细信息",
+  "toast.connectAccount": "连接账号",
+  "hosting.introMobile": "连接访问令牌后，可通过 https 克隆、fetch、pull 和 push。令牌仅保存在应用的私有文件夹中。重新连接同一服务和主机会替换现有账号。",
   "toast.label": "通知",
   "theme.accent.system": "跟随系统",
   "theme.accent.blue": "蓝色",

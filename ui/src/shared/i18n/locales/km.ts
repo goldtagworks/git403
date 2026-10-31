@@ -854,6 +854,8 @@ export const km: Record<Key, string> = {
   "status.releaseNotes": "មើលកំណត់ចំណាំការចេញផ្សាយ",
   "toast.less": "បង្រួម",
   "toast.more": "ព័ត៌មានលម្អិត",
+  "toast.connectAccount": "ភ្ជាប់គណនី",
+  "hosting.introMobile": "ភ្ជាប់ token ចូលប្រើ ដើម្បី clone, fetch, pull និង push តាម https។ token ត្រូវបានរក្សាទុកតែក្នុងថតឯកជនរបស់កម្មវិធីប៉ុណ្ណោះ។ ការភ្ជាប់ម្តងទៀតទៅសេវា និងម៉ាស៊ីនដដែលនឹងជំនួសគណនីដែលមានស្រាប់។",
   "toast.label": "ការជូនដំណឹង",
   "theme.accent.system": "ប្រព័ន្ធ",
   "theme.accent.blue": "ខៀវ",

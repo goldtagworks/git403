@@ -854,6 +854,8 @@ export const ja: Record<Key, string> = {
   "status.releaseNotes": "リリースノートを表示",
   "toast.less": "折りたたむ",
   "toast.more": "詳細",
+  "toast.connectAccount": "アカウントを接続",
+  "hosting.introMobile": "トークンを接続すると、https リモートのクローン・fetch・pull・push ができます。トークンはアプリ専用フォルダにのみ保存されます。同じサービスとホストに再度接続すると、既存のアカウントが置き換えられます。",
   "toast.label": "通知",
   "theme.accent.system": "システム",
   "theme.accent.blue": "ブルー",

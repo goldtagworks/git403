@@ -854,6 +854,8 @@ export const ko: Record<Key, string> = {
   "status.releaseNotes": "릴리스 노트 보기",
   "toast.less": "접기",
   "toast.more": "자세히",
+  "toast.connectAccount": "계정 연결",
+  "hosting.introMobile": "토큰을 연결하면 https 원격을 복제·fetch·pull·push 할 수 있습니다. 토큰은 앱 전용 폴더에만 저장됩니다. 같은 서비스·호스트에 다시 연결하면 기존 계정을 바꿉니다.",
   "toast.label": "알림",
   "theme.accent.system": "시스템",
   "theme.accent.blue": "파랑",

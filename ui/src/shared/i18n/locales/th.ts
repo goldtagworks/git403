@@ -854,6 +854,8 @@ export const th: Record<Key, string> = {
   "status.releaseNotes": "ดูบันทึกประจำรุ่น",
   "toast.less": "ย่อ",
   "toast.more": "รายละเอียด",
+  "toast.connectAccount": "เชื่อมต่อบัญชี",
+  "hosting.introMobile": "เชื่อมต่อโทเค็นการเข้าถึงเพื่อ clone, fetch, pull และ push ผ่าน https โทเค็นจะถูกเก็บไว้ในโฟลเดอร์ส่วนตัวของแอปเท่านั้น การเชื่อมต่อซ้ำกับบริการและโฮสต์เดิมจะแทนที่บัญชีที่มีอยู่",
   "toast.label": "การแจ้งเตือน",
   "theme.accent.system": "ระบบ",
   "theme.accent.blue": "น้ำเงิน",

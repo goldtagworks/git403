@@ -57,6 +57,9 @@ const Card = memo(function Card({ t }: { t: ToastItem }) {
           {t.n > 1 && <span className="toast-n">×{t.n}</span>}
         </div>
         {t.detail && <div className={`toast-detail${t.kind === "error" ? " selectable" : ""}`}>{t.detail}</div>}
+        {t.action && (
+          <button type="button" className="toast-more toast-action" onClick={() => (dismissToast(t.id), t.action!.run())}>{t.action.label}</button>
+        )}
         {long && (
           <button type="button" className="toast-more" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
             {open ? tr("toast.less") : tr("toast.more")}

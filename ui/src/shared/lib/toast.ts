@@ -7,12 +7,15 @@ export interface ToastItem {
   kind: ToastKind;
   title: string;
   detail?: string;
+  /** 토스트 안의 버튼(누르면 run을 실행하고 닫는다) */
+  action?: ToastAction;
   /** 같은 알림이 연속으로 온 횟수 */
   n: number;
   /** 같은 알림이 다시 올 때마다 늘어난다 (자동 사라짐 타이머를 다시 시작하는 신호) */
   rev: number;
 }
-export interface ToastOpts { kind?: ToastKind; detail?: string }
+export interface ToastAction { label: string; run: () => void }
+export interface ToastOpts { kind?: ToastKind; detail?: string; action?: ToastAction }
 
 export const MAX_TOASTS = 4;
 /** 성공·정보·경고가 저절로 사라지기까지 (오류는 닫을 때까지 유지) */
@@ -42,7 +45,7 @@ export function toast(title: string, opts: ToastOpts = {}) {
   if (last && last.kind === kind && last.title === title && last.detail === detail) {
     set([...items.slice(0, -1), { ...last, n: last.n + 1, rev: last.rev + 1 }]);
   } else {
-    set([...items, { id: ++seq, kind, title, detail, n: 1, rev: 0 }].slice(-MAX_TOASTS));
+    set([...items, { id: ++seq, kind, title, detail, action: opts.action, n: 1, rev: 0 }].slice(-MAX_TOASTS));
   }
 }
 /** 오류 토스트. detail이 없으면 여러 줄 메시지의 첫 줄이 제목이 된다. */

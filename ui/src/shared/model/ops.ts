@@ -919,7 +919,7 @@ export const ops = {
   // ---- 저장소 관리 ----
   clone: async () => {
     // gh에 로그인된 계정이 여럿이면 어느 계정으로 받을지 고른다(https만). 고르면 복제한 저장소에 그 계정을 연결한다
-    const gh = await api.ghAccounts().catch(() => null);
+    const gh = isMobile ? null : await api.ghAccounts().catch(() => null); // 모바일엔 gh가 없다
     const users = gh?.installed ? gh.hosts.flatMap((h) => h.accounts.map((a) => ({ host: h.host, user: a.user }))) : [];
     const label = (a: { host: string; user: string }) => (gh!.hosts.length > 1 ? `${a.user} (${a.host})` : a.user);
     // 폴더 선택기가 없는 백엔드(Android)는 앱 전용 저장소 폴더에 고정: 위치 입력 없이 폴더 경로만 안내한다

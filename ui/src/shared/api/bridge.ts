@@ -160,8 +160,10 @@ export const invoke = <T>(cmd: string, args?: Record<string, unknown>): Promise<
 // 작업 완료 이벤트(`job-done`·`detached-done`: [id, err])의 err도 코드 JSON일 수 있다 — 같은 번역을 거친다(코드 없으면 원문)
 const ERR_EVENTS = new Set(["job-done", "detached-done"]);
 const evErr = (e: unknown) => (typeof e === "string" ? String(toError(e)) : e);
+/** 코드 오류면 그 코드(작업 완료 이벤트의 셋째 값으로 덧붙인다) */
+const evCode = (e: unknown) => errCode(toError(e));
 export const listen = <T>(event: string, handler0: (e: { payload: T }) => void): Promise<() => void> => {
-  const handler = ERR_EVENTS.has(event) ? ({ payload }: { payload: T }) => handler0({ payload: (Array.isArray(payload) ? [payload[0], evErr(payload[1])] : payload) as T }) : handler0;
+  const handler = ERR_EVENTS.has(event) ? ({ payload }: { payload: T }) => handler0({ payload: (Array.isArray(payload) ? [payload[0], evErr(payload[1]), evCode(payload[1])] : payload) as T }) : handler0;
   if (!vscode) return tauriListen<T>(event, handler);
   let set = handlers.get(event);
   if (!set) handlers.set(event, (set = new Set()));

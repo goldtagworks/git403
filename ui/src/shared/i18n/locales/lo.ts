@@ -854,6 +854,8 @@ export const lo: Record<Key, string> = {
   "status.releaseNotes": "ເບິ່ງບັນທຶກການເຜີຍແຜ່",
   "toast.less": "ຫຍໍ້",
   "toast.more": "ລາຍລະອຽດ",
+  "toast.connectAccount": "ເຊື່ອມຕໍ່ບັນຊີ",
+  "hosting.introMobile": "ເຊື່ອມຕໍ່ token ການເຂົ້າເຖິງ ເພື່ອ clone, fetch, pull ແລະ push ຜ່ານ https. token ຖືກເກັບໄວ້ໃນໂຟນເດີສ່ວນຕົວຂອງແອັບເທົ່ານັ້ນ. ການເຊື່ອມຕໍ່ອີກຄັ້ງກັບບໍລິການ ແລະ ໂຮສດຽວກັນຈະແທນທີ່ບັນຊີເດີມ.",
   "toast.label": "ການແຈ້ງເຕືອນ",
   "theme.accent.system": "ລະບົບ",
   "theme.accent.blue": "ສີຟ້າ",

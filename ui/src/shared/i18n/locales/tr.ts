@@ -854,6 +854,8 @@ export const tr: Record<Key, string> = {
   "status.releaseNotes": "Sürüm notlarını görüntüle",
   "toast.less": "Daralt",
   "toast.more": "Ayrıntılar",
+  "toast.connectAccount": "Hesabı bağla",
+  "hosting.introMobile": "https üzerinden clone, fetch, pull ve push yapmak için bir erişim jetonu bağlayın. Jeton yalnızca uygulamanın özel klasöründe saklanır. Aynı hizmete ve ana makineye yeniden bağlanmak mevcut hesabı değiştirir.",
   "toast.label": "Bildirimler",
   "theme.accent.system": "Sistem",
   "theme.accent.blue": "Mavi",

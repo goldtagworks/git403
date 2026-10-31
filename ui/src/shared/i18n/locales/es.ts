@@ -854,6 +854,8 @@ export const es: Record<Key, string> = {
   "status.releaseNotes": "Ver notas de la versión",
   "toast.less": "Contraer",
   "toast.more": "Detalles",
+  "toast.connectAccount": "Conectar cuenta",
+  "hosting.introMobile": "Conecta un token de acceso para clonar, hacer fetch, pull y push por https. El token se guarda solo en la carpeta privada de la app. Volver a conectar el mismo servicio y host reemplaza la cuenta existente.",
   "toast.label": "Notificaciones",
   "theme.accent.system": "Sistema",
   "theme.accent.blue": "Azul",

@@ -1447,3 +1447,4 @@ html[data-mobile] .sheet-backdrop { padding: 12px; }
 html[data-mobile] .sheet-backdrop.top { padding-top: 12px; }
 html[data-mobile] .sheet, html[data-mobile] .sheet.wide, html[data-mobile] .sheet.inspector { max-height: 100%; max-width: 100%; box-sizing: border-box; }
 html[data-mobile] .sheet.inspector { height: auto; }
+html[data-mobile] .toast-action { min-height: 44px; font-size: 14px; }

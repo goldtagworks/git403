@@ -34,8 +34,8 @@ const TABS = [
   { id: "ai", label: "AI", icon: "sparkle", group: "link" },
 ] as const satisfies readonly { id: string; label: string; icon: IconName; group: string }[];
 const GROUPS = ["app", "repo", "link"] as const;
-/** 모바일에서 뺄 탭: 외부 도구·터미널(tools), ssh 키, gh 계정, AI CLI — Android엔 없는 것들 */
-const NO_MOBILE: readonly string[] = ["tools", "ssh", "accounts", "ai"];
+/** 모바일에서 뺄 탭: 외부 도구·터미널(tools), ssh 키, AI CLI — Android엔 없는 것들 (계정은 토큰 입력만 남겨 보인다) */
+const NO_MOBILE: readonly string[] = ["tools", "ssh", "ai"];
 /** 탭 이름: 문구 키면 번역하고 아니면(Git·AI·gitignore) 그대로 */
 const tabName = (label: string) => (label.startsWith("settings.") ? t(label as Key) : label);
 type TabId = "general" | "git" | "accounts" | "ai" | "tools" | "ignore" | "ssh" | "issues";

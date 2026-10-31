@@ -853,6 +853,8 @@ export const en = {
   "status.releaseNotes": "View release notes",
   "toast.less": "Collapse",
   "toast.more": "Details",
+  "toast.connectAccount": "Connect account",
+  "hosting.introMobile": "Connect a personal access token to clone, fetch, pull and push over https. The token is stored only in the app's private folder. Connecting again to the same service and host replaces the existing account.",
   "toast.label": "Notifications",
   "theme.accent.system": "System",
   "theme.accent.blue": "Blue",

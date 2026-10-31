@@ -69,6 +69,9 @@ function clobberedTags(err: string): string | null {
 /** 이미 안내한 저장소·태그 (자동 Fetch마다 반복하지 않게) */
 const keptTags = new Set<string>();
 
+/** 인증 실패(hosting.unauthorized)면 모바일 토스트에 "계정 연결" 버튼(설정 > 계정) — 모바일엔 gh·키체인 로그인이 없어 토큰 연결이 유일한 길 */
+const connectAction = (code?: string) => (isMobile && code === "hosting.unauthorized" ? { label: t("toast.connectAccount"), run: ops.manageAccounts } : undefined);
+
 function App() {
   useLocale(); // 언어가 바뀔 때만 App 아래 non-memo 화면이 다시 그려진다
   const theme = useTheme();
@@ -112,7 +115,7 @@ function App() {
   const jobs = useRef(new Map<number, { name: string; repo: string; onDone?: () => void; remote?: boolean; quiet?: boolean; note?: ReturnType<typeof jobNote>; args?: string[]; shell?: string }>());
   const ignored = useRef(new Set<number>()); // 사용자 작업에 밀려 취소한 자동 작업 (완료 이벤트 무시)
   const quietFailed = useRef(false); // 자동 작업이 연속 실패 중인지 (안내는 한 번만)
-  const early = useRef(new Map<number, string | null>());
+  const early = useRef(new Map<number, [string | null, string | undefined]>());
 
   const loadStatus = useCallback(async (path = repoRef.current) => {
     if (!path) return;
@@ -297,10 +300,10 @@ function App() {
   }, [closeTab]);
 
   /** 작업 완료. 다른 탭의 작업이면 다시 읽지 않고 문구에 저장소 이름을 붙인다. */
-  const finish = useCallback((id: number, err: string | null) => {
+  const finish = useCallback((id: number, err: string | null, code?: string) => {
     if (ignored.current.delete(id)) return;
     const j = jobs.current.get(id);
-    if (!j) return void early.current.set(id, err);
+    if (!j) return void early.current.set(id, [err, code]);
     jobs.current.delete(id);
     setJob(null);
     setMessage("");
@@ -316,7 +319,7 @@ function App() {
       if (!err) quietFailed.current = false;
       else if (!quietFailed.current) {
         quietFailed.current = true;
-        toast(t("app.jobFailed", { name: j.name }), { kind: "warning", detail: err.trim().split("\n").pop() });
+        toast(t("app.jobFailed", { name: j.name }), { kind: "warning", detail: err.trim().split("\n").pop(), action: connectAction(code) });
         // 연결 계정이 없어 다른 계정 저장소에 막힌 경우: 접근되는 계정에 연결하고 다시 받을지 묻는다 (연속 실패 중 한 번만)
         if (/repository not found/i.test(err)) suggestOtherAccount(j.repo, () => ctx.job(j.name, j.args ?? [], { repo: j.repo, quiet: true }));
       }
@@ -325,7 +328,7 @@ function App() {
     const here = j.repo === repoRef.current;
     const prefix = here || j.onDone ? "" : `${j.repo.split(/[\\/]/).pop()}: `;
     if (err) {
-      toastError(prefix + t("app.jobFailed", { name: j.name }), err.trim());
+      toast(prefix + t("app.jobFailed", { name: j.name }), { kind: "error", detail: err.trim(), action: connectAction(code) });
       // 다른 gh 계정이면 접근되는지 확인하고 연결·재시도를 제안한다
       if (/repository not found/i.test(err)) suggestOtherAccount(j.repo, () => ctx.job(j.name, j.args ?? [], { repo: j.repo, shell: j.shell, remote: j.remote, onDone: j.onDone }));
     }
@@ -358,9 +361,9 @@ function App() {
         const id = opts?.shell ? await api.startShell(repo, opts.shell) : await api.startJob(repo, args, opts?.quiet, opts?.ghUser);
         jobs.current.set(id, { name, repo, onDone: opts?.onDone, remote: opts?.remote, quiet: opts?.quiet, args, shell: opts?.shell, note: opts?.track ? jobNote(name, repo, opts.track) : undefined });
         if (early.current.has(id)) {
-          const err = early.current.get(id)!;
+          const [err, code] = early.current.get(id)!;
           early.current.delete(id);
-          finish(id, err);
+          finish(id, err, code);
         } else setJob({ id, name, quiet: opts?.quiet });
       } catch (e) {
         toastError(String(e));
@@ -402,7 +405,7 @@ function App() {
         api.askpassReply(id, r ? String(r.answer) : null);
       }),
       listen<RepoChange>("repo-changed", ({ payload }) => (touch(), payload.refs ? loadAll() : loadStatus())),
-      listen<[number, string | null]>("job-done", ({ payload: [id, err] }) => finish(id, err)),
+      listen<[number, string | null, string?]>("job-done", ({ payload: [id, err, code] }) => finish(id, err, code)),
       // macOS 메뉴 "닫기"(⌘W, src-tauri lib.rs — 메뉴 막대가 만들어지기 전의 기본 메뉴): 같은 처리
       listen("close-key", closeKey),
     ];

@@ -854,6 +854,8 @@ export const uk: Record<Key, string> = {
   "status.releaseNotes": "Переглянути примітки до випуску",
   "toast.less": "Згорнути",
   "toast.more": "Докладніше",
+  "toast.connectAccount": "Підключити акаунт",
+  "hosting.introMobile": "Підключіть токен доступу, щоб клонувати, виконувати fetch, pull і push через https. Токен зберігається лише в приватній теці застосунку. Повторне підключення до того самого сервісу й хоста замінює наявний акаунт.",
   "toast.label": "Сповіщення",
   "theme.accent.system": "Системний",
   "theme.accent.blue": "Синій",

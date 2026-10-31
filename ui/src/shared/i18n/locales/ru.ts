@@ -854,6 +854,8 @@ export const ru: Record<Key, string> = {
   "status.releaseNotes": "Открыть примечания к выпуску",
   "toast.less": "Свернуть",
   "toast.more": "Подробнее",
+  "toast.connectAccount": "Подключить аккаунт",
+  "hosting.introMobile": "Подключите токен доступа, чтобы клонировать, выполнять fetch, pull и push по https. Токен хранится только в личной папке приложения. Повторное подключение к тому же сервису и хосту заменяет существующий аккаунт.",
   "toast.label": "Уведомления",
   "theme.accent.system": "Системный",
   "theme.accent.blue": "Синий",

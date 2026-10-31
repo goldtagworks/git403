@@ -1,6 +1,7 @@
 import { SettingsGroup, SettingsRow } from "../../shared/ui/SettingsLayout";
 import { useEffect, useRef, useState } from "react";
 import { pref } from "../../shared/lib/settings";
+import { isMobile } from "../../shared/lib/platform";
 import { Sheet, SheetActions, SheetBody, SheetHead } from "../../shared/ui/Sheet";
 import { t, useLocale, type Key } from "../../shared/i18n/i18n";
 import { api } from "../../shared/api/api";
@@ -78,7 +79,7 @@ export function AccountsPanel() {
   return (
     <>
       <form className="panel-form" aria-label={t("hosting.accountsLabel")} onSubmit={(e) => (e.preventDefault(), ready && !busy && add())}>
-        <SettingsGroup title={t("hosting.listLabel")} note={t("hosting.intro")}>
+        <SettingsGroup title={t("hosting.listLabel")} note={t(isMobile ? "hosting.introMobile" : "hosting.intro")}>
           <ul className="accounts" aria-label={t("hosting.listLabel")}>
             {list?.map((a) => (
               <li key={`${a.provider}:${a.host}:${a.username}`}>
@@ -112,14 +113,14 @@ export function AccountsPanel() {
         <div className="sheet-actions">
           <button type="submit" className="primary" disabled={!ready || busy}>{busy ? t("hosting.verifying") : t("hosting.connect")}</button>
         </div>
-        <SettingsGroup>
+        {!isMobile && <SettingsGroup>
           <SettingsRow name={t("settings.ghRestore")}>
             <input type="checkbox" checked={restore} onChange={(e) => (setRestore(e.target.checked), ops.setPref("ghRestore", e.target.checked))} />
           </SettingsRow>
           <SettingsRow name={t("gh.autoSwitch")}>
             <input type="checkbox" checked={autoSw} onChange={(e) => (setAutoSw(e.target.checked), ops.setPref("ghAutoSwitch", e.target.checked))} />
           </SettingsRow>
-        </SettingsGroup>
+        </SettingsGroup>}
       </form>
     </>
   );

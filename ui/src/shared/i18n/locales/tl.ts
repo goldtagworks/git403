@@ -854,6 +854,8 @@ export const tl: Record<Key, string> = {
   "status.releaseNotes": "Tingnan ang release notes",
   "toast.less": "Itago",
   "toast.more": "Mga detalye",
+  "toast.connectAccount": "Ikonekta ang account",
+  "hosting.introMobile": "Magkonekta ng access token para mag-clone, mag-fetch, mag-pull at mag-push sa https. Sa pribadong folder lang ng app iniimbak ang token. Ang muling pagkonekta sa parehong serbisyo at host ay papalit sa kasalukuyang account.",
   "toast.label": "Mga abiso",
   "theme.accent.system": "System",
   "theme.accent.blue": "Asul",

@@ -854,6 +854,8 @@ export const uz: Record<Key, string> = {
   "status.releaseNotes": "Reliz qaydlarini ko‘rish",
   "toast.less": "Yig'ish",
   "toast.more": "Batafsil",
+  "toast.connectAccount": "Hisobni ulash",
+  "hosting.introMobile": "https orqali clone, fetch, pull va push qilish uchun kirish tokenini ulang. Token faqat ilovaning shaxsiy papkasida saqlanadi. Xuddi shu xizmat va hostga qayta ulansa, mavjud hisob almashtiriladi.",
   "toast.label": "Bildirishnomalar",
   "theme.accent.system": "Tizim",
   "theme.accent.blue": "Ko'k",

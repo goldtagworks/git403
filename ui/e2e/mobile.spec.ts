@@ -84,7 +84,8 @@ for (const size of [...PHONES, ...TABLETS]) {
     expect(b.width).toBeGreaterThanOrEqual(size.width - 1);
     expect(b.height).toBeGreaterThanOrEqual(size.height - 1);
     await expect(dlg.getByRole("button", { name: "Git", exact: true })).toBeVisible();
-    for (const n of [/도구/, /SSH/i, /계정/, /^AI/]) await expect(dlg.getByRole("button", { name: n })).toHaveCount(0);
+    for (const n of [/도구/, /SSH/i, /^AI/]) await expect(dlg.getByRole("button", { name: n })).toHaveCount(0);
+    await expect(dlg.getByRole("button", { name: "계정" })).toBeVisible(); // 27g(4): 토큰 직접 입력 계정은 모바일에도
     await shot(page, "settings-list", size, info);
     await dlg.getByRole("button", { name: "일반" }).tap();
     await expect(dlg.getByLabel("테마")).toBeVisible();
@@ -99,6 +100,54 @@ for (const size of [...PHONES, ...TABLETS]) {
     await page.goBack(); // Android 뒤로 = 설정 닫기
     await expect(dlg).toHaveCount(0);
     await expect(page.getByRole("list", { name: "저장소 목록" })).toBeVisible();
+  });
+
+  test(`${tag}: 설정 > 계정 — 계정 그룹이 보이고 gh 항목은 없고, 토큰으로 추가·삭제한다`, async ({ page }, info) => {
+    await start(page, size, () => ((window as any).__gh = { installed: true, accounts: [{ user: "alice", active: true }, { user: "gold", active: false }] }));
+    await page.getByRole("button", { name: "설정" }).tap();
+    const dlg = page.getByRole("dialog", { name: "설정" });
+    await dlg.getByRole("button", { name: "계정" }).tap();
+    const list = dlg.getByRole("list", { name: "연결된 계정" });
+    await expect(list).toContainText("GitHub · demo-user");
+    await expect(dlg.getByText("gh", { exact: false })).toHaveCount(0); // gh 되돌리기·자동 전환 등
+    await expect(dlg.getByText("키체인", { exact: false })).toHaveCount(0);
+    await expect(dlg.getByText("앱 전용 폴더", { exact: false })).toBeVisible();
+    await dlg.getByLabel("토큰").fill("ghp_ok");
+    await expect(dlg.getByLabel("토큰")).toHaveCSS("min-height", /^(4[4-9]|[5-9]\d)/);
+    await shot(page, "accounts", size, info);
+    await dlg.getByRole("button", { name: "연결", exact: true }).tap();
+    await expect(list).toContainText("GitHub · new-user");
+    await dlg.getByRole("button", { name: "new-user 삭제" }).tap();
+    await expect(list).not.toContainText("new-user");
+    expect(await page.evaluate(() => (window as any).__git.filter((c: string[]) => c[0].startsWith("account_")))).toEqual([["account_add", JSON.stringify({ provider: "github", host: "" })], ["account_remove", "new-user"]]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await page.evaluate(() => (window as any).__git.some((c: string[]) => c[0].startsWith("gh_")))).toBe(false); // gh 조회·로그인은 부르지 않는다
+  });
+
+  test(`${tag}: 인증 실패(hosting.unauthorized) 토스트의 [계정 연결] → 설정 > 계정`, async ({ page }, info) => {
+    await start(page, size, () => ((window as any).__job = { early: true, errCode: { code: "hosting.unauthorized", vars: {}, message: "Authentication failed" } }));
+    await page.getByRole("button", { name: "복제…" }).tap();
+    const d = page.getByRole("dialog");
+    await d.getByRole("textbox", { name: "URL" }).fill("https://github.com/demo/private.git");
+    await d.getByRole("button", { name: "복제", exact: true }).tap();
+    const toastBox = page.locator(".toast", { hasText: "인증에 실패했습니다" });
+    await expect(toastBox).toBeVisible();
+    await shot(page, "unauth-toast", size, info);
+    await toastBox.getByRole("button", { name: "계정 연결" }).tap();
+    const dlg = page.getByRole("dialog", { name: "설정" });
+    await expect(dlg.getByRole("list", { name: "연결된 계정" })).toBeVisible();
+    await expect(dlg.getByRole("heading", { name: "계정", exact: true })).toBeVisible();
+    await page.goBack();
+    await expect(dlg).toHaveCount(0);
+  });
+
+  test(`${tag}: 복제 대화상자에 gh 계정 선택이 없다`, async ({ page }) => {
+    await start(page, size, () => ((window as any).__gh = { installed: true, accounts: [{ user: "alice", active: true }, { user: "gold", active: false }] }));
+    await page.getByRole("button", { name: "복제…" }).tap();
+    const d = page.getByRole("dialog");
+    await expect(d.getByRole("textbox", { name: "URL" })).toBeVisible();
+    await expect(d.getByLabel("계정")).toHaveCount(0);
+    expect(await page.evaluate(() => (window as any).__git.some((c: string[]) => c[0].startsWith("gh_")))).toBe(false);
   });
 
   test(`${tag}: 빈 목록은 안내 문구와 복제 버튼`, async ({ page }, info) => {

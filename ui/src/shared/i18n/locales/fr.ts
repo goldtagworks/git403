@@ -854,6 +854,8 @@ export const fr: Record<Key, string> = {
   "status.releaseNotes": "Voir les notes de version",
   "toast.less": "Réduire",
   "toast.more": "Détails",
+  "toast.connectAccount": "Connecter un compte",
+  "hosting.introMobile": "Connectez un jeton d'accès pour cloner, fetch, pull et push en https. Le jeton est stocké uniquement dans le dossier privé de l'application. Se reconnecter au même service et hôte remplace le compte existant.",
   "toast.label": "Notifications",
   "theme.accent.system": "Système",
   "theme.accent.blue": "Bleu",

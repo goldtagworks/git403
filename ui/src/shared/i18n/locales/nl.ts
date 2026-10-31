@@ -854,6 +854,8 @@ export const nl: Record<Key, string> = {
   "status.releaseNotes": "Release notes bekijken",
   "toast.less": "Inklappen",
   "toast.more": "Details",
+  "toast.connectAccount": "Account koppelen",
+  "hosting.introMobile": "Koppel een toegangstoken om via https te clonen, fetchen, pullen en pushen. Het token wordt alleen in de privémap van de app opgeslagen. Opnieuw koppelen met dezelfde service en host vervangt het bestaande account.",
   "toast.label": "Meldingen",
   "theme.accent.system": "Systeem",
   "theme.accent.blue": "Blauw",

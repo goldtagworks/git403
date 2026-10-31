@@ -854,6 +854,8 @@ export const ne: Record<Key, string> = {
   "status.releaseNotes": "रिलिज नोटहरू हेर्नुहोस्",
   "toast.less": "खुम्च्याउनुहोस्",
   "toast.more": "विवरण",
+  "toast.connectAccount": "खाता जडान गर्नुहोस्",
+  "hosting.introMobile": "https मार्फत clone, fetch, pull र push गर्न पहुँच टोकन जडान गर्नुहोस्। टोकन एपको निजी फोल्डरमा मात्र भण्डारण हुन्छ। उही सेवा र होस्टमा फेरि जडान गर्दा अवस्थित खाता बदलिन्छ।",
   "toast.label": "सूचनाहरू",
   "theme.accent.system": "प्रणाली",
   "theme.accent.blue": "नीलो",

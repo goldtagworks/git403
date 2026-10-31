@@ -854,6 +854,8 @@ export const vi: Record<Key, string> = {
   "status.releaseNotes": "Xem ghi chú phát hành",
   "toast.less": "Thu gọn",
   "toast.more": "Chi tiết",
+  "toast.connectAccount": "Kết nối tài khoản",
+  "hosting.introMobile": "Kết nối token truy cập để clone, fetch, pull và push qua https. Token chỉ được lưu trong thư mục riêng của ứng dụng. Kết nối lại cùng dịch vụ và máy chủ sẽ thay thế tài khoản hiện có.",
   "toast.label": "Thông báo",
   "theme.accent.system": "Hệ thống",
   "theme.accent.blue": "Xanh dương",
