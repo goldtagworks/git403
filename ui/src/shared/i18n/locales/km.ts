@@ -1204,7 +1204,7 @@ export const km: Record<Key, string> = {
   "prr.act.approved": "{who} បានអនុម័ត",
   "prr.act.changes_requested": "{who} បានស្នើសុំការកែប្រែ",
   "prr.act.commented": "{who} បានបញ្ចេញមតិ",
-  "prr.act.review_requested": "{who} បានស្នើសុំការត្រួតពិនិត្យ",
+  "prr.act.review_requested": "{who} បានស្នើសុំការពិនិត្យ",
   "prr.act.pushed": "{who} បាន push",
   "prr.act.merged": "{who} បាន merge",
   "prr.act.closed": "{who} បានបិទ",
