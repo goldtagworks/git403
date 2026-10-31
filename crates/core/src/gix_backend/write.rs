@@ -19,11 +19,11 @@ use super::common::{fail, open, under};
 use super::diff::read_worktree_file;
 use crate::{Error, Result};
 
-fn exit(code: i32, msg: impl Into<String>) -> Error {
+pub(super) fn exit(code: i32, msg: impl Into<String>) -> Error {
     Error::Exit { code: Some(code), stderr: msg.into() }
 }
 
-fn unsupported(what: &str) -> Error {
+pub(super) fn unsupported(what: &str) -> Error {
     Error::Unsupported(what.to_owned())
 }
 
@@ -88,7 +88,7 @@ fn guard_explicit(index: &gix::index::File, spec: &str) -> Result<()> {
 }
 
 /// git처럼 `index.lock`을 먼저 잡고 인덱스를 읽어 고친 뒤 쓴다. 실패하면 잠금은 되돌려진다.
-fn modify_index(r: &gix::Repository, f: impl FnOnce(&mut gix::index::File) -> Result<()>) -> Result<()> {
+pub(super) fn modify_index(r: &gix::Repository, f: impl FnOnce(&mut gix::index::File) -> Result<()>) -> Result<()> {
     if let Some(h) = active_hook(r, &["post-index-change"]) {
         return Err(unsupported(&format!("index update (hook {h})")));
     }

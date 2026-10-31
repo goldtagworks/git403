@@ -79,10 +79,9 @@ fn restore_url(repo: &gix::Repository, stored: &str) -> Result<()> {
     })
 }
 
-/// 체크아웃할 트리(HEAD)의 어느 `.gitattributes`에든 `filter=`가 있으면 거절한다(외부 필터는 못 돌린다).
-fn check_filters(repo: &gix::Repository) -> Result<()> {
-    let Some(id) = repo.head().map_err(fail)?.try_peel_to_id().map_err(fail)? else { return Ok(()) };
-    let tree = id.object().map_err(fail)?.peel_to_tree().map_err(fail)?;
+/// 체크아웃할 트리의 어느 `.gitattributes`에든 `filter=`가 있으면 거절한다(외부 필터는 못 돌린다). `switch`·`pull`도 쓴다.
+pub(super) fn check_tree_filters(repo: &gix::Repository, tree: gix::ObjectId) -> Result<()> {
+    let tree = repo.find_tree(tree).map_err(fail)?;
     let mut rec = gix::traverse::tree::Recorder::default();
     tree.traverse().breadthfirst(&mut rec).map_err(fail)?;
     for e in rec.records.iter().filter(|e| e.mode.is_blob() && (e.filepath == ".gitattributes" || e.filepath.ends_with(b"/.gitattributes"))) {
@@ -92,6 +91,13 @@ fn check_filters(repo: &gix::Repository) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// 받은 HEAD 트리 검사.
+fn check_filters(repo: &gix::Repository) -> Result<()> {
+    let Some(id) = repo.head().map_err(fail)?.try_peel_to_id().map_err(fail)? else { return Ok(()) };
+    let tree = id.object().map_err(fail)?.peel_to_tree().map_err(fail)?;
+    check_tree_filters(repo, tree.id)
 }
 
 /// 실패·취소 뒤 정리: 새로 만든 폴더는 통째로 지우고, 원래 있던 빈 폴더(`existed` = 그 권한)는 남기고 비운다.

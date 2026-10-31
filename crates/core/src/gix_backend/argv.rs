@@ -1,5 +1,6 @@
-//! `run(argv)` 허용 목록: backend가 실제로 부르는 짧은 읽기 명령만 해석한다. 나머지는 `Unsupported`.
+//! `run(argv)` 허용 목록: backend가 실제로 부르는 짧은 읽기 명령과 `branch`·`switch`(쓰기, branch.rs·switch.rs)만 해석한다. 나머지는 `Unsupported`.
 //!
+//! - `config --local|--global <key> <value>`·`--unset <key>`: 쓰기(cfgwrite.rs).
 //! - `config [--local|--global] [--get] <key>`: 마지막 값(git과 같음). 없으면 종료 코드 1.
 //! - `config [--local|--global] [--null] --get-regexp <키 정규식>`: 모든 항목을 `키 값\n`(--null이면 `키\n값\0`)으로. 없으면 종료 코드 1.
 //! - `symbolic-ref --short -q HEAD`: 현재 브랜치 이름, detached면 종료 코드 1.
@@ -19,7 +20,11 @@ fn exit(code: i32, ok: &[i32]) -> Result<Vec<u8>> {
 pub(super) fn run(repo: &Path, argv: &[String], ok: &[i32]) -> Result<Vec<u8>> {
     let a: Vec<&str> = argv.iter().map(String::as_str).collect();
     match a.as_slice() {
+        ["config", scope @ ("--local" | "--global"), "--unset", key] if !key.starts_with('-') => super::cfgwrite::unset(repo, scope, key, ok),
+        ["config", scope @ ("--local" | "--global"), key, value] if !key.starts_with('-') => super::cfgwrite::set(repo, scope, key, value, ok),
         ["config", rest @ ..] => config(repo, rest, ok),
+        ["branch", rest @ ..] => super::branch::run(repo, rest),
+        ["switch", rest @ ..] => super::switch::run(repo, rest),
         ["symbolic-ref", "--short", "-q", "HEAD"] => match open(repo)?.head_name().map_err(fail)? {
             Some(n) => Ok(format!("{}\n", n.shorten()).into_bytes()),
             None => exit(1, ok),
@@ -52,10 +57,14 @@ fn config(repo: &Path, rest: &[&str], ok: &[i32]) -> Result<Vec<u8>> {
     let value = match scope {
         Some(Source::User) => {
             let f = gix::config::File::from_globals().map_err(fail)?;
-            f.string_filter(key, &mut |m: &gix::config::file::Metadata| m.source == Source::User).map(|v| v.to_vec())
+            f.string_filter(key, &mut |m: &gix::config::file::Metadata| matches!(m.source, Source::User | Source::Git)).map(|v| v.to_vec())
         }
         Some(s) => open(repo)?.config_snapshot().plumbing().string_filter(key, &mut |m: &gix::config::file::Metadata| m.source == s).map(|v| v.to_vec()),
-        None => open(repo)?.config_snapshot().string(key).map(|v| v.to_vec()),
+        // 저장소 밖에서도 git은 전역·시스템 설정을 읽는다
+        None => match gix::discover(repo) {
+            Ok(r) => r.config_snapshot().string(key).map(|v| v.to_vec()),
+            Err(_) => gix::config::File::from_globals().map_err(fail)?.string(key).map(|v| v.to_vec()),
+        },
     };
     match value {
         Some(v) => Ok([v, b"\n".to_vec()].concat()),
@@ -85,6 +94,7 @@ fn get_regexp(repo: &Path, rest: &[&str], ok: &[i32]) -> Result<Vec<u8>> {
     let re = regex::Regex::new(&lower_key_pattern(pat.ok_or_else(unsupported)?)).map_err(|_| unsupported())?;
     let file = match scope {
         Some(s) if s.contains(&Source::User) => gix::config::File::from_globals().map_err(fail)?,
+        None if gix::discover(repo).is_err() => gix::config::File::from_globals().map_err(fail)?,
         _ => open(repo)?.config_snapshot().plumbing().clone(),
     };
     let mut out = Vec::new();

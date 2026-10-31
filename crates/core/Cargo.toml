@@ -39,6 +39,10 @@ name = "worktree"
 required-features = ["cli"]
 
 [[test]]
+name = "gix_config_env"
+required-features = ["cli", "gix"]
+
+[[test]]
 name = "gix_cross"
 required-features = ["cli", "gix"]
 
