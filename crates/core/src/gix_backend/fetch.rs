@@ -84,6 +84,8 @@ fn guard_submodules(r: &gix::Repository) -> Result<()> {
 pub(super) fn fetch_remote(repo: &Path, remote: Option<&str>, specs: Option<&[String]>, ssh_batch: Option<bool>, stop: &AtomicBool, events: &mpsc::UnboundedSender<JobEvent>) -> Result<(String, gix::remote::fetch::Outcome)> {
     init_tls();
     let mut r = open(repo)?;
+    // 신원이 없어도 reflog는 쓴다(git과 같음): gix가 ref를 갱신할 때 쓰도록 대체 신원을 심는다(저장소 파일은 안 바뀜)
+    r.committer_or_set_generic_fallback().map_err(fail)?;
     if let Some(h) = super::write::active_hook(&r, &["reference-transaction"]) {
         return Err(Error::Unsupported(format!("fetch(hook {h})")));
     }
@@ -173,7 +175,7 @@ fn follow_remote_head(r: &gix::Repository, label: &str, outcome: &gix::remote::f
     if !local.starts_with(&format!("refs/remotes/{label}/")) || r.try_find_reference(local.as_str()).map_err(fail)?.is_none() {
         return Ok(());
     }
-    let who = r.committer().transpose().map_err(fail)?.map(|c| c.to_owned()).transpose().map_err(fail)?;
+    let who = Some(super::common::committer(r)?);
     let edit = gix::refs::transaction::RefEdit::update(name.as_str().try_into().map_err(fail)?, gix::refs::Target::Symbolic(local.as_str().try_into().map_err(fail)?), gix::refs::transaction::PreviousValue::MustNotExist, "remote: created from HEAD");
     let mut buf = Default::default();
     let done = r.edit_references_as(Some(edit), who.as_ref().map(|w| w.to_ref(&mut buf))).map_err(fail)?;

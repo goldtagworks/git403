@@ -1822,6 +1822,7 @@ name = "git403"
 version = "1.0.3"
 dependencies = [
  "gc-backend",
+ "gc-hosting",
  "gc-i18n",
  "jni 0.22.4",
  "ndk-context",

@@ -38,9 +38,17 @@ impl SecretStore for Keychain {
     }
 }
 
-/// Android: `init_secret_dir`로 정한 앱 전용 폴더의 `FileSecrets`.
+/// 파일 저장소를 감싸는 암호화(Android Keystore 등). `seal`한 바이트만 디스크에 쓴다.
+pub trait SecretCipher: Send + Sync {
+    fn seal(&self, plain: &[u8]) -> Result<Vec<u8>>;
+    fn open(&self, sealed: &[u8]) -> Result<Vec<u8>>;
+}
+
+/// Android: `init_secret_dir`로 정한 앱 전용 폴더 + `set_secret_cipher`로 등록한 Keystore 암호화. 암호화가 없으면 평문으로 쓰지 않고 오류를 낸다.
 #[cfg(target_os = "android")]
 static SECRET_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+#[cfg(target_os = "android")]
+static SECRET_CIPHER: std::sync::OnceLock<std::sync::Arc<dyn SecretCipher>> = std::sync::OnceLock::new();
 
 /// 앱 시작 때 한 번(앱 전용 내부 저장소 폴더). Android 전용.
 #[cfg(target_os = "android")]
@@ -48,10 +56,18 @@ pub fn init_secret_dir(dir: &std::path::Path) {
     let _ = SECRET_DIR.set(dir.to_path_buf());
 }
 
+/// Keystore 암호화를 등록한다(앱 시작 때 한 번). Android 전용.
+#[cfg(target_os = "android")]
+pub fn set_secret_cipher(cipher: std::sync::Arc<dyn SecretCipher>) {
+    let _ = SECRET_CIPHER.set(cipher);
+}
+
 #[cfg(target_os = "android")]
 impl Keychain {
     fn file() -> Result<FileSecrets> {
-        SECRET_DIR.get().map(|d| FileSecrets { path: d.join("secrets.json") }).ok_or_else(|| Error::Store("secret store is not initialized".into()))
+        let dir = SECRET_DIR.get().ok_or_else(|| Error::Store("secret store is not initialized".into()))?;
+        let cipher = SECRET_CIPHER.get().ok_or_else(|| Error::Store("secure storage (Keystore) is not initialized".into()))?;
+        Ok(FileSecrets { path: dir.join("secrets.json"), cipher: Some(cipher.clone()) })
     }
 }
 
@@ -68,42 +84,88 @@ impl SecretStore for Keychain {
     }
 }
 
-/// 토큰을 JSON 파일 하나(`{키: 토큰}`)에 저장한다. 파일 권한 0600(소유자만), 쓸 때 임시 파일 → fsync → rename → 폴더 fsync.
-/// OS 키체인이 없는 곳(Android: 앱 전용 내부 저장소라 다른 앱이 못 읽는다)용이며 한 프로세스 안에서는 잠금으로 직렬화한다.
+/// 토큰을 파일 하나(`{키: 토큰}` JSON)에 저장한다. 파일 권한 0600(소유자만), 쓸 때 임시 파일 → fsync → rename → 폴더 fsync.
+/// `cipher`가 있으면 `path`의 확장자를 `enc`로 바꾼 파일에 **봉인한 바이트만** 쓴다. 이때 평문 `path`(옛 형식)가 있으면 읽어 봉인해 옮기고 지운다(이동 도중 어느 시점에 꺼져도 평문이나 봉인본이 남는다).
+/// `cipher`가 없으면 평문(OS 키체인이 없고 암호화도 못 쓰는 곳·시험용). 한 프로세스 안에서는 잠금으로 직렬화한다.
 pub struct FileSecrets {
     pub path: PathBuf,
+    pub cipher: Option<std::sync::Arc<dyn SecretCipher>>,
 }
 
 static FILE_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 
 impl FileSecrets {
+    fn enc_path(&self) -> PathBuf {
+        self.path.with_extension("enc")
+    }
+
     fn load(&self) -> Result<std::collections::BTreeMap<String, String>> {
-        match std::fs::read_to_string(&self.path) {
-            Ok(t) => serde_json::from_str(&t).map_err(|e| Error::Store(e.to_string())),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Default::default()),
+        let read = |p: &std::path::Path| match std::fs::read(p) {
+            Ok(b) => Ok(Some(b)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(e) => Err(Error::Store(e.to_string())),
+        };
+        let parse = |b: &[u8]| serde_json::from_slice(b).map_err(|e| Error::Store(e.to_string()));
+        match &self.cipher {
+            None => Ok(read(&self.path)?.map(|b| parse(&b)).transpose()?.unwrap_or_default()),
+            Some(c) => {
+                if let Some(sealed) = read(&self.enc_path())? {
+                    return parse(&c.open(&sealed)?);
+                }
+                // 옛 평문 파일: 봉인해서 옮기고 지운다
+                match read(&self.path)? {
+                    Some(plain) => {
+                        let map = parse(&plain)?;
+                        self.store(&map)?;
+                        Ok(map)
+                    }
+                    None => Ok(Default::default()),
+                }
+            }
         }
     }
 
-    fn store(&self, map: &std::collections::BTreeMap<String, String>) -> Result<()> {
+    fn write_file(&self, target: &std::path::Path, bytes: &[u8]) -> Result<()> {
         use std::io::Write;
         let io = |e: std::io::Error| Error::Store(e.to_string());
-        let dir = self.path.parent().ok_or_else(|| Error::Store("no parent directory".into()))?;
+        let dir = target.parent().ok_or_else(|| Error::Store("no parent directory".into()))?;
         std::fs::create_dir_all(dir).map_err(io)?;
-        let tmp = self.path.with_extension("json.tmp");
+        let tmp = target.with_extension("tmp");
         let _ = std::fs::remove_file(&tmp);
         let mut opts = std::fs::OpenOptions::new();
         opts.write(true).create_new(true);
         #[cfg(unix)]
         std::os::unix::fs::OpenOptionsExt::mode(&mut opts, 0o600);
         let mut f = opts.open(&tmp).map_err(io)?;
-        f.write_all(serde_json::to_string(map).map_err(|e| Error::Store(e.to_string()))?.as_bytes()).and_then(|()| f.sync_all()).map_err(io)?;
-        std::fs::rename(&tmp, &self.path).map_err(io)?;
+        f.write_all(bytes).and_then(|()| f.sync_all()).map_err(io)?;
+        std::fs::rename(&tmp, target).map_err(io)?;
         #[cfg(unix)]
         if let Ok(d) = std::fs::File::open(dir) {
             let _ = d.sync_all();
         }
         Ok(())
+    }
+
+    fn store(&self, map: &std::collections::BTreeMap<String, String>) -> Result<()> {
+        let json = serde_json::to_vec(map).map_err(|e| Error::Store(e.to_string()))?;
+        match &self.cipher {
+            None => self.write_file(&self.path, &json),
+            Some(c) => {
+                self.write_file(&self.enc_path(), &c.seal(&json)?)?;
+                // 봉인본이 디스크에 내려간 뒤에만 평문을 지운다
+                match std::fs::remove_file(&self.path) {
+                    Ok(()) => {
+                        #[cfg(unix)]
+                        if let Some(Ok(d)) = self.path.parent().map(std::fs::File::open) {
+                            let _ = d.sync_all();
+                        }
+                        Ok(())
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                    Err(e) => Err(Error::Store(e.to_string())),
+                }
+            }
+        }
     }
 }
 
@@ -207,7 +269,7 @@ mod tests {
     #[test]
     fn file_secrets는_0600으로_저장하고_지운다() {
         let dir = std::env::temp_dir().join(format!("gc-hosting-fs-{}", std::process::id()));
-        let fs = FileSecrets { path: dir.join("secrets.json") };
+        let fs = FileSecrets { path: dir.join("secrets.json"), cipher: None };
         assert_eq!(fs.get("a").unwrap(), None);
         fs.set("a", "t1").unwrap();
         fs.set("b", "t2").unwrap();
@@ -219,7 +281,44 @@ mod tests {
         fs.delete("nope").unwrap();
         assert_eq!(fs.get("a").unwrap(), None);
         assert_eq!(fs.get("b").unwrap().as_deref(), Some("t2"));
-        assert!(!dir.join("secrets.json.tmp").exists());
+        assert!(!dir.join("secrets.tmp").exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// 시험용 암호화: 바이트를 뒤집고 앞에 표식을 붙인다(평문이 그대로 보이지 않음을 확인할 정도).
+    struct Toy;
+    impl SecretCipher for Toy {
+        fn seal(&self, p: &[u8]) -> Result<Vec<u8>> {
+            Ok(b"SEAL".iter().copied().chain(p.iter().rev().copied()).collect())
+        }
+        fn open(&self, s: &[u8]) -> Result<Vec<u8>> {
+            s.strip_prefix(b"SEAL").map(|r| r.iter().rev().copied().collect()).ok_or_else(|| Error::Store("bad seal".into()))
+        }
+    }
+
+    #[test]
+    fn 암호화가_있으면_평문을_쓰지_않고_옛_평문_파일을_옮기고_지운다() {
+        let dir = std::env::temp_dir().join(format!("gc-hosting-enc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // 옛 평문 파일
+        std::fs::write(dir.join("secrets.json"), r#"{"old":"plain-token"}"#).unwrap();
+        let fs = FileSecrets { path: dir.join("secrets.json"), cipher: Some(std::sync::Arc::new(Toy)) };
+        assert_eq!(fs.get("old").unwrap().as_deref(), Some("plain-token"), "옛 평문을 읽는다");
+        assert!(!dir.join("secrets.json").exists(), "읽으면서 평문이 지워진다");
+        fs.set("new", "tok2").unwrap();
+        let sealed = std::fs::read(dir.join("secrets.enc")).unwrap();
+        assert!(sealed.starts_with(b"SEAL"));
+        assert!(!String::from_utf8_lossy(&sealed).contains("plain-token") && !String::from_utf8_lossy(&sealed).contains("tok2"));
+        #[cfg(unix)]
+        assert_eq!(std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(dir.join("secrets.enc")).unwrap().permissions()) & 0o777, 0o600);
+        assert_eq!(fs.get("old").unwrap().as_deref(), Some("plain-token"));
+        assert_eq!(fs.get("new").unwrap().as_deref(), Some("tok2"));
+        fs.delete("old").unwrap();
+        assert_eq!(fs.get("old").unwrap(), None);
+        // 깨진 봉인본은 오류(평문으로 되돌아가지 않음)
+        std::fs::write(dir.join("secrets.enc"), b"garbage").unwrap();
+        assert!(fs.get("new").is_err());
         let _ = std::fs::remove_dir_all(dir);
     }
 

@@ -69,6 +69,11 @@ pub fn run() {
             let handle = app.handle().clone();
             #[cfg(target_os = "android")]
             android::init_tls_verifier();
+            #[cfg(target_os = "android")]
+            if let Err(e) = android::init_secret_cipher() {
+                // 계정 토큰만 못 쓴다(저장 시 오류). 앱은 계속 뜬다.
+                eprintln!("Keystore 초기화 실패: {e}");
+            }
             // 인증 입력: git·ssh가 이 실행 파일을 askpass로 부르게 한다 (gc_backend::askpass).
             // Android: 앱 전용 내부 저장소(`repos_root`·복제 대상의 기준)라 대체 경로 없이 실패시킨다
             #[cfg(target_os = "android")]

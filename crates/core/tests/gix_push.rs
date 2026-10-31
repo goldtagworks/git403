@@ -378,7 +378,10 @@ fn reflogs(work: &Path) -> String {
             // `<old> <new> <이름> <메일> <시각> <tz>\t<메시지>`
             let (head, msg) = l.split_once('\t').unwrap_or((l, ""));
             let words: Vec<&str> = head.split(' ').collect();
-            s.push_str(&format!("{} {}\t{msg}\n", words[..words.len() - 2].join(" "), ""));
+            // 신원이 없는 저장소의 reflog는 구현마다 대체 신원이 달라 신원 칸을 가린다
+            let anon = !Command::new("git").current_dir(work).args(["config", "user.name"]).output().unwrap().status.success();
+            let who = if anon { "<WHO>".to_owned() } else { words[2..words.len() - 2].join(" ") };
+            s.push_str(&format!("{} {} {who}\t{msg}\n", words[0], words[1]));
         }
     }
     s
@@ -838,4 +841,57 @@ async fn 계정_토큰으로_clone_fetch_pull_push가_되고_토큰은_어디에
     t.0.lock().unwrap().insert(format!("127.0.0.1:{}", port_of(&both)), ("kim".into(), "wr0ng-tok".into()));
     let (_, res) = run_job(&g, &both.work(), &["push", "--progress", "origin", "main"], None).await;
     res.unwrap_or_else(|e| panic!("URL 자격 증명 우선: {e:?}"));
+}
+
+// ---------- reflog 신원 ----------
+
+/// 신원(`user.name|email`)이 없는 저장소에서도 fetch·pull·branch·switch는 성공한다(git은 reflog에 대체 신원을 씀). 커밋만 거절한다.
+#[tokio::test(flavor = "multi_thread")]
+async fn 신원이_없어도_reflog를_쓰는_작업은_성공하고_커밋만_거절한다() {
+    let base = base();
+    let prep = |e: &Env| {
+        let other = e.root.path().join("other");
+        git(e.root.path(), &["clone", "-q", e.remote().to_str().unwrap(), "other"]);
+        for (k, v) in [("user.name", "o"), ("user.email", "o@o")] {
+            git(&other, &[ "config", k, v]);
+        }
+        write(&other, "r.txt", b"r\n");
+        commit(&other, "원격 커밋", 8);
+        git(&other, &["push", "-q", "origin", "main"]);
+        // 로컬: 한 커밋 뒤처지게 되돌리고 신원 설정을 지운다
+        git(&e.work(), &["reset", "-q", "--hard", "HEAD~1"]);
+        git(&e.work(), &["config", "--unset", "user.name"]);
+        git(&e.work(), &["config", "--unset", "user.email"]);
+    };
+    let refs = |d: &Path| git(d, &["for-each-ref", "--format=%(refname) %(objectname)"]);
+    // fetch·pull은 spawn_job, branch·switch는 run
+    for argv in [&["fetch"][..], &["pull", "--progress", "--ff-only", "origin", "main"]] {
+        let (a, b) = (env_of(base.path(), Kind::File, None, None), env_of(base.path(), Kind::File, None, None));
+        prep(&a);
+        prep(&b);
+        let (_, rc) = run_job(&CliBackend::new(GitRunner::default()), &a.work(), argv, None).await;
+        let (_, rg) = run_job(&GixBackend::new(), &b.work(), argv, None).await;
+        assert!(rc.is_ok() && rg.is_ok(), "{argv:?}: cli {rc:?} gix {rg:?}");
+        assert_eq!(refs(&a.work()), refs(&b.work()), "{argv:?}");
+        assert_eq!(git(&a.work(), &["rev-parse", "HEAD"]), git(&b.work(), &["rev-parse", "HEAD"]));
+        git(&b.work(), &["fsck", "--strict", "--no-dangling"]);
+    }
+    let (a, b) = (env_of(base.path(), Kind::File, None, None), env_of(base.path(), Kind::File, None, None));
+    prep(&a);
+    prep(&b);
+    for argv in [&["branch", "newb"][..], &["switch", "-c", "x", "origin/main"], &["switch", "newb"], &["branch", "-m", "newb", "renamed"]] {
+        let rc = CliBackend::new(GitRunner::default()).run(&a.work(), argv, &[]).await;
+        let rg = GixBackend::new().run(&b.work(), argv, &[]).await;
+        assert!(rc.is_ok() && rg.is_ok(), "{argv:?}: cli {rc:?} gix {rg:?}");
+        assert_eq!(refs(&a.work()), refs(&b.work()), "{argv:?}");
+    }
+    assert_eq!(reflogs(&a.work()).replace("\n", "|").contains("<WHO>"), true);
+    // 신원이 없는 reflog는 대체 신원 하나로 일관돼야 한다(빈 이름·메일이 아님)
+    let log = fs::read_to_string(b.work().join(".git/logs/refs/heads/x")).unwrap();
+    assert!(!log.contains("<>") && !log.contains("  <"), "{log}");
+    // 커밋은 거절
+    write(&b.work(), "n.txt", b"n\n");
+    git(&b.work(), &["add", "-A"]);
+    let r = GixBackend::new().commit(&b.work(), "msg", false).await;
+    assert!(matches!(r, Err(Error::Unsupported(_)) | Err(Error::Exit { .. })), "{r:?}");
 }

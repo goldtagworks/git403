@@ -170,12 +170,11 @@ impl Drop for ConfigLock {
     }
 }
 
-/// reflog에 쓸 committer. 없으면 git은 기본 신원으로 쓰지만 여기선 못 하므로 거절한다.
+/// reflog에 쓸 committer. git은 `user.name|email`이 없어도 reflog에는 대체 신원을 쓰고(커밋만 거절) gix도 같은 정책이다:
+/// 설정이 있으면 그것, 없으면 gix의 기본 대체값(`no name configured <noEmailAvailable@example.com>`, clone이 쓰는 값과 같음). 커밋은 `write.rs`가 따로 신원을 확인해 거절한다.
 pub(crate) fn committer(r: &gix::Repository) -> crate::Result<gix::actor::Signature> {
-    match r.committer() {
-        Some(c) => c.map_err(fail)?.to_owned().map_err(fail),
-        None => Err(crate::Error::Unsupported("reflog(no committer identity)".into())),
-    }
+    let mut r = r.clone();
+    r.committer_or_set_generic_fallback().map_err(fail)?.to_owned().map_err(fail)
 }
 
 /// git 경로(바이트) → 파일 시스템 경로.
