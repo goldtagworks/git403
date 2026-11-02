@@ -33,9 +33,10 @@ for T in aarch64-apple-darwin:aarch64:darwin-aarch64 x86_64-apple-darwin:x64:dar
   TAR=git403_${VERSION}_${ARCH}.app.tar.gz
   cp "$APP" "$TMPD/$TAR"
   node scripts/latest-json.mjs "$TMPD/latest.json" "$VERSION" "$PLATFORM" "https://github.com/$RELEASES/releases/download/v$VERSION/$TAR" "$APP.sig"
-  # 로컬 확인용으로 out/<아키텍처>에 복사한다(pnpm build와 같은 자리).
-  mkdir -p out && cp -R "target/$TRIPLE/release/bundle" "out/$ARCH"
   gh release upload "v$VERSION" "$DMG" "$TMPD/$TAR" -R $RELEASES --clobber
+  # 로컬 확인용 dmg만 out/<아키텍처>로 옮긴다. .app은 지워 Spotlight에 사본이 쌓이지 않게 한다.
+  rm -rf "out/$ARCH" && mkdir -p "out/$ARCH" && mv "$DMG" "out/$ARCH/"
+  rm -rf "target/$TRIPLE/release/bundle"
 done
 gh release upload "v$VERSION" "$TMPD/latest.json" -R $RELEASES --clobber
 rm -rf "$TMPD"
