@@ -220,7 +220,8 @@ test("LFS 미설치: 작업은 안내만 하고 실행하지 않는다", async (
     await expect(page.getByRole("alert")).toContainText("Git LFS가 설치되어 있지 않습니다");
     await page.getByRole("alert").getByRole("button", { name: "닫기" }).click();
   }
-  expect((await gitCalls(page)).filter((c) => c[0] === "start_job" || c[0] === "lfs")).toEqual([]);
+  // 저장소 열 때의 자동 Fetch(start_job fetch)는 제외하고 LFS 작업만 본다
+  expect((await gitCalls(page)).filter((c) => c[0] === "lfs" || (c[0] === "start_job" && String(c[1]).includes('"lfs"')))).toEqual([]);
 
   await page.locator(".picker").first().click();
   await menuItem(page, "LFS 상태…").click();

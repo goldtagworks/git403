@@ -322,7 +322,11 @@ fn active_plugins(repo_root: &Path, home: &Path) -> Vec<(String, PathBuf)> {
 
 fn tilde(home: &Path, p: &Path) -> String {
     let h = std::fs::canonicalize(home).unwrap_or_else(|_| home.to_path_buf());
-    p.display().to_string().replace(&h.display().to_string(), "~")
+    // 표시 경로는 OS와 관계없이 `/`로 (Windows의 `\` 섞임 방지)
+    match p.strip_prefix(&h) {
+        Ok(r) => format!("~/{}", r.to_string_lossy().replace('\\', "/")),
+        Err(_) => p.display().to_string(),
+    }
 }
 
 /// 지정이 없을 때의 대체: 저장소 `.claude|.agents/skills`의 커밋/PR 스킬(같은 이름은 앞의 것 하나),
@@ -701,7 +705,7 @@ mod tests {
         skill(&v1, "skills", "ke-commit", "커밋 메시지", "옛 버전");
         skill(&v2, "skills", "ke-commit", "(acme) 커밋 메시지", "새 버전 규칙");
         skill(&v2, "skills", "ke-other", "다른 일", "무관");
-        w(home, ".claude/plugins/installed_plugins.json", &plugins.replace("HOME", &home.display().to_string()));
+        w(home, ".claude/plugins/installed_plugins.json", &plugins.replace("HOME", &home.display().to_string().replace('\\', "/")));
         w(home, ".claude/settings.json", settings);
         v2
     }

@@ -15,6 +15,7 @@ const git = (...a) => execFileSync("git", a, { cwd: repo, encoding: "utf8" }).tr
 git("init", "-q", "-b", "main");
 git("config", "user.name", "E2E");
 git("config", "user.email", "e2e@example.com");
+git("config", "core.autocrlf", "false"); // Git for Windows 시스템 기본값(true)이면 CRLF 확인·내용 비교가 달라진다
 writeFileSync(join(repo, "a.txt"), "1\n");
 git("add", ".");
 git("commit", "-qm", "첫 커밋");
@@ -403,9 +404,13 @@ try {
 
   await step("앱을 끄면 실행 중이던 작업의 자식 프로세스(손자 포함)도 함께 끝난다", async () => {
     const pidFile = join(home, "child.pid");
-    await js(`await window.__TAURI_INTERNALS__.invoke("start_shell", { repo: ${JSON.stringify(repo)}, command: "sleep 300 & echo $! > ${pidFile}; wait" });`);
+    // Windows의 start_shell은 cmd /C라 손자 프로세스를 PowerShell로 띄운다 (cmd가 감싸므로 큰따옴표 없이)
+    const command = process.platform === "win32"
+      ? `powershell -NoProfile -Command $p = Start-Process -PassThru -NoNewWindow ping -ArgumentList '-n','300','127.0.0.1'; [IO.File]::WriteAllText('${pidFile}', $p.Id); $p.WaitForExit()`
+      : `sleep 300 & echo $! > ${pidFile}; wait`;
+    await js(`await window.__TAURI_INTERNALS__.invoke("start_shell", { repo: ${JSON.stringify(repo)}, command: ${JSON.stringify(command)} });`);
     let pid = 0;
-    for (let i = 0; i < 100 && !pid; i++) {
+    for (let i = 0; i < 200 && !pid; i++) {
       pid = Number(existsSync(pidFile) ? readFileSync(pidFile, "utf8").trim() : 0);
       if (!pid) await new Promise((r) => setTimeout(r, 50));
     }
@@ -421,8 +426,15 @@ try {
 } finally {
   if (saved) await js(`localStorage.clear(); for (const [k, v] of Object.entries(${saved})) localStorage.setItem(k, v);`).catch(() => {});
   app.kill();
-  rmSync(repo, { recursive: true, force: true });
-  rmSync(home, { recursive: true, force: true });
+  await exited(app);
+  // Windows는 앱이 끝난 뒤에도 자식 git·백신 검사로 폴더 잠금이 몇 초 남는다. 정리 실패가 결과를 가리지 않게 경고만
+  for (const dir of [repo, home]) {
+    try {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 50, retryDelay: 200 });
+    } catch (e) {
+      console.warn(`임시 폴더 정리 실패(무시): ${dir} — ${e.code}`);
+    }
+  }
 }
 
 finish();

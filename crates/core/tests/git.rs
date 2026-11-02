@@ -226,6 +226,7 @@ async fn restore_file_resets_worktree_and_index_from_rev() {
     let tmp = tempfile::tempdir().unwrap();
     let repo = tmp.path();
     git(repo, &["init", "-q"]);
+    git(repo, &["config", "core.autocrlf", "false"]); // Git for Windows 시스템 기본값(true)이면 복원 내용이 CRLF가 된다
     std::fs::write(repo.join("a.txt"), "v1\n").unwrap();
     git(repo, &["add", "."]);
     git(repo, &["commit", "-q", "-m", "one"]);

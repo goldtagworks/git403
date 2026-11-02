@@ -530,7 +530,7 @@ mod tests {
         git_set(&b, "git403.jira.url", "https://old.example.com").await;
         let r = b.settings_import_apply(file(json!({"gitGlobal": {"git403.jira.url": "https://new.example.com"}})), vec!["gitGlobal".into()], Some(json!({"a": 1}))).await.unwrap();
         let saved = std::fs::read_to_string(r["backup"].as_str().unwrap()).unwrap();
-        assert!(saved.contains("old.example.com") && saved.contains("\"a\": 1") && r["backup"].as_str().unwrap().contains("backups/settings-"));
+        assert!(saved.contains("old.example.com") && saved.contains("\"a\": 1") && r["backup"].as_str().unwrap().replace('\\', "/").contains("backups/settings-"));
         assert_eq!(b.git_globals().await.unwrap().0["git403.jira.url"], "https://new.example.com");
     }
 
