@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.4
+
+- Webview UI state (collapsed sidebar sections and so on) is kept when the view is reopened.
+- Commit details can sit on the right (default, with an inline message editor) or at the bottom.
+- Edit a commit message from the details pencil or the graph context menu (amend for HEAD, reword rebase for older commits).
+- Checkout blocked by local changes stashes them, switches and re-applies them.
+- Drag tabs to reorder; search shows the list of matching commits.
+
 ## 1.0.3
 
 - Redesigned commit details: the subject wraps up to three lines, the first body line is previewed under it (click to show the full message), and author, co-authors (by name), committer (when different), commit and parent hashes are shown compactly.
