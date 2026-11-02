@@ -114,6 +114,7 @@ function App() {
   // 작업 번호 → 정보. job-done이 start_job 응답보다 먼저 오면 결과를 early에 두었다가 등록 때 처리한다.
   const jobs = useRef(new Map<number, { name: string; repo: string; onDone?: () => void; remote?: boolean; quiet?: boolean; note?: ReturnType<typeof jobNote>; args?: string[]; shell?: string }>());
   const ignored = useRef(new Set<number>()); // 사용자 작업에 밀려 취소한 자동 작업 (완료 이벤트 무시)
+  const toHead = useRef(false); // Pull 성공 뒤 다음 재조회에서 선택을 HEAD(받은 최신 커밋)로 옮긴다
   const quietFailed = useRef(false); // 자동 작업이 연속 실패 중인지 (안내는 한 번만)
   const early = useRef(new Map<number, [string | null, string | undefined]>());
 
@@ -203,7 +204,9 @@ function App() {
           return next;
         });
       }
-      setSelected((s) => (s && (s === WORKTREE || v.commits.some((c) => c.id === s)) ? s : DETAIL ? null : r.find((x) => x.head)?.target ?? v.commits[0]?.id ?? null)); // 커밋 상세 탭은 확장이 보낸 select만 보인다
+      const top = toHead.current;
+      toHead.current = false;
+      setSelected((s) => (!top && s && (s === WORKTREE || v.commits.some((c) => c.id === s)) ? s : DETAIL ? null : r.find((x) => x.head)?.target ?? v.commits[0]?.id ?? null)); // 커밋 상세 탭은 확장이 보낸 select만 보인다
     } catch (e) {
       if (seq !== loadSeq.current) return;
       pendingRef.current = null;
@@ -337,7 +340,10 @@ function App() {
     if (!err && here && j.remote && !j.onDone) prBus.emit(); // 원격 ref가 바뀐 작업 뒤 PR 목록을 한 번 다시 읽는다 (onDone이 있으면 그쪽이 책임)
     if (j.onDone) {
       if (!err) j.onDone(); // 복제 등: 성공 시 그 동작만, 실패해도 현재 탭은 다시 읽지 않음
-    } else if (here) loadAll();
+    } else if (here) {
+      if (!err && j.args?.[0] === "pull") toHead.current = true;
+      loadAll();
+    }
   }, [loadAll]);
 
   // ops가 쓰는 공용 동작
