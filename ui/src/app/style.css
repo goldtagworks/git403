@@ -488,7 +488,8 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 .commit-actions { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 12px; }
 .commit-actions label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block !important; }
 .commit-btns { display: inline-flex; flex: none; gap: 6px; margin-left: auto; }
-.commit-actions label { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); }
+.commit-actions label { color: var(--muted); }
+.commit-actions label input { margin: 0 4px 0 0; vertical-align: -2px; }
 .empty-diff { display: flex; align-items: center; justify-content: center; color: var(--muted); }
 
 /* diff hunk 버튼, 고른 줄 */
@@ -515,7 +516,7 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 .sheet-aside { margin-right: auto; display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 12px; }
 .sheet-reason { color: var(--muted); word-break: keep-all; }
 /* 폼 컨트롤(설정·대화상자·커밋 입력): 기본(24px)보다 넉넉한 28px. 머리줄·아이콘 버튼처럼 작게 쓰는 곳은 각자 덮어쓴다 */
-.sheet :where(select, input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"])), .commit-box input { min-height: 28px; padding-top: 4px; padding-bottom: 4px; }
+.sheet :where(select, input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"])), .commit-box input:not([type="checkbox"]) { min-height: 28px; padding-top: 4px; padding-bottom: 4px; }
 /* 콤보박스: macOS WebKit의 기본 select는 padding-left를 무시해 글자가 테두리에 붙는다 → 모양을 직접 그린다(위아래 화살표 = macOS 팝업 버튼).
    화살표는 data URI라 토큰을 못 써서 두 테마의 --muted 사이 회색 하나로 둔다 */
 select { -webkit-appearance: none; appearance: none; padding-left: 10px; padding-right: 26px;
