@@ -845,7 +845,7 @@ test("가져오기: 언어 설정이 바로 앱 문구에 반영된다(허용 �
   expect(await page.evaluate(() => [localStorage.getItem("language"), localStorage.getItem("hidden:/demo/git403")])).toEqual(['"en"', null]);
 });
 
-// ---- 레이아웃: VS Code 설정 화면식(제목 → 설명 → 컨트롤, 카드 없음) ----
+// ---- 레이아웃: 2열 격자(라벨 | 컨트롤 + 설명), 카드·표 테두리·강조선 없음 ----
 test("설정 레이아웃: 제목줄·검색칸·항목 세로 배치·고정 폭 컨트롤", async ({ page }) => {
   await open(page, "일반");
   const d = dlg(page);
@@ -860,18 +860,21 @@ test("설정 레이아웃: 제목줄·검색칸·항목 세로 배치·고정 �
     expect(w, l).toBeLessThanOrEqual(320);
     expect(w, l).toBeGreaterThanOrEqual(120);
   }
-  // 컨트롤은 제목·설명 아래 왼쪽 정렬
+  // 2열 격자: 라벨은 왼쪽 열(오른쪽 정렬), 컨트롤은 오른쪽 열, 설명은 컨트롤 아래. 입력·select는 같은 폭·높이
   const item = d.locator(".sitem", { hasText: "자동 Fetch 간격" });
   const name = (await item.locator(".sitem-name").boundingBox())!;
   const desc = (await item.locator(".sitem-desc").boundingBox())!;
   const sel = (await d.getByLabel("자동 Fetch 간격").boundingBox())!;
-  expect(desc.y).toBeGreaterThan(name.y);
-  expect(sel.y).toBeGreaterThan(desc.y);
-  expect(Math.abs(sel.x - name.x)).toBeLessThan(4);
-  expect(sel.x + sel.width).toBeLessThan(panel.x + panel.width / 2 + 200);
-  // 항목 hover/포커스 시 왼쪽 강조선
+  expect(sel.x).toBeGreaterThan(name.x + name.width);
+  expect(desc.y).toBeGreaterThan(sel.y);
+  expect(Math.abs(desc.x - sel.x)).toBeLessThan(4);
+  const num = (await d.getByLabel(/그래프 커밋 개수 상한/).boundingBox())!;
+  expect(Math.abs(num.width - sel.width)).toBeLessThan(1);
+  expect(Math.abs(num.height - sel.height)).toBeLessThan(1);
+  expect(Math.abs(num.x - sel.x)).toBeLessThan(1);
+  // 왼쪽 강조선 없음
   await item.hover();
-  expect(await item.evaluate((el) => getComputedStyle(el).borderLeftColor)).not.toBe("rgba(0, 0, 0, 0)");
+  expect(await item.evaluate((el) => getComputedStyle(el).borderLeftWidth)).toBe("0px");
   // 버튼도 제목·설명 있는 항목, 업데이트 확인은 자동 확인 항목 안
   await expect(d.locator(".sitem", { hasText: "업데이트 자동 확인" }).getByRole("button", { name: "지금 확인" })).toBeVisible();
   for (const n of ["Git", "계정", "AI", "도구", "gitignore", "SSH 키", "이슈 링크"]) {
