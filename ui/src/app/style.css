@@ -690,7 +690,7 @@ select { -webkit-appearance: none; appearance: none; padding-left: 10px; padding
 .heat-h { text-align: left; }
 
 /* 설정 창(VS Code 설정 화면식): 제목줄 · 검색 · 왼쪽 탭 목록 · 본문(굵은 제목 → 설명 → 컨트롤). 컴포넌트는 shared/ui/SettingsLayout.tsx */
-.sheet.settings { width: min(900px, calc(100vw - 32px)); height: min(82vh, 700px); overflow: hidden; }
+.sheet.settings { width: min(1040px, calc(100vw - 32px)); height: min(86vh, 760px); overflow: hidden; }
 .settings-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 212px 1fr; }
 .settings-nav { display: flex; flex-direction: column; min-height: 0; padding: 10px 8px 10px 12px; gap: 10px; }
 .settings-search { position: relative; flex: none; display: flex; align-items: center; }
@@ -706,25 +706,26 @@ select { -webkit-appearance: none; appearance: none; padding-left: 10px; padding
 .settings-tabs [role="tab"]:hover { background: var(--hover); }
 .settings-tabs [role="tab"][aria-selected="true"] { font-weight: 600; background: var(--selected); color: var(--accent-fg); }
 .settings-panel { min-width: 0; min-height: 0; overflow: auto; padding: 12px 24px 28px 16px; }
-.sheet .settings-title { margin: 0; padding: 4px 0 6px; font-size: 20px; font-weight: 600; }
-.settings-panel, .m-settings-body { --ctl-h: 28px; --ctl-w: 320px; --lab-w: 180px; --lab-gap: 24px; }
+.sheet .settings-title { margin: 0; padding: 4px 0 10px; font-size: 24px; font-weight: 600; }
+.settings-panel, .m-settings-body { --ctl-h: 34px; --ctl-w: 400px; --lab-w: 220px; --lab-gap: 28px; }
 .panel-form { display: flex; flex-direction: column; gap: 28px; }
 .panel-form .help { margin: 0; color: var(--muted); word-break: keep-all; }
 .sgroup { display: flex; flex-direction: column; min-width: 0; }
-.sgroup-title { margin: 8px 0 4px; padding-bottom: 8px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600; }
+.sgroup-title { margin: 8px 0 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border); font-size: 15px; font-weight: 600; }
 .sgroup-card { display: flex; flex-direction: column; }
-.sgroup-note { margin: 6px 0 0; font-size: 12px; color: var(--muted); word-break: keep-all; }
-.sitem { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; }
+.sgroup-note { margin: 6px 0 0; font-size: 13px; color: var(--muted); word-break: keep-all; }
+.sitem { display: flex; flex-direction: column; gap: 6px; padding: 14px 0 14px 14px; border-left: 2px solid transparent; margin-left: -2px; }
+.sitem:hover, .sitem:focus-within { border-left-color: var(--accent); }
 .sitem-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.sitem-name { font-size: 13px; font-weight: 500; word-break: keep-all; }
+.sitem-name { font-size: 14px; font-weight: 500; word-break: keep-all; }
 .sitem-cat { font-weight: 400; color: var(--muted); }
-.sitem-desc { font-size: 12px; color: var(--muted); word-break: keep-all; }
+.sitem-desc { font-size: 13px; line-height: 1.5; color: var(--muted); word-break: keep-all; }
 .sitem-desc:empty { display: none; }
 .sitem-ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .sitem-ctl select, .sitem-ctl input:not([type="checkbox"]):not([type="radio"]) { width: var(--ctl-w); max-width: 100%; }
 .sitem-ctl button { flex: none; white-space: nowrap; }
 .sitem-ctl .folder-field { display: flex; gap: 8px; max-width: 100%; }
-.sitem-ctl .folder-field input:not([type="checkbox"]) { flex: none; }
+.sitem-ctl .folder-field input:not([type="checkbox"]) { flex: 0 1 var(--ctl-w); min-width: 0; }
 .sitem.check { flex-direction: row; align-items: flex-start; gap: 10px; }
 .sitem.check input[type="checkbox"] { margin: 0; }
 .sitem.bare { padding: 4px 0; }
@@ -732,14 +733,14 @@ select { -webkit-appearance: none; appearance: none; padding-left: 10px; padding
 .snote.warn { color: var(--danger); }
 .accounts .key-main .hint { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
 /* 데스크톱: 2열 격자(왼쪽 라벨 오른쪽 정렬 · 오른쪽 컨트롤 + 아래 설명). 컨트롤 높이·폭은 토큰 하나 */
-.settings-panel :where(input:not([type="checkbox"], [type="radio"]), select, button:not(.tool-ico, .tool-txt)) { height: var(--ctl-h); box-sizing: border-box; padding-top: 0; padding-bottom: 0; }
+.settings-panel :where(input:not([type="checkbox"], [type="radio"]), select, button:not(.tool-ico, .tool-txt)) { height: var(--ctl-h); box-sizing: border-box; padding-top: 0; padding-bottom: 0; font-size: 14px; }
 .settings-panel .accounts { border: 0; border-radius: 0; }
 .settings-panel .accounts li { padding: 6px 0; min-height: var(--ctl-h); box-sizing: border-box; }
 .settings-panel .accounts.providers label { padding: 6px 8px; border-radius: 6px; }
 @media (min-width: 641px) {
-  .settings-panel .sitem { display: grid; grid-template-columns: var(--lab-w) minmax(0, 1fr); column-gap: var(--lab-gap); row-gap: 4px; align-items: start; }
+  .settings-panel .sitem { display: grid; grid-template-columns: calc(var(--lab-w) - 12px) minmax(0, 1fr); column-gap: var(--lab-gap); row-gap: 4px; align-items: start; }
   .settings-panel .sitem-text { display: contents; }
-  .settings-panel .sitem-name { grid-column: 1; grid-row: 1 / span 2; padding-top: 5px; line-height: 18px; text-align: right; }
+  .settings-panel .sitem-name { grid-column: 1; grid-row: 1 / span 2; padding-top: 7px; line-height: 20px; text-align: right; }
   .settings-panel .sitem-ctl { grid-column: 2; grid-row: 1; min-height: var(--ctl-h); }
   .settings-panel .sitem-desc { grid-column: 2; grid-row: 2; }
   .settings-panel .panel-form > .sheet-actions { justify-content: flex-start; padding: 0; border-top: 0; margin-left: calc(var(--lab-w) + var(--lab-gap)); }

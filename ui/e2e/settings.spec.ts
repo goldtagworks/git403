@@ -857,8 +857,10 @@ test("설정 레이아웃: 제목줄·검색칸·항목 세로 배치·고정 �
   const panel = (await d.getByRole("tabpanel").boundingBox())!;
   for (const l of ["테마", "자동 Fetch 간격"]) {
     const w = (await d.getByLabel(l).boundingBox())!.width;
-    expect(w, l).toBeLessThanOrEqual(320);
-    expect(w, l).toBeGreaterThanOrEqual(120);
+    // 설정 컨트롤은 크게(design.md): 줄이면 실패
+    expect(w, l).toBeLessThanOrEqual(400);
+    expect(w, l).toBeGreaterThanOrEqual(320);
+    expect((await d.getByLabel(l).boundingBox())!.height, l).toBeGreaterThanOrEqual(34);
   }
   // 2열 격자: 라벨은 왼쪽 열(오른쪽 정렬), 컨트롤은 오른쪽 열, 설명은 컨트롤 아래. 입력·select는 같은 폭·높이
   const item = d.locator(".sitem", { hasText: "자동 Fetch 간격" });
@@ -872,9 +874,9 @@ test("설정 레이아웃: 제목줄·검색칸·항목 세로 배치·고정 �
   expect(Math.abs(num.width - sel.width)).toBeLessThan(1);
   expect(Math.abs(num.height - sel.height)).toBeLessThan(1);
   expect(Math.abs(num.x - sel.x)).toBeLessThan(1);
-  // 왼쪽 강조선 없음
+  // 호버하면 왼쪽 강조선, 안내문과 컨트롤 시작선은 같다
   await item.hover();
-  expect(await item.evaluate((el) => getComputedStyle(el).borderLeftWidth)).toBe("0px");
+  expect(await item.evaluate((el) => getComputedStyle(el).borderLeftColor)).not.toBe("rgba(0, 0, 0, 0)");
   // 버튼도 제목·설명 있는 항목, 업데이트 확인은 자동 확인 항목 안
   await expect(d.locator(".sitem", { hasText: "업데이트 자동 확인" }).getByRole("button", { name: "지금 확인" })).toBeVisible();
   for (const n of ["Git", "계정", "AI", "도구", "gitignore", "SSH 키", "이슈 링크"]) {
