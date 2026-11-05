@@ -30,6 +30,12 @@ pub(crate) struct Ai {
     /// 이 프로세스에서 위험 확인을 마친 대화 (`<대화id>\0<저장소>`). 이어 가기 차례는 다시 묻지 않는다
     #[cfg(feature = "cli")]
     pub(crate) confirmed: Mutex<HashSet<String>>,
+    /// AI 차례가 진행 중인 저장소(정규화한 경로). 같은 저장소에서 차례를 동시에 돌리지 않는다(백업·되돌림·전후 비교가 서로 엉킨다)
+    #[cfg(feature = "cli")]
+    pub(crate) repos: std::sync::Arc<Mutex<HashSet<PathBuf>>>,
+    /// 이 프로세스가 만든 백업((저장소, id) → 백업). 되돌리기가 UI가 주는 digest 대신 여기(없으면 이력)의 digest로 검사한다
+    #[cfg(feature = "cli")]
+    pub(crate) backups: Mutex<HashMap<(PathBuf, String), gc_core::ai_backup::Backup>>,
 }
 
 fn cancelled() -> String {
@@ -38,7 +44,7 @@ fn cancelled() -> String {
 
 impl Ai {
     pub fn new(config_dir: &Path) -> Self {
-        Self { path: config_dir.join("ai.json"), tasks: Default::default(), chats: Default::default(), #[cfg(feature = "cli")] confirmed: Default::default() }
+        Self { path: config_dir.join("ai.json"), tasks: Default::default(), chats: Default::default(), #[cfg(feature = "cli")] confirmed: Default::default(), #[cfg(feature = "cli")] repos: Default::default(), #[cfg(feature = "cli")] backups: Default::default() }
     }
 
     pub async fn settings(&self) -> Res<gc_ai::Settings> {

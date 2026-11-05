@@ -327,6 +327,23 @@ for (const [name, flags, why] of riskCases) {
   });
 }
 
+test("확인한 뒤 저장소 상태(지문)가 바뀌면 이어 가기 차례에서도 다시 묻고 새 지문으로 보낸다", async ({ page }) => {
+  await open(page, { __risk: { level: "public", fingerprint: "fp-a", configFp: "cf-a" } });
+  await toggle(page);
+  await send(page, "상태 알려줘");
+  await done(page);
+  expect(await confirmAsks(page)).toHaveLength(1);
+  const [first] = await callsOf(page, "ai_chat_start");
+  expect(JSON.parse(first[1]).confirmed).toBe(true);
+  // 확인 뒤 원격·설정이 바뀜(UI가 들고 있는 옛 지문은 백엔드가 인정하지 않는다)
+  await page.evaluate(() => ((window as any).__risk = { level: "public", fingerprint: "fp-b", configFp: "cf-a" }));
+  await send(page, "이어서");
+  await expect.poll(async () => (await confirmAsks(page)).length).toBe(2);
+  await expect(col(page).getByRole("button", { name: "이 작업 되돌리기" })).toHaveCount(2);
+  expect(await callsOf(page, "ai_chat_risk")).toHaveLength(2);
+  expect(await callsOf(page, "ai_chat_start")).toHaveLength(3); // 옛 지문으로 한 번 거절된 뒤 새 지문으로 성공
+});
+
 test("로컬 전용 저장소는 확인 없이 진행한다", async ({ page }) => {
   await open(page);
   await toggle(page);

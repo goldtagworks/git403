@@ -6,7 +6,7 @@
 //! 순수 판정(`judge`)과 git을 실행해 모으는 부분(`check`, 동기 `std::process::Command`)을 나눠, 앱과 MCP 서버가 같은 판정·같은 지문을 쓴다.
 
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Verdict {
@@ -18,6 +18,15 @@ pub struct Verdict {
     pub fingerprint: String,
     /// 설정(상위·서브모듈·worktree·include 전부)이 가리키는 훅 폴더(`core.hooksPath`)의 저장소 상대 경로. AI는 여기를 쓰지 못한다(`ai_tool::set_extra_protected`)
     pub hooks_dirs: Vec<String>,
+    /// include 대상 설정 파일 중 **저장소 안**의 경로(저장소 상대, 아직 없는 파일 포함). 여기에 `core.fsmonitor` 같은 것을 심으면 설정이 바뀌므로 AI는 쓰지 못한다
+    pub config_files: Vec<String>,
+}
+
+impl Verdict {
+    /// AI가 쓰면 안 되는 설정 의존 경로 전부(`ai_tool::set_extra_protected`에 넘긴다)
+    pub fn protected_paths(&self) -> Vec<String> {
+        self.hooks_dirs.iter().chain(&self.config_files).cloned().collect()
+    }
 }
 
 /// 설정 항목 하나의 출처: 상위 저장소 설정, 또는 서브모듈·다른 worktree 설정 파일(그 파일이 있는 폴더)
@@ -307,15 +316,9 @@ pub fn parse_listing(text: &str, scoped: bool) -> Vec<(String, String)> {
 }
 
 fn run(git: &str, cwd: &Path, args: &[&str]) -> Option<String> {
-    let mut c = Command::new(git);
-    // 판정은 신뢰하지 않는 설정을 읽는 일이라 fsmonitor·훅 등이 프로그램을 실행하지 못하게 한다(`-c`는 command 범위라 `--show-scope`에서 걸러져 판정·지문에 안 들어간다)
-    c.args(crate::ai_tool::hardened_args()).args(args).current_dir(cwd).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
-    // 저장소 밖을 가리키는 git 환경 변수는 지운다 (실행 환경은 MCP 서버와 같다)
-    for k in ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_NAMESPACE"] {
-        c.env_remove(k);
-    }
-    c.env("GIT_TERMINAL_PROMPT", "0").env("LC_ALL", "C");
-    let o = c.output().ok()?;
+    // 신뢰하지 않는 설정을 읽는 일이라 fsmonitor·훅 등이 프로그램을 실행하지 못하는 git 명령(`ai_tool::git_command`)으로 돌린다
+    // (`-c`는 command 범위라 `--show-scope`에서 걸러져 판정·지문에 안 들어간다)
+    let o = crate::ai_tool::git_command(git, Some(cwd)).args(args).stdout(Stdio::piped()).stderr(Stdio::null()).output().ok()?;
     o.status.success().then(|| String::from_utf8_lossy(&o.stdout).into_owned())
 }
 
@@ -327,8 +330,8 @@ fn fnv(text: &str) -> String {
 /// `include.path`·`includeIf.<조건>.path` 항목이 가리키는 파일들(조건과 무관하게: 지금 안 맞는 includeIf도 조건이 바뀌면 켜진다)
 fn include_targets(entries: &[(String, String)], base: &Path) -> Vec<PathBuf> {
     entries.iter().filter(|(k, _)| k == "include.path" || (k.starts_with("includeif.") && k.ends_with(".path"))).filter_map(|(_, v)| {
-        let p = if let Some(rest) = v.strip_prefix("~/") {
-            std::env::var_os("HOME").map(|h| PathBuf::from(h).join(rest))?
+        let p = if v.starts_with('~') {
+            expand_tilde(v)?
         } else if Path::new(v).is_absolute() {
             PathBuf::from(v)
         } else {
@@ -338,21 +341,78 @@ fn include_targets(entries: &[(String, String)], base: &Path) -> Vec<PathBuf> {
     }).collect()
 }
 
-/// 설정 항목 중 `core.hookspath` 값을 저장소 상대 경로(어휘적으로 정규화, 소문자 아님)로. 저장소 안을 가리키지 않는 값(밖의 절대 경로·`..`)은 쓸 수 없는 곳이라 뺀다
-fn hooks_dirs(entries: &[(Source, String, String)], root: &Path) -> Vec<String> {
-    let mut out: Vec<String> = entries.iter().filter(|(_, k, v)| k == "core.hookspath" && !v.is_empty()).filter_map(|(_, _, v)| {
-        let p = Path::new(v);
-        let rel = if p.is_absolute() { p.strip_prefix(root).ok().map(Path::to_path_buf).or_else(|| p.strip_prefix(canon(root)).ok().map(Path::to_path_buf))? } else { p.to_path_buf() };
-        let mut parts: Vec<String> = Vec::new();
-        for c in rel.components() {
-            match c {
-                std::path::Component::Normal(n) => parts.push(n.to_string_lossy().into_owned()),
-                std::path::Component::ParentDir => { parts.pop()?; }
-                _ => {}
+/// git이 경로 설정에서 풀어 주는 `~`·`~/x`·`~user/x`(홈 폴더). 풀 수 없으면 None
+fn expand_tilde(v: &str) -> Option<PathBuf> {
+    let rest = v.strip_prefix('~')?;
+    let (user, tail) = rest.split_once('/').map_or((rest, ""), |(u, t)| (u, t));
+    let home = if user.is_empty() { PathBuf::from(std::env::var_os("HOME")?) } else { user_home(user)? };
+    Some(if tail.is_empty() { home } else { home.join(tail) })
+}
+
+#[cfg(unix)]
+fn user_home(user: &str) -> Option<PathBuf> {
+    use std::os::unix::ffi::OsStrExt;
+    let name = std::ffi::CString::new(user).ok()?;
+    // SAFETY: getpwnam은 스레드 안전하지 않지만 반환 값을 바로 복사하고, 이 함수는 판정 스레드에서만 부른다
+    let pw = unsafe { libc::getpwnam(name.as_ptr()) };
+    if pw.is_null() {
+        return None;
+    }
+    let dir = unsafe { std::ffi::CStr::from_ptr((*pw).pw_dir) };
+    Some(PathBuf::from(std::ffi::OsStr::from_bytes(dir.to_bytes())))
+}
+#[cfg(not(unix))]
+fn user_home(_: &str) -> Option<PathBuf> {
+    None
+}
+
+/// 경로를 어휘적으로 정규화해(`.`·`..` 처리) 저장소(`root`) 안이면 저장소 상대 경로(`/` 구분)로. 밖이면 None
+fn rel_in_repo(p: &Path, root: &Path) -> Option<String> {
+    let mut norm = PathBuf::new();
+    for c in p.components() {
+        match c {
+            std::path::Component::ParentDir => {
+                norm.pop();
+            }
+            std::path::Component::CurDir => {}
+            c => norm.push(c.as_os_str()),
+        }
+    }
+    let rel = norm.strip_prefix(root).ok().or_else(|| norm.strip_prefix(canon(root)).ok())?;
+    let parts: Vec<String> = rel.components().filter_map(|c| matches!(c, std::path::Component::Normal(_)).then(|| c.as_os_str().to_string_lossy().into_owned())).collect();
+    (!parts.is_empty()).then(|| parts.join("/"))
+}
+
+/// 설정 항목 중 `core.hookspath`가 가리키는 폴더를 저장소 상대 경로로(저장소 밖은 쓸 수 없는 곳이라 뺀다). 풀이 규칙:
+/// `~`·`~user`는 홈으로 전개, 절대 경로는 그대로, 상대 경로는 훅을 돌리는 **작업 트리 기준** — 서브모듈 설정(`.git/modules/<이름>/config`·`<서브모듈>/.git/config`)에서 온 값은
+/// 그 서브모듈의 작업 트리(`core.worktree`, 없으면 알 수 없으므로 저장소 루트 기준도 함께) 기준이다.
+fn hooks_dirs(entries: &[(Source, String, String)], root: &Path, dotgit: &Path, common: &Path) -> Vec<String> {
+    let modules = common.join("modules");
+    let mut out: Vec<String> = Vec::new();
+    for (src, k, v) in entries.iter().filter(|(_, k, v)| k == "core.hookspath" && !v.is_empty()) {
+        let _ = k;
+        let mut bases: Vec<PathBuf> = vec![root.to_path_buf()];
+        if let Source::Other(dir) = src {
+            let is_sub = dir.starts_with(&modules) || (dir.file_name().is_some_and(|n| n == ".git") && dir != dotgit);
+            if is_sub {
+                bases.clear();
+                let wt = entries.iter().find(|(s, k, _)| matches!(s, Source::Other(d) if d == dir) && k == "core.worktree").map(|(_, _, w)| w.clone());
+                match wt {
+                    Some(w) => bases.push(if Path::new(&w).is_absolute() { PathBuf::from(w) } else { dir.join(w) }),
+                    None if dir.file_name().is_some_and(|n| n == ".git") => bases.extend(dir.parent().map(Path::to_path_buf)),
+                    None => bases.push(root.to_path_buf()), // 흡수된 서브모듈인데 작업 트리를 모르면 저장소 루트 기준으로 넓게 보호
+                }
             }
         }
-        (!parts.is_empty()).then(|| parts.join("/"))
-    }).collect();
+        let expanded = if v.starts_with('~') { expand_tilde(v) } else { None };
+        let candidates: Vec<PathBuf> = match (&expanded, Path::new(v).is_absolute()) {
+            (Some(p), _) => vec![p.clone()],
+            (None, true) => vec![PathBuf::from(v)],
+            (None, false) if v.starts_with('~') => vec![],
+            (None, false) => bases.iter().map(|b| b.join(v)).collect(),
+        };
+        out.extend(candidates.iter().filter_map(|c| rel_in_repo(c, root)));
+    }
     out.sort();
     out.dedup();
     out
@@ -461,10 +521,13 @@ pub fn check(repo: &Path, git: &str) -> Verdict {
     let base = if gitdir.as_os_str().is_empty() { repo.join(".git") } else { gitdir.clone() };
     let mut pending: Vec<(PathBuf, usize)> = include_targets(&entries.iter().map(|(_, k, v)| (k.clone(), v.clone())).collect::<Vec<_>>(), &base).into_iter().map(|p| (p, 1)).collect();
     let mut seen: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+    let mut config_files: Vec<String> = Vec::new();
     let mut idx = 0;
     while idx < pending.len() && idx < 200 {
         let (p, depth) = pending[idx].clone();
         idx += 1;
+        // 저장소 안의 include 대상은(아직 없는 파일도) AI가 쓰지 못하게 모은다
+        config_files.extend(rel_in_repo(&p, &root));
         if !p.is_file() || !seen.insert(canon(&p)) {
             continue;
         }
@@ -504,7 +567,10 @@ pub fn check(repo: &Path, git: &str) -> Verdict {
     v.refuse.dedup();
     let mut raw: Vec<String> = entries.iter().map(|(s, k, val)| format!("{}|{k}={val}", match s { Source::Top => "top".to_string(), Source::Other(d) => d.to_string_lossy().into_owned() })).collect();
     raw.sort();
-    v.hooks_dirs = hooks_dirs(&entries, &root);
+    config_files.sort();
+    config_files.dedup();
+    v.hooks_dirs = hooks_dirs(&entries, &root, &dotgit, &common);
+    v.config_files = config_files;
     v.fingerprint = fnv(&format!("{}\n{}\n{}\n{}", top.trim(), gitdir.display(), common.display(), raw.join("\n")));
     v
 }
@@ -512,6 +578,7 @@ pub fn check(repo: &Path, git: &str) -> Verdict {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    use std::process::Command;
 
     fn e(rows: &[(&str, &str)]) -> Vec<(Source, String, String)> {
         rows.iter().map(|(k, v)| (Source::Top, k.to_string(), v.to_string())).collect()
@@ -810,5 +877,50 @@ mod tests {
         assert!(v.review.contains(&"core.fsmonitor".to_string()), "{v:?}");
         let ran: Vec<String> = std::fs::read_dir(&m).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n != "fsm.sh").collect();
         assert!(ran.is_empty(), "판정이 프로그램을 실행했다: {ran:?}");
+    }
+
+    /// 9차 M1: `~`·`~user` 전개, 서브모듈 출처의 상대 경로는 그 서브모듈 작업 트리 기준, include 출처는 저장소 루트 기준
+    #[test]
+    fn hooks_dirs_expand_home_and_resolve_submodule_relative_paths() {
+        let (_d, r) = repo();
+        let home = PathBuf::from(std::env::var_os("HOME").expect("HOME"));
+        let fake = home.join("git403-fake-proj"); // 없는 폴더: 어휘적 정규화만 쓴다
+        let (dotgit, common) = (fake.join(".git"), fake.join(".git"));
+        let top = |k: &str, v: &str| (Source::Top, k.to_string(), v.to_string());
+        let other = |d: &Path, k: &str, v: &str| (Source::Other(d.to_path_buf()), k.to_string(), v.to_string());
+        let h = |e: &[(Source, String, String)]| hooks_dirs(e, &fake, &dotgit, &common);
+        assert_eq!(h(&[top("core.hookspath", "~/git403-fake-proj/scripts/hooks")]), vec!["scripts/hooks".to_string()]);
+        assert!(h(&[top("core.hookspath", "~/elsewhere/hooks")]).is_empty(), "저장소 밖 홈 경로는 쓸 수 없는 곳");
+        if let Ok(u) = std::env::var("USER") {
+            if user_home(&u).is_some_and(|d| d == home) {
+                assert_eq!(h(&[top("core.hookspath", &format!("~{u}/git403-fake-proj/h2"))]), vec!["h2".to_string()]);
+            }
+        }
+        // 서브모듈: 흡수된 설정(modules/<이름>, core.worktree)과 흡수되지 않은 `<서브모듈>/.git/config`
+        let m = common.join("modules/sm");
+        assert_eq!(h(&[other(&m, "core.worktree", "../../../libs/sm"), other(&m, "core.hookspath", "hk")]), vec!["libs/sm/hk".to_string()]);
+        let plain = fake.join("libs/plain/.git");
+        assert_eq!(h(&[other(&plain, "core.hookspath", "githooks")]), vec!["libs/plain/githooks".to_string()]);
+        // 작업 트리를 모르는 흡수된 서브모듈은 저장소 루트 기준으로 넓게 보호
+        assert_eq!(h(&[other(&m, "core.hookspath", "hk")]), vec!["hk".to_string()]);
+        // include 파일(저장소 밖·안의 일반 파일)에서 온 상대 경로는 저장소 루트 기준
+        assert_eq!(h(&[other(&fake.join("cfgs"), "core.hookspath", "inc/hooks")]), vec!["inc/hooks".to_string()]);
+        let _ = r;
+    }
+
+    /// 9차 M2: include 대상 중 저장소 안의 설정 파일(없는 파일 포함)은 `config_files`로 모인다
+    #[test]
+    fn include_targets_inside_the_repository_are_collected_even_when_missing() {
+        let (_d, r) = repo();
+        sh(&r, &["config", "include.path", "../local.cfg"]);
+        sh(&r, &["config", "--add", "include.path", "../sub/dir/other.cfg"]);
+        sh(&r, &["config", "--add", "include.path", "/nonexistent-outside/x.cfg"]);
+        let v = check(&r, "git");
+        assert_eq!(v.config_files, vec!["local.cfg".to_string(), "sub/dir/other.cfg".to_string()], "{v:?}");
+        assert!(v.protected_paths().contains(&"local.cfg".to_string()));
+        // 재현: 나중에 그 파일에 fsmonitor를 심으면 지문이 달라진다
+        let before = v.fingerprint.clone();
+        std::fs::write(r.join("local.cfg"), "[core]\n\tfsmonitor = /bin/true\n").unwrap();
+        assert_ne!(check(&r, "git").fingerprint, before);
     }
 }

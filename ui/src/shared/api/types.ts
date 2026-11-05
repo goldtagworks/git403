@@ -304,7 +304,9 @@ export type AiChatEvent =
   | { kind: "note"; code: string; message: string }
   | { kind: "cancelled" };
 /** 시작 전 확인이 필요한 저장소인지: none=로컬 전용·본인만 쓰는 private, public=공개, shared=본인 외 협업자 있음, unknown=판정 불가(위험으로 본다) */
-export interface AiRisk { level: "none" | "public" | "shared" | "unknown"; collaborators?: number; /** 저장소 쪽 git 설정(서브모듈 포함)에서 안전 목록 밖인 키 이름들. 있으면 레벨과 무관하게 확인 필요 */ config?: string[]; /** 확인으로도 허용할 수 없는 설정 사유(밖을 가리키는 worktree·mirror·비기본 refspec 등). 있으면 시작하지 않는다 */ refuse?: string[]; /** git 실행을 가두는 OS 샌드박스: seatbelt(macOS)·bwrap(Linux)·none(Windows·bubblewrap 없는 Linux). none이면 매 대화 확인 + 경고 */ sandbox?: "seatbelt" | "bwrap" | "none" }
+export interface AiRisk { level: "none" | "public" | "shared" | "unknown"; collaborators?: number; /** 저장소 쪽 git 설정(서브모듈 포함)에서 안전 목록 밖인 키 이름들. 있으면 레벨과 무관하게 확인 필요 */ config?: string[]; /** 확인으로도 허용할 수 없는 설정 사유(밖을 가리키는 worktree·mirror·비기본 refspec 등). 있으면 시작하지 않는다 */ refuse?: string[]; /** git 실행을 가두는 OS 샌드박스: seatbelt(macOS)·bwrap(Linux)·none(Windows·bubblewrap 없는 Linux). none이면 매 대화 확인 + 경고 */ sandbox?: "seatbelt" | "bwrap" | "none"; /** 판정에 쓴 원격·설정의 지문. 확인창에서 본 값을 `ai_chat_start`의 seen으로 되돌려 보낸다 */ fingerprint?: string; configFp?: string }
+/** 확인창에서 본 저장소 상태(위험 판정의 지문) */
+export interface AiSeen { fingerprint: string; configFp: string }
 /** 한 차례(입력·답)의 이력 한 줄 */
 export interface AiChatEntry { time: number; repo: string; input: string; answer: string; commands: string[]; backup: AiBackup | null; sessionId: string | null; status: "done" | "error" | "cancelled" }
 export interface AiChatSummary { conversation: string; title: string; time: number; turns: number }

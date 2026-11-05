@@ -36,7 +36,7 @@ pub struct Backup {
 /// (`add -A`의 clean 필터, `switch`·`reset`·`restore`의 smudge 필터가 `sh -c`로 실행되던 길. 비운 필터는 실행되지 않고, `required=false`라 실패도 아니다).
 async fn hardened(git: &GitRunner, repo: &Path) -> GitRunner {
     let mut args = crate::ai_tool::hardened_args();
-    let keys = git.output_allow(repo, &["config", "--name-only", "--get-regexp", r"^filter\..+\.(clean|smudge|process|required)$"], &[1]).await.unwrap_or_default();
+    let keys = git.hardened(crate::ai_tool::hardened_args()).output_allow(repo, &["config", "--name-only", "--get-regexp", r"^filter\..+\.(clean|smudge|process|required)$"], &[1]).await.unwrap_or_default();
     let mut names = std::collections::BTreeSet::new();
     for k in String::from_utf8_lossy(&keys).lines() {
         if let Some((name, _)) = k.trim().rsplit_once('.') {

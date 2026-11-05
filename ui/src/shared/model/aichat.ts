@@ -5,7 +5,7 @@ import { t, tErr } from "../i18n/i18n";
 import { isMobile } from "../lib/platform";
 import { toast, toastError } from "../lib/toast";
 import { aiProvider } from "./aiProviders";
-import type { AiBackup, AiChatEntry, AiChatEvent, AiRisk } from "../api/types";
+import type { AiBackup, AiChatEntry, AiChatEvent, AiRisk, AiSeen } from "../api/types";
 
 // AI 채팅(맨 오른쪽 독립 열) 상태. React 밖의 외부 스토어: 이벤트(text·tool…)가 계속 와도 구독한 화면(`features/ai/AiChat.tsx`)만 다시 그리고
 // 그래프·사이드바·상세·툴바·상태바는 건드리지 않는다. 구독은 종류별 — 대화(저장소별)·실행 중 여부(상태바)·열림(저장소별).
@@ -19,7 +19,7 @@ export type Item =
   /** 이번 차례 끝의 "이 작업 되돌리기" 한 줄. done = 되돌린 뒤 */
   | { k: "undo"; backup: AiBackup; done?: boolean };
 /** confirmed: 이 대화는 위험 확인(공개·다수 협업자·판정 불가)을 마쳤다 — 이어 가기 차례는 다시 묻지 않는다 (백엔드도 같은 규칙으로 다시 검사) */
-export interface Chat { id: string; repo: string; sessionId: string | null; items: Item[]; running: boolean; confirmed: boolean }
+export interface Chat { id: string; repo: string; sessionId: string | null; items: Item[]; running: boolean; confirmed: boolean; /** 확인창에서 본 저장소 상태(지문). 이어 가기 때 백엔드에 되돌려 보내고, 저장소가 바뀌었으면 백엔드가 거절해 다시 묻는다 */ seen?: AiSeen }
 
 /** 데스크탑 전용 (모바일·VS Code 좁은 뷰·커밋 상세 탭에는 열이 없다) */
 export const available = !isMobile && !COMPACT && !DETAIL;
@@ -165,28 +165,45 @@ export const aiChat = {
     if (!text || cur.running) return;
     const start = { ...cur, running: true, items: [...cur.items, { k: "user", text } as Item] };
     put(start);
-    let confirmed = cur.confirmed;
-    const run = () => api.aiChatStart(repo, start.id, text, start.sessionId, confirmed);
+    let seen = cur.confirmed ? cur.seen : undefined;
+    const run = () => api.aiChatStart(repo, start.id, text, start.sessionId, seen);
     const drop = (items: Item[]) => put({ ...chats.get(repo)!, running: false, items });
+    // 위험 판정(조회 실패 = 판정 불가 = 확인) → 확인창. 승낙하면 본 지문을 seen으로 쥔다. 거절·거부면 입력 줄만 거두고 false
+    const confirm = async () => {
+      const risk = await api.aiChatRisk(repo).catch((): AiRisk => ({ level: "unknown" }));
+      // 확인으로도 허용할 수 없는 저장소 설정: 묻지 않고 막는다(사유를 보여 준다)
+      if (risk.refuse?.length) return drop([...cur.items, { k: "note", text: tErr("aiChat.configRefused", { reasons: risk.refuse.join("; ") }, risk.refuse.join("; ")), error: true }]), false;
+      if (!(await confirmRisk(repo, risk))) return drop(cur.items), false;
+      seen = { fingerprint: risk.fingerprint ?? "", configFp: risk.configFp ?? "" };
+      return true;
+    };
     try {
-      // 대화 첫 실행: 위험 판정(조회 실패 = 판정 불가 = 확인). 거절하면 입력 줄만 거두고 실행하지 않는다
-      if (!confirmed) {
-        const risk = await api.aiChatRisk(repo).catch((): AiRisk => ({ level: "unknown" }));
-        // 확인으로도 허용할 수 없는 저장소 설정: 묻지 않고 막는다(사유를 보여 준다)
-        if (risk.refuse?.length) return drop([...cur.items, { k: "note", text: tErr("aiChat.configRefused", { reasons: risk.refuse.join("; ") }, risk.refuse.join("; ")), error: true }]);
-        if (!(await confirmRisk(repo, risk))) return drop(cur.items);
-        confirmed = true;
-      }
+      if (!seen && !(await confirm())) return;
       let b: AiBackup | null;
+      const attempt = async () => {
+        try {
+          return await run();
+        } catch (e) {
+          // 확인 뒤 저장소(원격·설정)가 바뀌었다: 이어 가기 차례여도 다시 묻고 한 번 더 시도한다
+          if (errCode(e) === "aiChat.confirmRequired" && seen && cur.confirmed) {
+            cur.confirmed = false; // 한 번만
+            if (!(await confirm())) return undefined;
+            return await run();
+          }
+          throw e;
+        }
+      };
       try {
-        b = await run();
+        const r = await attempt();
+        if (r === undefined) return;
+        b = r;
       } catch (e) {
         if (errCode(e) !== "ai.consentRequired") throw e;
         if (!(await consent())) return drop(cur.items); // 동의 거절: 입력 줄만 거둔다
         b = await run();
       }
       if (b) backups.set(start.id, b);
-      put({ ...chats.get(repo)!, confirmed: true });
+      put({ ...chats.get(repo)!, confirmed: true, seen });
     } catch (e) {
       backups.delete(start.id);
       drop([...chats.get(repo)!.items, { k: "note", text: String(e), error: true }]);

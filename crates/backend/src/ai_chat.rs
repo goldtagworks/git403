@@ -21,6 +21,25 @@ fn summary(name: &str, command: &str) -> String {
     format!("{name}: {}", command.lines().next().unwrap_or_default().chars().take(200).collect::<String>())
 }
 
+/// UI가 확인창에서 본 저장소 상태(`ai_chat_risk`가 준 `fingerprint`·`configFp`). 시작 때 다시 판정한 값과 같을 때만 확인으로 인정한다
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Seen {
+    pub fingerprint: String,
+    pub config_fp: String,
+}
+
+/// 저장소 단위 잠금(정규화한 경로). 놓으면(drop) 풀린다
+struct RepoLock {
+    set: std::sync::Arc<parking_lot::Mutex<std::collections::HashSet<PathBuf>>>,
+    key: PathBuf,
+}
+
+impl Drop for RepoLock {
+    fn drop(&mut self) {
+        self.set.lock().remove(&self.key);
+    }
+}
+
 impl Backend {
     /// claude에 줄 `--mcp-config`: 이 실행 파일을 MCP 서버(`--git403-mcp <저장소>`)로. 서버 환경에는 PATH·git 경로·사용자 git 설정에 필요한 변수만 넣고,
     /// git 자식에게 줄 askpass 환경은 `GIT403_GIT_ENV`로 따로 싣는다(서버가 askpass로 오인되지 않게)
@@ -56,7 +75,7 @@ impl Backend {
     /// 채팅 한 차례를 시작한다. 바로 `{backup}`(`Backup | null`)을 돌려주고 진행은 `ai-chat` 이벤트
     /// `{conversation, event: ChatEvent}`로 보낸다(마지막 이벤트는 `done`·`error`·`cancelled` 중 하나이고 이력 저장 뒤에 나간다).
     /// `conversation`은 UI가 만든 id(이어 가기는 같은 id + 직전 `done`의 `sessionId`). `program`은 보통 `claude`(테스트는 가짜 스크립트).
-    pub(crate) async fn ai_chat_start(&self, program: &str, repo: PathBuf, conversation: String, input: String, session_id: Option<String>, confirmed: bool) -> Res<Value> {
+    pub(crate) async fn ai_chat_start(&self, program: &str, repo: PathBuf, conversation: String, input: String, session_id: Option<String>, confirmed: Option<Seen>) -> Res<Value> {
         use gc_core::{ai_backup, Error as CoreError, JobEvent};
         ai_history::check_id(&conversation)?;
         if input.trim().is_empty() {
@@ -75,7 +94,9 @@ impl Backend {
         }
         let key = format!("{conversation}\0{}\0{}\0{}\0{}", repo.display(), r.fingerprint, r.config_fp, r.sandbox);
         if !self.ai.confirmed.lock().contains(&key) {
-            if (r.level != crate::ai_risk::Level::None || !r.config.is_empty() || r.sandbox == "none") && !confirmed {
+            // UI가 "확인했다"고 하려면 확인창에서 본 지문이 지금 다시 판정한 값과 같아야 한다(저장소가 바뀌었으면 다시 묻는다)
+            let seen_ok = confirmed.as_ref().is_some_and(|s| s.fingerprint == r.fingerprint && s.config_fp == r.config_fp);
+            if (r.level != crate::ai_risk::Level::None || !r.config.is_empty() || r.sandbox == "none") && !seen_ok {
                 return Err(gc_i18n::coded!("aiChat.confirmRequired", "Confirmation is required before AI can work on this repository ({level}, collaborators: {collaborators}, settings outside the safe list: {config})", level = serde_json::to_value(r.level).ok().and_then(|v| v.as_str().map(String::from)).unwrap_or_default(), collaborators = r.collaborators.unwrap_or(0), config = r.config.len()).json());
             }
             self.ai.confirmed.lock().insert(key);
@@ -84,9 +105,21 @@ impl Backend {
         if self.ai.chats.lock().contains_key(&conversation) {
             return Err(busy());
         }
+        // 같은 저장소(정규화한 경로)에서는 한 번에 한 차례만: 대화가 달라도 백업·되돌림·전후 비교가 서로 엉키지 않게
+        let lock = {
+            let key = repo.canonicalize().unwrap_or_else(|_| repo.clone());
+            let mut set = self.ai.repos.lock();
+            if !set.insert(key.clone()) {
+                return Err(busy());
+            }
+            RepoLock { set: self.ai.repos.clone(), key }
+        };
         static SEQ: AtomicU64 = AtomicU64::new(0);
         let id = format!("b{:x}{}", now_ms(), SEQ.fetch_add(1, Ordering::Relaxed));
         let backup = ai_backup::create(&self.git, &repo, &id).await.map_err(|e| e.ipc())?;
+        if let Some(b) = &backup {
+            self.ai.backups.lock().insert((repo.canonicalize().unwrap_or_else(|_| repo.clone()), id.clone()), b.clone());
+        }
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let args = chat::args(&input, session_id.as_deref(), &self.mcp_config(&repo, &r.fingerprint, &r.config_fp, r.sandbox));
         let spawned = {
@@ -117,6 +150,7 @@ impl Backend {
         let me = self.clone();
         let reply = backup.clone();
         tokio::spawn(async move {
+            let _lock = lock; // 차례가 끝나면(이력 저장·마지막 이벤트 뒤) 저장소 잠금을 푼다
             let (mut text, mut commands, mut done) = (String::new(), Vec::new(), None);
             while let Some(ev) = rx.recv().await {
                 // stderr(Progress)는 오류 요약으로만 쓰이므로 중계하지 않는다
@@ -162,6 +196,7 @@ impl Backend {
                 }
             }
             me.ai.chats.lock().remove(&conversation);
+            drop(_lock);
             me.emit_chat(&conversation, &last);
         });
         json(reply)
@@ -180,8 +215,27 @@ impl Backend {
     }
 
     /// 백업 HEAD로 되돌린다 (`gc_core::ai_backup::restore`: 안전 규칙은 그쪽 문서)
-    pub(crate) async fn ai_backup_restore(&self, repo: PathBuf, id: String, branch: Option<String>, abort_ongoing: bool, branches: bool, wip: bool, digest: Option<String>) -> Res<Value> {
-        gc_core::ai_backup::restore(&self.git, &repo, &id, branch.as_deref(), abort_ongoing, branches, wip, digest.as_deref()).await.map_err(|e| e.ipc())?;
+    /// 되돌릴 때의 백업 지문은 **UI가 준 값이 아니라** 이 프로세스가 만든 백업(없으면 이력)에 적힌 값으로 검사한다: UI가 `digest`를 빼먹어도·바꿔도 강제된다.
+    /// 어느 쪽에도 없는 id는 거절(`aiBackup.missing`). 같은 저장소에서 AI 차례가 진행 중이면 `aiChat.busy`.
+    pub(crate) async fn ai_backup_restore(&self, repo: PathBuf, id: String, branch: Option<String>, abort_ongoing: bool, branches: bool, wip: bool, _ui_digest: Option<String>) -> Res<Value> {
+        let key = repo.canonicalize().unwrap_or_else(|_| repo.clone());
+        let known = self.ai.backups.lock().get(&(key.clone(), id.clone())).cloned();
+        let known = match known {
+            Some(b) => Some(b),
+            None => {
+                let (root, r, i) = (self.chat_root(), repo.clone(), id.clone());
+                off(move || Ok(ai_history::find_backup(&root, &r, &i))).await?
+            }
+        };
+        let Some(b) = known else { return Err(gc_i18n::coded!("aiBackup.missing", "Backup not found").json()) };
+        let _lock = {
+            let mut set = self.ai.repos.lock();
+            if !set.insert(key.clone()) {
+                return Err(gc_i18n::coded!("aiChat.busy", "This conversation is already running").json());
+            }
+            RepoLock { set: self.ai.repos.clone(), key }
+        };
+        gc_core::ai_backup::restore(&self.git, &repo, &id, branch.as_deref(), abort_ongoing, branches, wip, Some(&b.digest).filter(|d| !d.is_empty()).map(String::as_str)).await.map_err(|e| e.ipc())?;
         Ok(Value::Null)
     }
 
@@ -243,6 +297,25 @@ mod tests {
     use std::path::Path;
     use std::sync::Arc;
     use std::time::Duration;
+
+    /// 지문(`fingerprint`·`configFp`)은 매번 달라 비교에서 뺀다
+    fn no_fp(mut v: Value) -> Value {
+        v.as_object_mut().unwrap().retain(|k, _| k != "fingerprint" && k != "configFp");
+        v
+    }
+
+    impl Backend {
+        /// 시험용: `confirmed`면 확인창에서 방금 판정을 본 것처럼 그 지문을 `seen`으로 넘긴다(실제 UI와 같은 흐름)
+        async fn start_t(&self, program: &str, repo: PathBuf, conversation: String, input: String, session_id: Option<String>, confirmed: bool) -> Res<Value> {
+            let seen = if confirmed {
+                let r = self.ai_chat_risk(&repo).await?;
+                Some(Seen { fingerprint: r.fingerprint, config_fp: r.config_fp })
+            } else {
+                None
+            };
+            self.ai_chat_start(program, repo, conversation, input, session_id, seen).await
+        }
+    }
 
     #[derive(Default)]
     struct Rec(Mutex<Vec<Value>>);
@@ -314,7 +387,7 @@ EOF"#;
     #[tokio::test]
     async fn run_streams_events_backs_up_head_and_saves_redacted_history() {
         let (b, rec, repo, bin, _keep) = setup(OK).await;
-        let r = b.ai_chat_start(&prog(&bin), repo.clone(), "c1".into(), "상태 알려줘".into(), None, true).await.unwrap();
+        let r = b.start_t(&prog(&bin), repo.clone(), "c1".into(), "상태 알려줘".into(), None, true).await.unwrap();
         let sha = git(&repo, &["rev-parse", "HEAD"]);
         assert_eq!((r["sha"].as_str(), r["branch"].as_str(), r["ref"].as_str().unwrap().starts_with("refs/git403/ai-backup/")), (Some(sha.as_str()), Some("main"), true));
         assert_eq!(git(&repo, &["rev-parse", r["ref"].as_str().unwrap()]), sha, "실행 전 HEAD가 ref에 저장됨");
@@ -347,9 +420,9 @@ EOF"#;
     #[tokio::test]
     async fn second_turn_resumes_session_and_busy_or_unconsented_is_rejected() {
         let (b, rec, repo, bin, _keep) = setup(OK).await;
-        b.ai_chat_start(&prog(&bin), repo.clone(), "c".into(), "하나".into(), None, true).await.unwrap();
+        b.start_t(&prog(&bin), repo.clone(), "c".into(), "하나".into(), None, true).await.unwrap();
         rec.last("c").await;
-        b.ai_chat_start(&prog(&bin), repo.clone(), "c".into(), "둘".into(), Some("s1".into()), true).await.unwrap();
+        b.start_t(&prog(&bin), repo.clone(), "c".into(), "둘".into(), Some("s1".into()), true).await.unwrap();
         for _ in 0..300 {
             if rec.kinds("c").iter().filter(|k| *k == "done").count() == 2 {
                 break;
@@ -362,17 +435,17 @@ EOF"#;
         assert_eq!((l.as_array().unwrap().len(), l[0]["turns"].as_u64(), l[0]["title"].as_str()), (1, Some(2), Some("하나")));
         // 동의 없음 / 잘못된 id / 빈 입력
         b.ai.set_settings(None, None, None, Some(false), false, None).await.unwrap();
-        let e = b.ai_chat_start(&prog(&bin), repo.clone(), "x".into(), "a".into(), None, true).await.unwrap_err();
+        let e = b.start_t(&prog(&bin), repo.clone(), "x".into(), "a".into(), None, true).await.unwrap_err();
         assert!(e.contains("ai.consentRequired"), "{e}");
         b.ai.set_settings(None, None, None, Some(true), false, None).await.unwrap();
-        assert!(b.ai_chat_start(&prog(&bin), repo.clone(), "../x".into(), "a".into(), None, true).await.unwrap_err().contains("aiChat.badId"));
-        assert!(b.ai_chat_start(&prog(&bin), repo.clone(), "x".into(), "  ".into(), None, true).await.unwrap_err().contains("aiChat.emptyInput"));
+        assert!(b.start_t(&prog(&bin), repo.clone(), "../x".into(), "a".into(), None, true).await.unwrap_err().contains("aiChat.badId"));
+        assert!(b.start_t(&prog(&bin), repo.clone(), "x".into(), "  ".into(), None, true).await.unwrap_err().contains("aiChat.emptyInput"));
     }
 
     #[tokio::test]
     async fn busy_conversation_is_rejected_and_cancel_kills_the_process_tree() {
         let (b, rec, repo, bin, _keep) = setup("echo '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"작업 중\"}]},\"parent_tool_use_id\":null}'\nsleep 60 &\necho $! > \"$D/pid\"\nwait").await;
-        b.ai_chat_start(&prog(&bin), repo.clone(), "c".into(), "오래 걸리는 일".into(), None, true).await.unwrap();
+        b.start_t(&prog(&bin), repo.clone(), "c".into(), "오래 걸리는 일".into(), None, true).await.unwrap();
         for _ in 0..300 {
             if rec.kinds("c").contains(&"text".to_string()) && bin.path().join("pid").exists() {
                 break;
@@ -380,7 +453,7 @@ EOF"#;
             tokio::time::sleep(Duration::from_millis(30)).await;
         }
         let pid: i32 = std::fs::read_to_string(bin.path().join("pid")).unwrap().trim().parse().unwrap();
-        let e = b.ai_chat_start(&prog(&bin), repo.clone(), "c".into(), "또".into(), None, true).await.unwrap_err();
+        let e = b.start_t(&prog(&bin), repo.clone(), "c".into(), "또".into(), None, true).await.unwrap_err();
         assert!(e.contains("aiChat.busy"), "{e}");
         b.ai_chat_cancel("c");
         assert_eq!(rec.last("c").await["kind"], "cancelled");
@@ -402,20 +475,20 @@ EOF"#;
     #[tokio::test]
     async fn failures_become_error_events_and_missing_cli_is_coded_and_leaves_no_backup() {
         let (b, rec, repo, bin, _keep) = setup("echo boom >&2\nexit 3").await;
-        b.ai_chat_start(&prog(&bin), repo.clone(), "e".into(), "x".into(), None, true).await.unwrap();
+        b.start_t(&prog(&bin), repo.clone(), "e".into(), "x".into(), None, true).await.unwrap();
         let last = rec.last("e").await;
         assert_eq!(last["kind"], "error");
         assert!(last["message"].as_str().unwrap().contains("boom"), "{last}");
         assert_eq!(b.ai_history_read(repo.clone(), "e".into()).await.unwrap()[0]["status"], "error");
         // result가 is_error인 경우(로그인 안 됨 등)는 done{isError:true}
         std::fs::write(bin.path().join("claude"), "#!/bin/sh\necho '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"result\":\"Not logged in\",\"session_id\":\"s\"}'\nexit 1\n").unwrap();
-        b.ai_chat_start(&prog(&bin), repo.clone(), "e2".into(), "x".into(), None, true).await.unwrap();
+        b.start_t(&prog(&bin), repo.clone(), "e2".into(), "x".into(), None, true).await.unwrap();
         let last = rec.last("e2").await;
         assert_eq!((last["kind"].as_str(), last["isError"].as_bool(), last["result"].as_str()), (Some("done"), Some(true), Some("Not logged in")));
         assert_eq!(rec.kinds("e2"), ["done"], "오류가 두 번 나가지 않는다");
         // CLI 없음
         let before = git(&repo, &["for-each-ref", "refs/git403"]);
-        let e = b.ai_chat_start("/nonexistent/claude", repo.clone(), "m".into(), "x".into(), None, true).await.unwrap_err();
+        let e = b.start_t("/nonexistent/claude", repo.clone(), "m".into(), "x".into(), None, true).await.unwrap_err();
         assert!(e.contains("aiChat.cliMissing"), "{e}");
         let after = git(&repo, &["for-each-ref", "refs/git403"]);
         assert_eq!(after.lines().count(), before.lines().count(), "실패한 시작의 백업 ref는 지운다");
@@ -426,7 +499,7 @@ EOF"#;
         let (b, rec, repo, bin, _keep) = setup(OK).await;
         assert_eq!(b.ai_chat_settings().await.unwrap(), json!({"save": true, "retentionDays": 90}));
         b.ai_chat_settings_set(Some(false), None).await.unwrap();
-        b.ai_chat_start(&prog(&bin), repo.clone(), "off".into(), "저장 안 함".into(), None, true).await.unwrap();
+        b.start_t(&prog(&bin), repo.clone(), "off".into(), "저장 안 함".into(), None, true).await.unwrap();
         rec.last("off").await;
         assert!(b.ai_history_list(repo.clone()).await.unwrap().as_array().unwrap().is_empty());
         assert!(b.ai_chat_settings_set(None, Some(0)).await.unwrap_err().contains("aiChat.badRetention"));
@@ -434,16 +507,16 @@ EOF"#;
         assert_eq!(b.ai_chat_settings().await.unwrap(), json!({"save": true, "retentionDays": 7}));
         // clear: 이력과 그 백업 ref가 같이 사라진다
         let refs = || git(&repo, &["for-each-ref", "--format=%(refname)", "refs/git403/ai-backup"]);
-        b.ai_chat_start(&prog(&bin), repo.clone(), "k".into(), "지울 대화".into(), None, true).await.unwrap();
+        b.start_t(&prog(&bin), repo.clone(), "k".into(), "지울 대화".into(), None, true).await.unwrap();
         rec.last("k").await;
         assert_eq!(refs().lines().count(), 2, "저장 끈 실행의 백업(남음) + 이 실행");
         b.ai_history_clear(repo.clone()).await.unwrap();
         assert!(b.ai_history_list(repo.clone()).await.unwrap().as_array().unwrap().is_empty());
         assert_eq!(refs().lines().count(), 1, "이력이 있던 백업만 지워진다");
         // prune: 보관 기간(7일)이 지난 대화만
-        b.ai_chat_start(&prog(&bin), repo.clone(), "old".into(), "옛 대화".into(), None, true).await.unwrap();
+        b.start_t(&prog(&bin), repo.clone(), "old".into(), "옛 대화".into(), None, true).await.unwrap();
         rec.last("old").await;
-        b.ai_chat_start(&prog(&bin), repo.clone(), "new".into(), "새 대화".into(), None, true).await.unwrap();
+        b.start_t(&prog(&bin), repo.clone(), "new".into(), "새 대화".into(), None, true).await.unwrap();
         rec.last("new").await;
         let dir = std::fs::read_dir(b.chat_root()).unwrap().flatten().next().unwrap().path();
         let f = std::fs::File::options().write(true).open(dir.join("old.jsonl")).unwrap();
@@ -459,7 +532,7 @@ EOF"#;
     async fn restore_ipc_returns_to_backup_head() {
         let (b, rec, repo, bin, _keep) = setup(&format!("cd \"$(pwd)\" && git -c user.name=t -c user.email=t@t commit -q --allow-empty -m ai-commit\n{OK}")).await;
         let before = git(&repo, &["rev-parse", "HEAD"]);
-        let r = b.ai_chat_start(&prog(&bin), repo.clone(), "r".into(), "커밋해".into(), None, true).await.unwrap();
+        let r = b.start_t(&prog(&bin), repo.clone(), "r".into(), "커밋해".into(), None, true).await.unwrap();
         rec.last("r").await;
         assert_ne!(git(&repo, &["rev-parse", "HEAD"]), before, "가짜 claude가 커밋을 만들었다");
         b.ai_backup_restore(repo.clone(), r["id"].as_str().unwrap().into(), Some("main".into()), false, false, false, None).await.unwrap();
@@ -471,7 +544,7 @@ EOF"#;
         let (b, rec, repo, bin, _keep) = setup(OK).await;
         // 로컬 전용(원격 없음): 확인 없이 진행
         assert_eq!(b.ai_chat_risk(&repo).await.unwrap().level, crate::ai_risk::Level::None);
-        b.ai_chat_start(&prog(&bin), repo.clone(), "local".into(), "a".into(), None, needs_sandbox_confirm()).await.unwrap(); // 샌드박스가 있으면 확인 없이 진행(없는 플랫폼은 확인 필요)
+        b.start_t(&prog(&bin), repo.clone(), "local".into(), "a".into(), None, needs_sandbox_confirm()).await.unwrap(); // 샌드박스가 있으면 확인 없이 진행(없는 플랫폼은 확인 필요)
         rec.last("local").await;
         // 판정 불가(GitHub가 아닌 원격·해석 못 하는 원격) = 위험: confirmed 없이는 거절, 프로세스도 안 뜬다
         // 같은 컴퓨터의 경로·file:// 원격은 로컬 전용이 아니라 **거절**(대상 저장소 설정이 push·fetch 때 실행될 수 있다): 확인(`confirmed`)으로도 시작할 수 없다
@@ -481,7 +554,7 @@ EOF"#;
             let r = b.ai_chat_risk(&repo).await.unwrap();
             assert!(r.refuse.iter().any(|x| x.contains("local path")), "{url}: {r:?}");
             for confirmed in [false, true] {
-                let e = b.ai_chat_start(&prog(&bin), repo.clone(), "loc".into(), "a".into(), None, confirmed).await.unwrap_err();
+                let e = b.start_t(&prog(&bin), repo.clone(), "loc".into(), "a".into(), None, confirmed).await.unwrap_err();
                 assert!(e.contains("aiChat.configRefused") && e.contains("local path"), "{url}: {e}");
             }
             assert!(rec.kinds("loc").is_empty());
@@ -489,17 +562,17 @@ EOF"#;
         for url in ["https://gitlab.com/o/r.git", "https://example.com/x/y.git"] {
             git(&repo, &["remote", "remove", "origin"]);
             git(&repo, &["remote", "add", "origin", url]);
-            assert_eq!(b.ai_chat_risk_ipc(repo.clone()).await.unwrap(), json!({"level": "unknown", "sandbox": sb()}), "{url}");
+            assert_eq!(no_fp(b.ai_chat_risk_ipc(repo.clone()).await.unwrap()), json!({"level": "unknown", "sandbox": sb()}), "{url}");
         }
         let _ = std::fs::remove_file(bin.path().join("args"));
-        let e = b.ai_chat_start(&prog(&bin), repo.clone(), "risky".into(), "a".into(), None, false).await.unwrap_err();
+        let e = b.start_t(&prog(&bin), repo.clone(), "risky".into(), "a".into(), None, false).await.unwrap_err();
         assert!(e.contains("aiChat.confirmRequired") && e.contains("unknown"), "{e}");
         assert!(!bin.path().join("args").exists() && rec.kinds("risky").is_empty(), "거절되면 실행하지 않는다");
         assert!(git(&repo, &["for-each-ref", "refs/git403/ai-backup"]).lines().count() <= 1, "거절된 시작은 백업도 만들지 않는다");
         // 확인하면 진행, 같은 대화의 다음 차례는 다시 묻지 않는다. 다른 대화는 다시 묻는다
-        b.ai_chat_start(&prog(&bin), repo.clone(), "risky".into(), "a".into(), None, true).await.unwrap();
+        b.start_t(&prog(&bin), repo.clone(), "risky".into(), "a".into(), None, true).await.unwrap();
         rec.last("risky").await;
-        b.ai_chat_start(&prog(&bin), repo.clone(), "risky".into(), "b".into(), Some("s1".into()), false).await.unwrap();
+        b.start_t(&prog(&bin), repo.clone(), "risky".into(), "b".into(), Some("s1".into()), false).await.unwrap();
         for _ in 0..300 {
             if rec.kinds("risky").iter().filter(|k| *k == "done").count() == 2 {
                 break;
@@ -507,7 +580,7 @@ EOF"#;
             tokio::time::sleep(Duration::from_millis(30)).await;
         }
         assert_eq!(rec.kinds("risky").iter().filter(|k| *k == "done").count(), 2);
-        let e = b.ai_chat_start(&prog(&bin), repo.clone(), "other".into(), "a".into(), None, false).await.unwrap_err();
+        let e = b.start_t(&prog(&bin), repo.clone(), "other".into(), "a".into(), None, false).await.unwrap_err();
         assert!(e.contains("aiChat.confirmRequired"), "{e}");
     }
 
@@ -532,9 +605,9 @@ EOF"#;
         git(&repo, &["config", "--unset", "url.https://example.com/.insteadOf"]);
         // 확인한 뒤 원격이 바뀌면 같은 대화도 다시 확인을 요구한다
         git(&repo, &["remote", "set-url", "origin", "https://gitlab.com/o/r.git"]);
-        b.ai_chat_start(&prog(&bin), repo.clone(), "fp".into(), "a".into(), None, true).await.unwrap();
+        b.start_t(&prog(&bin), repo.clone(), "fp".into(), "a".into(), None, true).await.unwrap();
         rec.last("fp").await;
-        b.ai_chat_start(&prog(&bin), repo.clone(), "fp".into(), "b".into(), Some("s1".into()), false).await.unwrap();
+        b.start_t(&prog(&bin), repo.clone(), "fp".into(), "b".into(), Some("s1".into()), false).await.unwrap();
         for _ in 0..300 {
             if rec.kinds("fp").iter().filter(|k| *k == "done").count() == 2 {
                 break;
@@ -542,7 +615,7 @@ EOF"#;
             tokio::time::sleep(Duration::from_millis(30)).await;
         }
         git(&repo, &["remote", "set-url", "origin", "https://gitlab.com/o/other.git"]);
-        let e = b.ai_chat_start(&prog(&bin), repo.clone(), "fp".into(), "c".into(), Some("s1".into()), false).await.unwrap_err();
+        let e = b.start_t(&prog(&bin), repo.clone(), "fp".into(), "c".into(), Some("s1".into()), false).await.unwrap_err();
         assert!(e.contains("aiChat.confirmRequired"), "{e}");
     }
 
@@ -562,14 +635,17 @@ EOF"#;
         git(&repo, &["config", "include.path", "extra.cfg"]);
         let r = b.ai_chat_risk(&repo).await.unwrap();
         assert_eq!((r.level, r.config.clone()), (crate::ai_risk::Level::None, vec!["core.sshcommand".to_string(), "diff.evil.textconv".to_string(), "include.path".to_string()]));
-        assert_eq!(b.ai_chat_risk_ipc(repo.clone()).await.unwrap(), json!({"level": "none", "config": ["core.sshcommand", "diff.evil.textconv", "include.path"], "sandbox": sb()}));
-        let e = b.ai_chat_start(&prog(&bin), repo.clone(), "ex".into(), "a".into(), None, false).await.unwrap_err();
+        let mut ipc = b.ai_chat_risk_ipc(repo.clone()).await.unwrap();
+        assert!(ipc["fingerprint"].is_string() && ipc["configFp"].as_str().is_some_and(|f| f.len() == 16), "UI가 seen으로 돌려보낼 지문: {ipc}");
+        ipc.as_object_mut().unwrap().retain(|k, _| k != "fingerprint" && k != "configFp");
+        assert_eq!(ipc, json!({"level": "none", "config": ["core.sshcommand", "diff.evil.textconv", "include.path"], "sandbox": sb()}));
+        let e = b.start_t(&prog(&bin), repo.clone(), "ex".into(), "a".into(), None, false).await.unwrap_err();
         assert!(e.contains("aiChat.confirmRequired") && e.contains("\"config\":\"3\""), "{e}");
-        b.ai_chat_start(&prog(&bin), repo.clone(), "ex".into(), "a".into(), None, true).await.unwrap();
+        b.start_t(&prog(&bin), repo.clone(), "ex".into(), "a".into(), None, true).await.unwrap();
         rec.last("ex").await;
         // 확인 뒤 실행형 설정이 늘면 같은 대화도 다시 묻는다
         git(&repo, &["config", "filter.x.clean", "sh -c id"]);
-        let e = b.ai_chat_start(&prog(&bin), repo.clone(), "ex".into(), "b".into(), Some("s1".into()), false).await.unwrap_err();
+        let e = b.start_t(&prog(&bin), repo.clone(), "ex".into(), "b".into(), Some("s1".into()), false).await.unwrap_err();
         assert!(e.contains("aiChat.confirmRequired"), "{e}");
     }
 
@@ -579,7 +655,7 @@ EOF"#;
         git(&repo, &["branch", "dev"]);
         std::fs::write(repo.join("w.txt"), "mine\n").unwrap();
         let dev0 = git(&repo, &["rev-parse", "dev"]);
-        let r = b.ai_chat_start(&prog(&bin), repo.clone(), "bk".into(), "a".into(), None, true).await.unwrap();
+        let r = b.start_t(&prog(&bin), repo.clone(), "bk".into(), "a".into(), None, true).await.unwrap();
         rec.last("bk").await;
         assert_eq!((r["heads"].as_u64(), r["wip"].is_string()), (Some(2), true));
         git(&repo, &["branch", "-D", "dev"]);
@@ -597,26 +673,87 @@ EOF"#;
         crate::sandbox::tests_force_none::set(true);
         let r = b.ai_chat_risk(&repo).await.unwrap();
         assert_eq!((r.level, r.sandbox, r.config.is_empty(), r.refuse.is_empty()), (crate::ai_risk::Level::None, "none", true, true));
-        assert_eq!(b.ai_chat_risk_ipc(repo.clone()).await.unwrap(), json!({"level": "none", "sandbox": "none"}));
-        let e = b.ai_chat_start(&prog(&bin), repo.clone(), "ns".into(), "a".into(), None, false).await.unwrap_err();
+        assert_eq!(no_fp(b.ai_chat_risk_ipc(repo.clone()).await.unwrap()), json!({"level": "none", "sandbox": "none"}));
+        let e = b.start_t(&prog(&bin), repo.clone(), "ns".into(), "a".into(), None, false).await.unwrap_err();
         assert!(e.contains("aiChat.confirmRequired"), "{e}");
         assert!(rec.kinds("ns").is_empty());
-        b.ai_chat_start(&prog(&bin), repo.clone(), "ns".into(), "a".into(), None, true).await.unwrap();
+        b.start_t(&prog(&bin), repo.clone(), "ns".into(), "a".into(), None, true).await.unwrap();
         rec.last("ns").await;
         // 서버에는 none이 전달된다(앱이 확인을 받은 경우에만)
         let args = std::fs::read_to_string(bin.path().join("args")).unwrap();
         assert!(args.contains("\"GIT403_SANDBOX\":\"none\""), "{args}");
         // 같은 대화의 다음 차례는 다시 묻지 않는다
-        b.ai_chat_start(&prog(&bin), repo.clone(), "ns".into(), "b".into(), Some("s1".into()), false).await.unwrap();
+        b.start_t(&prog(&bin), repo.clone(), "ns".into(), "b".into(), Some("s1".into()), false).await.unwrap();
         crate::sandbox::tests_force_none::set(false);
     }
 
     #[tokio::test]
     async fn the_detected_sandbox_mode_is_passed_to_the_server() {
         let (b, rec, repo, bin, _keep) = setup(OK).await;
-        b.ai_chat_start(&prog(&bin), repo.clone(), "sm".into(), "a".into(), None, true).await.unwrap();
+        b.start_t(&prog(&bin), repo.clone(), "sm".into(), "a".into(), None, true).await.unwrap();
         rec.last("sm").await;
         let args = std::fs::read_to_string(bin.path().join("args")).unwrap();
         assert!(args.contains(&format!("\"GIT403_SANDBOX\":\"{}\"", sb())), "{args}");
+    }
+
+    /// 9차 L1: UI가 "확인했다"고 해도 확인창에서 본 지문이 지금 판정과 같을 때만 인정한다(저장소가 바뀌었거나 지문이 없으면 거절)
+    #[tokio::test]
+    async fn confirmation_counts_only_when_the_seen_fingerprints_match() {
+        let (b, rec, repo, bin, _keep) = setup(OK).await;
+        git(&repo, &["remote", "add", "origin", "https://gitlab.com/o/r.git"]); // 판정 불가 = 확인 필요
+        let r = b.ai_chat_risk(&repo).await.unwrap();
+        let seen = |f: &str, c: &str| Some(Seen { fingerprint: f.into(), config_fp: c.into() });
+        for (name, s) in [("none", None), ("stale-remote", seen("0000000000000000", &r.config_fp)), ("stale-config", seen(&r.fingerprint, "0000000000000000"))] {
+            let e = b.ai_chat_start(&prog(&bin), repo.clone(), "l1".into(), "a".into(), None, s).await.unwrap_err();
+            assert!(e.contains("aiChat.confirmRequired"), "{name}: {e}");
+        }
+        // 확인 뒤(UI가 들고 있는 confirmed=true) 저장소 설정이 바뀐 경우: 옛 지문으로는 통과하지 못한다
+        b.ai_chat_start(&prog(&bin), repo.clone(), "l1".into(), "a".into(), None, seen(&r.fingerprint, &r.config_fp)).await.unwrap();
+        rec.last("l1").await;
+        git(&repo, &["config", "filter.x.clean", "sh -c id"]);
+        let e = b.ai_chat_start(&prog(&bin), repo.clone(), "l1".into(), "b".into(), Some("s".into()), seen(&r.fingerprint, &r.config_fp)).await.unwrap_err();
+        assert!(e.contains("aiChat.confirmRequired"), "{e}");
+        let r2 = b.ai_chat_risk(&repo).await.unwrap();
+        b.ai_chat_start(&prog(&bin), repo.clone(), "l1".into(), "b".into(), Some("s".into()), seen(&r2.fingerprint, &r2.config_fp)).await.unwrap();
+    }
+
+    /// 9차 L2: 같은 저장소(다른 철자의 경로 포함)에서는 대화가 달라도 AI 차례를 동시에 돌리지 않는다. 끝나면 풀린다
+    #[tokio::test]
+    async fn only_one_ai_turn_runs_per_repository() {
+        let (b, rec, repo, bin, _keep) = setup("sleep 3\n").await;
+        b.start_t(&prog(&bin), repo.clone(), "one".into(), "a".into(), None, true).await.unwrap();
+        let alias = repo.join(".").join("..").join(repo.file_name().unwrap());
+        for p in [repo.clone(), alias] {
+            let e = b.start_t(&prog(&bin), p, "two".into(), "b".into(), None, true).await.unwrap_err();
+            assert!(e.contains("aiChat.busy"), "{e}");
+        }
+        // 되돌리기도 차례가 도는 동안은 거절
+        let id = b.ai.backups.lock().keys().next().unwrap().1.clone();
+        let e = b.ai_backup_restore(repo.clone(), id, None, false, false, false, None).await.unwrap_err();
+        assert!(e.contains("aiChat.busy"), "{e}");
+        b.ai_chat_cancel("one");
+        rec.last("one").await;
+        b.start_t(&prog(&bin), repo.clone(), "two".into(), "b".into(), None, true).await.unwrap();
+        b.ai_chat_cancel("two");
+        rec.last("two").await;
+    }
+
+    /// 9차 L3: 되돌리기는 UI가 주는 digest가 아니라 백엔드가 가진 백업(메모리·이력)의 digest로 검사한다(UI가 빼먹거나 속여도 강제, 모르는 id는 거절)
+    #[tokio::test]
+    async fn restore_enforces_the_digest_from_the_backend_not_the_ui() {
+        let (b, rec, repo, bin, _keep) = setup(OK).await;
+        let r = b.start_t(&prog(&bin), repo.clone(), "d1".into(), "a".into(), None, true).await.unwrap();
+        rec.last("d1").await;
+        let id = r["id"].as_str().unwrap().to_string();
+        // 백업 ref를 바꿔치기: UI가 digest를 안 줘도·거짓 digest를 줘도 거절된다
+        let evil = git(&repo, &["commit-tree", "HEAD^{tree}", "-m", "evil"]);
+        git(&repo, &["update-ref", &format!("refs/git403/ai-backup/{id}"), &evil]);
+        for ui in [None, Some("0000000000000000".to_string()), Some(r["digest"].as_str().unwrap().to_string())] {
+            let e = b.ai_backup_restore(repo.clone(), id.clone(), Some("main".into()), false, false, false, ui).await.unwrap_err();
+            assert!(!e.is_empty() && git(&repo, &["rev-parse", "HEAD"]) != evil, "{e}");
+        }
+        // 모르는 id
+        let e = b.ai_backup_restore(repo.clone(), "bnope".into(), None, false, false, false, None).await.unwrap_err();
+        assert!(e.contains("aiBackup.missing"), "{e}");
     }
 }

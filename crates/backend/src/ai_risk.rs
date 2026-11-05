@@ -29,8 +29,7 @@ pub struct Risk {
     /// `shared`일 때: 본인 외 협업자 수
     #[serde(skip_serializing_if = "Option::is_none")]
     pub collaborators: Option<usize>,
-    /// 판정에 쓴 원격 URL(가져오기·보내기, `insteadOf` 적용 후)의 지문. 확인 키에 넣어 원격이 바뀌면 다시 묻는다. UI로는 보내지 않는다
-    #[serde(skip)]
+    /// 판정에 쓴 원격 URL(가져오기·보내기, `insteadOf` 적용 후)의 지문. 확인 키에 넣어 원격이 바뀌면 다시 묻는다. UI는 확인했다는 표시와 함께 이 값을 `ai_chat_start`의 `seen`으로 되돌려 보낸다
     pub fingerprint: String,
     /// 저장소 쪽 git 설정(상위 local·worktree·include, 서브모듈 `modules/**/config`, 다른 worktree 설정)에서 **안전 목록 밖**인 키 이름들(값은 안 담음, `gc_core::ai_config`).
     /// 비어 있지 않으면 레벨과 무관하게 확인이 필요하다(훅·ext-diff·textconv는 앱이 끄지만 filter·driver·sshCommand 등은 끌 수 없다)
@@ -39,8 +38,7 @@ pub struct Risk {
     /// 확인으로도 허용할 수 없는 사유(저장소 밖 worktree·bare·mirror·비기본 fetch/push refspec·백업 이름공간 언급 등). 있으면 AI 채팅을 시작하지 않는다
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub refuse: Vec<String>,
-    /// 판정에 쓴 설정 전체의 지문(UI로는 안 보냄). 확인 키에 넣고 MCP 서버가 도구 호출마다 다시 계산해 대조한다
-    #[serde(skip)]
+    /// 판정에 쓴 설정 전체의 지문. 확인 키에 넣고 MCP 서버가 도구 호출마다 다시 계산해 대조한다. UI는 `seen`으로 되돌려 보낸다
     pub config_fp: String,
     /// git 실행을 가두는 OS 샌드박스: `seatbelt`(macOS)·`bwrap`(Linux)·`none`(Windows·bubblewrap 없는 Linux). `none`이면 앱의 검사만 남으므로 **매 대화 확인창 + 경고**를 요구한다
     pub sandbox: &'static str,
@@ -74,8 +72,13 @@ pub fn combine(rs: impl IntoIterator<Item = Risk>) -> Risk {
 impl Backend {
     /// 저장소의 위험 판정. 원격이 없으면 네트워크를 쓰지 않는다. 원격 URL은 `git remote get-url --all`(가져오기)과 `--push --all`(`pushurl` 포함)이
     /// 돌려주는 값 — git이 `url.<base>.insteadOf`를 적용한 뒤의 실제 주소다.
+    /// 판정용 읽기 git: 샌드박스 밖이라 훅·fsmonitor 등을 끈 실행기로만 돌린다(`ai_tool::hardened_args`)
+    async fn safe_git(&self, repo: &Path, args: &[&str], ok_codes: &[i32]) -> Result<Vec<u8>, gc_core::Error> {
+        self.git.hardened(gc_core::ai_tool::hardened_args()).output_allow(repo, args, ok_codes).await
+    }
+
     pub(crate) async fn ai_chat_risk(&self, repo: &Path) -> Res<Risk> {
-        let names = self.backend.run(repo, &["remote"], &[]).await.map_err(err)?;
+        let names = self.safe_git(repo, &["remote"], &[]).await.map_err(err)?;
         let names: Vec<String> = String::from_utf8_lossy(&names).lines().map(|l| l.trim().to_owned()).filter(|l| !l.is_empty()).collect();
         let mut urls = Vec::new();
         for n in &names {
@@ -86,7 +89,7 @@ impl Backend {
                 }
                 a.push(n.as_str());
                 // 실패(원격 설정 이상)는 해석 못 하는 원격으로 취급한다
-                match self.backend.run(repo, &a, &[]).await {
+                match self.safe_git(repo, &a, &[]).await {
                     Ok(o) => urls.extend(String::from_utf8_lossy(&o).lines().map(|l| (n.clone(), l.trim().to_owned())).filter(|(_, u)| !u.is_empty())),
                     Err(_) => urls.push((n.clone(), String::new())),
                 }
@@ -103,7 +106,7 @@ impl Backend {
         }
         for a in lfs_args {
             let argv: Vec<&str> = a.iter().map(String::as_str).collect();
-            if let Ok(o) = self.backend.run(repo, &argv, &[1]).await {
+            if let Ok(o) = self.safe_git(repo, &argv, &[1]).await {
                 hosted.extend(String::from_utf8_lossy(&o).lines().map(|l| ("lfs".to_string(), l.trim().to_owned())).filter(|(_, u)| !u.is_empty() && !gc_core::ai_config::is_local_url(u)));
             }
         }
@@ -162,7 +165,7 @@ mod tests {
         assert_eq!(combine([r(Level::None, None), r(Level::Unknown, None)]).level, Level::Unknown);
         assert_eq!(combine([r(Level::Unknown, None), r(Level::Shared, Some(2)), r(Level::Shared, Some(5))]), r(Level::Shared, Some(5)));
         assert_eq!(combine([r(Level::Shared, Some(2)), r(Level::Public, None), r(Level::None, None)]).level, Level::Public);
-        assert_eq!(serde_json::to_value(r(Level::Shared, Some(2))).unwrap(), serde_json::json!({"level": "shared", "collaborators": 2, "sandbox": "none"}));
-        assert_eq!(serde_json::to_value(r(Level::None, None)).unwrap(), serde_json::json!({"level": "none", "sandbox": "none"}));
+        assert_eq!(serde_json::to_value(r(Level::Shared, Some(2))).unwrap(), serde_json::json!({"level": "shared", "collaborators": 2, "fingerprint": "", "configFp": "", "sandbox": "none"}));
+        assert_eq!(serde_json::to_value(r(Level::None, None)).unwrap(), serde_json::json!({"level": "none", "fingerprint": "", "configFp": "", "sandbox": "none"}));
     }
 }

@@ -4,7 +4,7 @@ import { t } from "../i18n/i18n";
 import type { Locale } from "../i18n/i18n";
 import { hiddenPatterns } from "../lib/hidden";
 import { graphLimit, pref } from "../lib/settings";
-import type { GhAccounts, GhProbe, GhRepoAccount, AiProvider, AiEffort, PrReviewComment, ConflictBlobs, AiMethod, AiPart, AiResults, AiBackup, AiRisk, AiChatEntry, AiChatSettings, AiChatSummary, AiStatus, AiTask, BlameLine, ChangedFile, Commit, GraphView, HostAccount, InboxPr, PrDetail, HostProvider, Lfs, Pr, Ref, RemoteInfo, RemoteRepo, SshKey, Stats, StatsRange, Status, Submodule, SettingsApplied, SettingsPreview, SettingsSectionId, Worktree } from "./types";
+import type { GhAccounts, GhProbe, GhRepoAccount, AiProvider, AiEffort, PrReviewComment, ConflictBlobs, AiMethod, AiPart, AiResults, AiBackup, AiRisk, AiSeen, AiChatEntry, AiChatSettings, AiChatSummary, AiStatus, AiTask, BlameLine, ChangedFile, Commit, GraphView, HostAccount, InboxPr, PrDetail, HostProvider, Lfs, Pr, Ref, RemoteInfo, RemoteRepo, SshKey, Stats, StatsRange, Status, Submodule, SettingsApplied, SettingsPreview, SettingsSectionId, Worktree } from "./types";
 
 /** PR 계열 호출에 로컬 저장소 경로(연결된 gh 계정 토큰을 쓰게) */
 const lr = (localRepo?: string) => (localRepo ? { localRepo } : {});
@@ -141,8 +141,8 @@ export const api = {
   aiCancel: (token: string) => invoke<void>("ai_cancel", { token }),
   /** AI 채팅(Claude Code CLI): 한 차례 시작. 바로 백업(커밋 없는 저장소는 null)을 돌려주고 진행은 이벤트 `ai-chat {conversation, event}`. 이어 가기 = 같은 conversation + 직전 done의 sessionId */
   aiChatRisk: (repo: string) => invoke<AiRisk>("ai_chat_risk", { repo }),
-  /** confirmed: 위험 확인창(공개·다수 협업자·판정 불가)에서 승낙함. 백엔드가 다시 판정해 필요한데 false면 `aiChat.confirmRequired` */
-  aiChatStart: (repo: string, conversation: string, input: string, sessionId?: string | null, confirmed?: boolean) => invoke<AiBackup | null>("ai_chat_start", { repo, conversation, input, ...(sessionId ? { sessionId } : {}), ...(confirmed ? { confirmed } : {}) }),
+  /** seen: 위험 확인창(공개·다수 협업자·판정 불가)에서 승낙할 때 본 저장소 상태(`aiChatRisk`의 지문). 백엔드가 다시 판정해 필요한데 seen이 없거나 지금 값과 다르면 `aiChat.confirmRequired` */
+  aiChatStart: (repo: string, conversation: string, input: string, sessionId?: string | null, seen?: AiSeen) => invoke<AiBackup | null>("ai_chat_start", { repo, conversation, input, ...(sessionId ? { sessionId } : {}), ...(seen ? { confirmed: true, seen } : {}) }),
   aiChatCancel: (conversation: string) => invoke<void>("ai_chat_cancel", { conversation }),
   /** 백업 HEAD로 되돌린다. 머지·리베이스 등이 진행 중이면 aiBackup.operationInProgress — abortOngoing:true로 중단하고 되돌린다 */
   /** branches: 백업 때의 다른 로컬 브랜치 위치도 되돌림, wip: 백업 때의 작업 트리 스냅숏 내용도 되돌림(둘 다 사용자 확인 뒤에만) */

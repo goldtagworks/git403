@@ -77,6 +77,7 @@
 변경 이력
 - 2026-11-05: AI 채팅 보안 리뷰(금지 목록 `-c` 우회·도구 경로 무제한·저장소 설정 신뢰) 뒤 작성
 - 2026-11-05: OS 샌드박스 방어층(macOS Seatbelt·Linux bubblewrap·Windows는 확인+경고)과 "다층 방어" 절
+- 2026-11-05: 9차 리뷰 — hooksPath 홈 전개·서브모듈 기준·include 설정 파일 보호·샌드박스 밖 git 생성 단일화+소스 검사·확인에 본 지문 대조·저장소 잠금·되돌리기 digest 강제·이력 권한
 - 2026-11-05: 8차 리뷰 — 설정이 가리키는 훅 폴더 쓰기 금지·hooksPath review·샌드박스 밖 git(백업·판정)에 훅·필터·fsmonitor 끔 옵션·edit_file 하드링크·O_NOFOLLOW
 - 2026-11-05: 7차 리뷰 — 서버 쪽 쓰기 심볼릭 링크 안전화·링크 변화 전후 비교·LFS는 저장소가 실제 쓸 때만 네트워크 없는 단계에서 셸(LFS push 거절)·`.lfsconfig`·`lfs.url`·Linux bwrap 정리
 - 2026-11-05: 6차 리뷰 — 하위 키 단위 설정 허용 목록·include 대상 판정·로컬 경로 원격 거절·git 폴더 구조 검사·gc/maintenance/file 프로토콜 끔·실행 전후 비교로 보호 경로 변경 되돌림
@@ -96,3 +97,12 @@
 - **설정이 가리키는 훅 폴더는 쓰기 금지**: `core.hooksPath`(상위·서브모듈·worktree·include 어디서든)는 값이 비어 있지 않으면 `review`(사용자 확인에 키 이름이 보임)이고, `ai_config::Verdict.hooks_dirs`가 그 실제 값을 저장소 상대 경로로 모은다. MCP 서버가 `git` 호출과 `edit_file`마다 판정을 다시 해 `ai_tool::set_extra_protected`로 넣으면 정적 목록(`.githooks`·`.husky`…)과 똑같이 `edit_file`·`mv`·`mcp::preflight`(들어오는 변경)·`run_guarded`(전후 비교·되돌림)에 적용된다. 이름 비교는 대소문자·끝의 점·공백을 무시한다(대소문자 무시 파일 시스템·Windows에서 `.HUSKY`·`.GitHub.` 우회 불가 — 시험은 정적 목록 전체의 변형과 이 파일 시스템의 실제 다른 철자 쓰기 거절을 확인).
 - **샌드박스 밖에서 도는 모든 git에 안전 옵션**: 앱의 백업 생성·되돌리기·삭제(`ai_backup`)는 샌드박스 밖이라 `GitRunner::hardened`로 `ai_tool::hardened_args()`(훅 끔=`core.hooksPath` null 장치·fsmonitor 끔·외부 프로토콜 끔·pager 없음·서브모듈 안 들어감·gc/maintenance 끔)와 **저장소 설정의 모든 `filter.<이름>`의 clean·smudge·process를 비우고 `required=false`**를 붙인다(`add -A`의 clean, `switch`·`reset`·`restore`의 smudge, `update-ref`의 `reference-transaction`·`post-checkout` 훅이 막힘). 같은 옵션을 설정 판정(`ai_config::check`)의 읽기 git에도 붙였다 — 시험으로 `ls-files`가 `core.fsmonitor` 프로그램을 실행하던 것을 찾아 막았다(`-c`는 command 범위라 판정·지문에 안 들어감). 시험: 대조군(보통 git)은 훅·clean·smudge·fsmonitor가 전부 표식을 만들고, 백업 생성·복원(브랜치·wip 포함)·삭제는 하나도 못 만든다(안전 옵션을 빼면 시험이 실패함을 확인). 이 경로는 사용자가 review 키를 승낙한 뒤에도 같다.
 - **`edit_file`은 `ai_tool::write_confined`로**: 경로 성분 심볼릭 링크 거절·`O_NOFOLLOW`·새 파일은 `create_new`, 기존 파일은 하드링크(`nlink>1`)면 거절(링크 반대편이 저장소 밖·보호 경로일 수 있음). 서버의 되돌림 쓰기(`mcp::safe_write`)도 같은 함수.
+
+## 9차 리뷰 반영
+
+- **설정 의존 경로 보호 확대**: `core.hooksPath` 값은 `~`·`~user`를 홈으로 전개하고, 상대 경로는 훅을 돌리는 작업 트리 기준으로 푼다 — 서브모듈 설정(`.git/modules/<이름>/config`는 `core.worktree`, `<서브모듈>/.git/config`는 그 폴더) 출처의 값은 그 서브모듈 작업 트리 기준(작업 트리를 모르면 저장소 루트 기준으로 넓게). include 대상 설정 파일 중 **저장소 안** 경로(아직 없는 파일 포함, `include.path ../local.cfg` 등)는 `Verdict.config_files`로 모아 훅 폴더와 함께 `set_extra_protected`에 넣는다(`edit_file`·`mv`·`preflight`·`run_guarded`). `~user` 전개를 include 경로에도 쓴다.
+- **샌드박스 밖 git 생성을 한 곳으로**: 동기는 `ai_tool::git_command(git, cwd)`(훅·fsmonitor·외부 프로토콜 끔 + git 환경 변수 제거), 비동기는 `GitRunner::hardened(hardened_args())`뿐이다. `ai_config::check`·`mcp`의 LFS·credential helper 조회·`ai_risk`의 원격·`lfs.url` 조회·`ai_backup`의 필터 조회가 모두 이걸 쓴다(LFS 판정 git이 맨 `Command::new`이던 곳 수정). 지키는 시험은 `crates/backend/tests/ai_guard.rs`(소스 검사): AI 코드의 비시험 부분에 맨 `Command::new(`·무방비 `GitRunner` 호출이 없고, `ai_backup` 공개 함수마다 `hardened`를 쓴다.
+- **확인은 본 상태에만 유효**: `ai_chat_risk`가 `fingerprint`(원격)·`configFp`(설정)를 UI에 주고, `ai_chat_start`는 `confirmed`와 함께 확인창에서 본 값 `seen`을 받아 **다시 판정한 값과 같을 때만** 인정한다(없거나 다르면 `aiChat.confirmRequired`). UI는 이어 가기에서 거절되면 다시 묻고 새 지문으로 한 번 더 시도한다.
+- **저장소 단위 잠금**: 정규화한 경로 기준으로 같은 저장소에서 AI 차례는 동시에 하나(대화가 달라도 `aiChat.busy`), 차례가 도는 동안 되돌리기도 `aiChat.busy`. 차례가 끝나면(이력 저장 뒤 마지막 이벤트 직전) 풀린다.
+- **되돌리기 지문은 백엔드가 강제**: 이 프로세스가 만든 백업(없으면 채팅 이력)에서 `digest`를 찾아 검사한다 — UI가 `digest`를 빼먹거나 바꿔도 소용없고, 어느 쪽에도 없는 id는 `aiBackup.missing`.
+- **이력 보호**: 이력 폴더는 정규화한 경로로 해시(링크·`..`·끝 슬래시로 다른 이력이 되지 않음), 폴더 0700·파일 0600(기존 파일도 다음 저장 때 좁힘, 유닉스).

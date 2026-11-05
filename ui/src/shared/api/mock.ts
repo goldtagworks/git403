@@ -641,19 +641,21 @@ function handle(cmd: string, args: any): any {
       const w = window as any;
       gitCalls.push(["ai_chat_risk", (args as any).repo]);
       if (w.__riskFail) throw w.__riskFail;
-      return w.__risk ?? { level: "none" };
+      return { fingerprint: "fp0", configFp: "cf0", ...(w.__risk ?? { level: "none" }) };
     }
     if (cmd === "ai_chat_start") {
       const w = window as any;
-      const { repo, conversation, input, sessionId, confirmed } = args as { repo: string; conversation: string; input: string; sessionId?: string; confirmed?: boolean };
+      const { repo, conversation, input, sessionId, confirmed, seen } = args as { repo: string; conversation: string; input: string; sessionId?: string; confirmed?: boolean; seen?: { fingerprint: string; configFp: string } };
       gitCalls.push(["ai_chat_start", JSON.stringify({ repo, conversation, input, ...(sessionId ? { sessionId } : {}), ...(confirmed ? { confirmed } : {}) })]);
       if (!aiState().consent) throw JSON.stringify({ code: "ai.consentRequired", vars: {}, message: "Consent to use AI is required" });
       // 백엔드는 UI를 믿지 않고 다시 판정한다: 대화 첫 실행에 위험(none 아님)이고 확인이 없으면 거절
-      const key = `${conversation}\0${repo}`;
+      const risk = { fingerprint: "fp0", configFp: "cf0", ...(w.__risk ?? { level: "none" }) };
+      const key = `${conversation}\0${repo}\0${risk.fingerprint}\0${risk.configFp}`;
       if (!chatConfirmed.has(key)) {
-        const risk = w.__risk ?? { level: "none" };
         if (risk.refuse?.length) throw JSON.stringify({ code: "aiChat.configRefused", vars: { reasons: risk.refuse.join("; ") }, message: "refused" });
-        if ((risk.level !== "none" || risk.config?.length || risk.sandbox === "none") && !confirmed) throw JSON.stringify({ code: "aiChat.confirmRequired", vars: { level: risk.level, collaborators: risk.collaborators ?? 0, config: risk.config?.length ?? 0 }, message: "Confirmation is required" });
+        // 확인은 확인창에서 본 지문이 지금 판정과 같을 때만 인정한다(백엔드와 같은 규칙)
+        const seenOk = !!confirmed && seen?.fingerprint === risk.fingerprint && seen?.configFp === risk.configFp;
+        if ((risk.level !== "none" || risk.config?.length || risk.sandbox === "none") && !seenOk) throw JSON.stringify({ code: "aiChat.confirmRequired", vars: { level: risk.level, collaborators: risk.collaborators ?? 0, config: risk.config?.length ?? 0 }, message: "Confirmation is required" });
         chatConfirmed.add(key);
       }
       if (w.__chatFail) throw w.__chatFail;

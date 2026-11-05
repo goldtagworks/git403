@@ -5,7 +5,7 @@
 
 use std::io::{BufRead, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
@@ -115,7 +115,7 @@ fn lfs_shell_needed(repo: &Path) -> bool {
 fn lfs_shell_needed_uncached(repo: &Path) -> bool {
     {
         let git = std::env::var(GIT_BIN).unwrap_or_else(|_| "git".into());
-        let out = |a: &[&str]| Command::new(&git).args(a).current_dir(repo).stdin(Stdio::null()).output().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
+        let out = |a: &[&str]| ai_tool::git_command(&git, Some(repo)).args(a).output().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
         if out(&["config", "--get", "filter.lfs.process"]).trim() != "git-lfs filter-process" {
             return false;
         }
@@ -134,7 +134,7 @@ fn policy(repo: &Path, net: bool) -> Policy {
         let exe = git_env.as_ref().and_then(|m| m.get("GIT_ASKPASS")).and_then(Value::as_str).map(PathBuf::from);
         let port = git_env.as_ref().and_then(|m| m.get(crate::askpass::PORT_ENV)).and_then(Value::as_str).and_then(|p| p.parse().ok());
         let git = std::env::var(GIT_BIN).unwrap_or_else(|_| "git".into());
-        let cfg = |a: &[&str]| Command::new(&git).args(a).stdin(Stdio::null()).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
+        let cfg = |a: &[&str]| ai_tool::git_command(&git, None).args(a).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
         // 전역 설정의 credential helper 중 절대 경로(`!` 셸 helper는 셸이 필요해 제외)
         let helpers = cfg(&["config", "--global", "--get-all", "credential.helper"]).lines().map(str::trim).filter(|l| l.starts_with('/')).filter_map(|l| l.split_whitespace().next()).map(PathBuf::from).collect();
         (exe, port, helpers)
@@ -291,7 +291,7 @@ fn git_call(repo: &Path, args: &[String], ok: &Confirmed) -> Result<String, Stri
     if !v.refuse.is_empty() {
         return Err(format!("this repository's git configuration is not allowed: {}", v.refuse.join("; ")));
     }
-    ai_tool::set_extra_protected(&v.hooks_dirs);
+    ai_tool::set_extra_protected(&v.protected_paths());
     match ok.config.as_deref().filter(|f| !f.is_empty()) {
         None => return Err("repository configuration verification is unavailable (no confirmed fingerprint); git is disabled".into()),
         Some(f) if f != v.fingerprint => return Err("the repository's git configuration changed after you confirmed it; stop and ask the user to start a new turn".into()),
@@ -630,7 +630,7 @@ fn call(repo: &Path, name: &str, a: &Value, ok: &Confirmed) -> (String, bool) {
         "read_file" => sget("path").ok_or_else(|| "`path` is required".to_string()).and_then(|p| ai_tool::read_file(repo, p)),
         "edit_file" => match (sget("path"), sget("old_string"), sget("new_string")) {
             // 설정이 가리키는 훅 폴더(`core.hooksPath`)도 쓰기 금지에 넣는다(사용자의 다음 commit이 실행). 설정을 판정하지 못하면 쓰지 않는다
-            (Some(_), Some(_), Some(_)) if { let v = gc_core::ai_config::check(repo, &std::env::var(GIT_BIN).unwrap_or_else(|_| "git".into())); ai_tool::set_extra_protected(&v.hooks_dirs); !v.refuse.is_empty() } => Err("this repository's git configuration is not allowed; editing is disabled".into()),
+            (Some(_), Some(_), Some(_)) if { let v = gc_core::ai_config::check(repo, &std::env::var(GIT_BIN).unwrap_or_else(|_| "git".into())); ai_tool::set_extra_protected(&v.protected_paths()); !v.refuse.is_empty() } => Err("this repository's git configuration is not allowed; editing is disabled".into()),
             (Some(p), Some(o), Some(n)) => ai_tool::edit_file(repo, p, o, n, a.get("replace_all").and_then(Value::as_bool).unwrap_or(false)).map(|n| format!("edited {n} place(s)")),
             _ => Err("`path`, `old_string` and `new_string` are required".into()),
         },
@@ -680,6 +680,7 @@ fn serve(repo: &Path, input: impl BufRead, mut out: impl Write) {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    use std::process::Command;
 
     fn repo() -> (tempfile::TempDir, PathBuf) {
         let d = tempfile::tempdir().unwrap();
@@ -1136,5 +1137,28 @@ mod tests {
         git_ok(&p, &["config", "--unset", "core.hooksPath"]);
         let (t, e) = tool(&p, "edit_file", json!({"path": "scripts/hooks/pre-commit", "old_string": "exit 0", "new_string": "exit 1"}));
         assert!(!e, "{t}");
+    }
+
+    /// 9차 M2 재현: `include.path = ../local.cfg`(저장소 안, 아직 없음)에 fsmonitor를 심는 편집·이동·git 작업이 막힌다
+    #[test]
+    fn include_target_inside_the_repository_cannot_be_written_or_brought_in() {
+        let (_d, p) = repo();
+        git_ok(&p, &["config", "include.path", "../local.cfg"]);
+        for (path, old) in [("local.cfg", ""), ("LOCAL.CFG", "")] {
+            let (t, e) = tool(&p, "edit_file", json!({"path": path, "old_string": old, "new_string": "[core]\n\tfsmonitor = /tmp/x\n"}));
+            assert!(e && t.contains("not allowed"), "{path}: {t}");
+        }
+        assert!(!p.join("local.cfg").exists());
+        let (t, e) = tool(&p, "git", json!({"args": ["mv", "a.txt", "local.cfg"]}));
+        assert!(e && t.contains("rejected"), "{t}");
+        // 다른 브랜치가 그 파일을 만들어 오면 사전 검사가 거절
+        git_ok(&p, &["switch", "-qc", "evil"]);
+        std::fs::write(p.join("local.cfg"), "[core]\n\tfsmonitor = /tmp/x\n").unwrap();
+        git_ok(&p, &["add", "local.cfg"]);
+        git_ok(&p, &["commit", "-qm", "cfg"]);
+        git_ok(&p, &["switch", "-q", "main"]);
+        let (t, e) = tool(&p, "git", json!({"args": ["switch", "evil"]}));
+        assert!(e && t.contains("protected"), "{t}");
+        assert!(!p.join("local.cfg").exists());
     }
 }

@@ -54,8 +54,19 @@ pub fn check_id(id: &str) -> Res<()> {
 
 /// FNV-1a 64비트(Rust 버전에 따라 바뀌지 않는 해시)
 fn repo_dir(root: &Path, repo: &Path) -> PathBuf {
+    // 같은 저장소를 다른 철자(심볼릭 링크·`..`·끝 슬래시)로 열어도 같은 이력이 되게 정규화한 경로로 해시한다(없는 경로는 그대로)
+    let repo = &repo.canonicalize().unwrap_or_else(|_| repo.to_path_buf());
     let h = repo.to_string_lossy().trim_end_matches(['/', '\\']).bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3));
     root.join(format!("{h:016x}"))
+}
+
+/// 유닛 권한을 `mode`로(유닉스만; 다른 OS는 사용자 폴더 권한을 따른다)
+fn private(path: &Path, mode: u32) -> Res<()> {
+    #[cfg(unix)]
+    std::fs::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(mode)).map_err(io)?;
+    #[cfg(not(unix))]
+    let _ = (path, mode);
+    Ok(())
 }
 
 fn io(e: std::io::Error) -> String {
@@ -70,8 +81,18 @@ pub fn append(root: &Path, repo: &Path, conversation: &str, entry: Entry) -> Res
     use std::io::Write;
     check_id(conversation)?;
     let dir = repo_dir(root, repo);
-    std::fs::create_dir_all(&dir).map_err(io)?;
-    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(dir.join(format!("{conversation}.jsonl"))).map_err(io)?;
+    // 이력에는 사용자의 질문·답이 담긴다: 폴더 0700·파일 0600(다른 사용자는 읽지 못한다)
+    for d in [root, dir.as_path()] {
+        std::fs::create_dir_all(d).map_err(io)?;
+        private(d, 0o700)?;
+    }
+    let path = dir.join(format!("{conversation}.jsonl"));
+    let mut o = std::fs::OpenOptions::new();
+    o.create(true).append(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut o, 0o600);
+    let mut f = o.open(&path).map_err(io)?;
+    private(&path, 0o600)?; // 예전에 넓은 권한으로 만든 파일도 좁힌다
     let line = serde_json::to_string(&scrub(entry)).map_err(|e| e.to_string())?;
     writeln!(f, "{line}").map_err(io)
 }
@@ -125,6 +146,11 @@ pub fn prune(root: &Path, days: u32) -> Res<Vec<(String, Backup)>> {
         let _ = std::fs::remove_dir(&dir); // 비었을 때만 지워진다
     }
     Ok(removed)
+}
+
+/// 이 저장소의 이력에서 백업 `id`를 찾는다(되돌리기 때 백업 지문을 백엔드가 직접 검사하려고)
+pub fn find_backup(root: &Path, repo: &Path, id: &str) -> Option<Backup> {
+    backups_in(&repo_dir(root, repo)).into_iter().map(|(_, b)| b).find(|b| b.id == id)
 }
 
 fn backups_in(dir: &Path) -> Vec<(String, Backup)> {
@@ -196,5 +222,35 @@ mod tests {
         assert!(list(d.path(), repo).is_empty());
         assert!(clear(d.path(), repo).unwrap().is_empty(), "없어도 오류 아님");
         assert!(prune(&d.path().join("none"), 90).unwrap().is_empty());
+    }
+
+    #[test]
+    fn history_is_private_keyed_by_the_real_path_and_finds_backups_by_id() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path().join("ai-chat");
+        let real = tempfile::tempdir().unwrap();
+        let repo = real.path().canonicalize().unwrap();
+        let link = d.path().join("alias");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&repo, &link).unwrap();
+        let mut e = entry("q", 1);
+        e.backup = Some(Backup { id: "b1".into(), ref_name: "refs/git403/ai-backup/b1".into(), sha: "a".repeat(40), branch: None, heads: 1, wip: None, digest: "0123456789abcdef".into() });
+        append(&root, &repo, "c1", e).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+            assert_eq!((mode(&root), mode(&repo_dir(&root, &repo)), mode(&repo_dir(&root, &repo).join("c1.jsonl"))), (0o700, 0o700, 0o600));
+            // 다른 철자(링크)로 열어도 같은 이력
+            assert_eq!(repo_dir(&root, &link), repo_dir(&root, &repo));
+            assert_eq!(list(&root, &link).len(), 1);
+            // 예전에 넓은 권한이던 파일도 다음 저장에서 좁힌다
+            let f = repo_dir(&root, &repo).join("c1.jsonl");
+            std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o644)).unwrap();
+            append(&root, &link, "c1", entry("q2", 2)).unwrap();
+            assert_eq!(mode(&f), 0o600);
+        }
+        assert_eq!(find_backup(&root, &repo, "b1").map(|b| b.digest), Some("0123456789abcdef".to_string()));
+        assert!(find_backup(&root, &repo, "nope").is_none());
     }
 }

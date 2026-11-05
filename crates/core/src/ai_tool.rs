@@ -604,6 +604,21 @@ pub fn hardened_args() -> Vec<String> {
     v
 }
 
+/// **샌드박스 밖에서 git을 동기로 띄우는 유일한 길**: `hardened_args()` + 저장소 밖을 가리키는 git 환경 변수 제거 + 프롬프트·로캘 고정. 앱·MCP 서버의 모든 읽기용 git은 이걸 쓴다
+/// (비동기는 `GitRunner::hardened(hardened_args())`; 이 규칙은 `tests/ai_guard.rs`가 소스에서 지킨다)
+pub fn git_command(git: &str, cwd: Option<&Path>) -> std::process::Command {
+    let mut c = std::process::Command::new(git);
+    c.args(hardened_args()).stdin(std::process::Stdio::null());
+    if let Some(d) = cwd {
+        c.current_dir(d);
+    }
+    for k in ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_NAMESPACE", "GIT_ALTERNATE_OBJECT_DIRECTORIES"] {
+        c.env_remove(k);
+    }
+    c.env("GIT_TERMINAL_PROMPT", "0").env("LC_ALL", "C");
+    c
+}
+
 pub fn prefix(repo: &Path) -> Vec<String> {
     let mut v: Vec<String> = vec!["--no-pager".into(), format!("--work-tree={}", repo.display())];
     for c in ["protocol.ext.allow=never", "core.fsmonitor=false", "core.pager=cat", "core.quotepath=false", "submodule.recurse=false", "diff.ignoreSubmodules=all", "status.submoduleSummary=false", "fetch.prune=false", "fetch.pruneTags=false", "push.default=nothing", "push.recurseSubmodules=no", "gc.auto=0", "maintenance.auto=false", "protocol.file.allow=never"] {

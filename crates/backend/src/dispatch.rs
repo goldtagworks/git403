@@ -370,7 +370,10 @@ impl Backend {
             "ai_chat_start" => {
                 let (repo, conversation, input, session) = (a.repo()?, a.get::<String>("conversation")?, a.get::<String>("input")?, a.get::<Option<String>>("sessionId")?);
                 // confirmed: 사용자가 위험 확인창(공개·다수 협업자·판정 불가)에서 승낙했는지. 필요한데 false면 `aiChat.confirmRequired`
+                // seen: 확인창에서 본 `{fingerprint, configFp}`(`ai_chat_risk` 응답). 다시 판정한 값과 같을 때만 확인으로 인정한다
                 let confirmed = a.get::<Option<bool>>("confirmed")?.unwrap_or(false);
+                let seen = a.get::<Option<serde_json::Value>>("seen")?.and_then(|v| Some(crate::ai_chat::Seen { fingerprint: v.get("fingerprint")?.as_str()?.to_owned(), config_fp: v.get("configFp")?.as_str()?.to_owned() }));
+                let confirmed = if confirmed { seen } else { None };
                 self.ai_chat_start(gc_ai::Provider::Anthropic.program(), repo, conversation, input, session, confirmed).await
             }
             #[cfg(feature = "cli")]
