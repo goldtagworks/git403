@@ -386,13 +386,16 @@ export const Sidebar = memo(function Sidebar({ repo, refs, submodules, worktrees
   );
   const trees = useMemo(() => SECTIONS.map(({ kind }, i) => buildTree(shownKind[i], kind)), [shownKind]);
   const none = !!needle && shownKind.every((rs) => rs.length === 0);
-  // 그래프에서 고른 커밋을 가리키는 ref가 여럿이면 대표 하나만 강조: HEAD, 아니면 보이는 순서상 첫 항목
+  // 그래프에서 고른 커밋을 가리키는 ref가 여럿이면 대표 하나만 강조: 접힌 섹션·폴더 밖(눈에 보이는) 항목 중
+  // HEAD, 아니면 로컬→원격→태그 순 첫 항목. 보이는 게 없으면 접힌 것 중에서 같은 순서로 고른다.
   useEffect(() => {
-    const m = new Map<string, string>();
+    const shown = (r: Ref) => !!needle || !`${r.kind}/${r.name}`.split("/").some((_, i, p) => closed.has(p.slice(0, i + 1).join("/")));
     const all = shownKind.flat();
-    for (const r of [...all.filter((r) => r.head), ...all]) if (!m.has(r.target)) m.set(r.target, `${r.kind}/${r.name}`);
+    const vis = all.filter(shown);
+    const m = new Map<string, string>();
+    for (const r of [...vis.filter((r) => r.head), ...vis, ...all.filter((r) => r.head), ...all]) if (!m.has(r.target)) m.set(r.target, `${r.kind}/${r.name}`);
     setPrimary(m);
-  }, [shownKind]);
+  }, [shownKind, closed, needle]);
 
   return (
     <nav className="sidebar" ref={navRef} onPointerDown={onGrip} onPointerMove={onGripHover} onPointerLeave={onGripHover} onDoubleClick={onGripReset}>

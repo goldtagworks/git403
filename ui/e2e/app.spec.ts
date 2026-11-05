@@ -41,6 +41,14 @@ test("사이드바에서 브랜치를 고르면 커밋 상세와 diff가 보인�
   // 로컬·원격 둘이 같은 커밋을 가리켜도 대표(로컬) 하나만 강조한다 (포커스가 두 개로 보이지 않게)
   await page.locator(".commits").getByText("그래프 곡선 렌더링").click();
   await expect(page.locator(".sidebar [aria-current]")).toHaveText(["graph"]);
+  // 대표가 접힌 폴더 안이면 보이는 항목(origin/feature/graph)으로 옮긴다. 다시 펼치면 로컬로 돌아온다
+  const feature = branches.getByRole("button", { name: "feature", exact: true });
+  await feature.click();
+  await expect(page.locator(".sidebar [aria-current]")).toHaveCount(1);
+  await expect(page.locator(".sidebar section").nth(1).locator("[aria-current]")).toHaveText("graph");
+  await feature.click();
+  await expect(branches.locator("[aria-current]")).toHaveText("graph");
+  await expect(page.locator(".sidebar [aria-current]")).toHaveCount(1);
   await page.locator(".commits").getByText("진행률 이벤트 분리").click();
   await expect(page.locator(".sidebar [aria-current]")).toHaveCount(0);
   await branches.getByRole("button", { name: "pull-lock", exact: true }).click();
