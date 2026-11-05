@@ -182,7 +182,7 @@ test("끝나면 되돌리기 한 줄: OS 확인 후 백업으로 되돌리고, �
   const asked = await page.evaluate(() => (window as any).__asked as string[]);
   expect(asked.some((m) => m.includes("merge"))).toBe(true);
   const r = (await callsOf(page, "ai_backup_restore")).map((c) => JSON.parse(c[1]));
-  expect(r).toEqual([{ id: "b1", branch: "main", abortOngoing: false }, { id: "b1", branch: "main", abortOngoing: true }]);
+  expect(r).toEqual([{ id: "b1", branch: "main", abortOngoing: false, branches: false, wip: false }, { id: "b1", branch: "main", abortOngoing: true, branches: false, wip: false }]);
 });
 
 test("백업이 없으면(커밋 없는 저장소) 되돌리기 줄이 없다", async ({ page }) => {
@@ -345,4 +345,42 @@ test("이력 저장 실패 알림(note)은 토스트로 보인다", async ({ pag
   await send(page, "해줘");
   await done(page);
   await expect(page.getByText("채팅을 이력에 저장하지 못했습니다")).toBeVisible();
+});
+
+test("저장소 로컬 git 설정에 실행형 항목이 있으면 로컬 전용이어도 이유(키 이름)를 담아 묻는다", async ({ page }) => {
+  await open(page, { __risk: { level: "none", exec: ["diff.evil.textconv", "core.sshcommand"] } });
+  await toggle(page);
+  await send(page, "상태 알려줘");
+  await done(page);
+  const asks = await confirmAsks(page);
+  expect(asks).toHaveLength(1);
+  expect(asks[0]).toContain("diff.evil.textconv, core.sshcommand");
+  expect(asks[0]).toContain("훅·외부 diff·textconv는 꺼지지만");
+  expect(asks[0]).not.toContain("공개 저장소입니다");
+  expect(JSON.parse((await callsOf(page, "ai_chat_start"))[0][1]).confirmed).toBe(true);
+});
+
+test("되돌리기: 다른 로컬 브랜치·작업 트리 스냅숏이 있으면 각각 한 번 더 묻고, 승낙한 것만 함께 되돌린다", async ({ page }) => {
+  await open(page, { __chatHeads: 3, __chatWip: true });
+  await toggle(page);
+  await send(page, "정리해 줘");
+  await done(page);
+  await col(page).getByRole("button", { name: "이 작업 되돌리기" }).click();
+  await expect.poll(async () => (await callsOf(page, "ai_backup_restore")).length).toBe(1);
+  const asked = await page.evaluate(() => (window as any).__asked as string[]);
+  expect(asked.some((m) => m.includes("다른 로컬 브랜치 위치도"))).toBe(true);
+  expect(asked.some((m) => m.includes("커밋하지 않고 바꿔 두었던 파일도"))).toBe(true);
+  expect(JSON.parse((await callsOf(page, "ai_backup_restore"))[0][1])).toMatchObject({ branches: true, wip: true });
+});
+
+test("되돌리기: 브랜치·스냅숏이 없으면 추가 질문 없이 HEAD만", async ({ page }) => {
+  await open(page);
+  await toggle(page);
+  await send(page, "정리해 줘");
+  await done(page);
+  await col(page).getByRole("button", { name: "이 작업 되돌리기" }).click();
+  await expect.poll(async () => (await callsOf(page, "ai_backup_restore")).length).toBe(1);
+  const asked = await page.evaluate(() => (window as any).__asked as string[]);
+  expect(asked.some((m) => m.includes("다른 로컬 브랜치 위치도") || m.includes("커밋하지 않고 바꿔 두었던 파일도"))).toBe(false);
+  expect(JSON.parse((await callsOf(page, "ai_backup_restore"))[0][1])).toMatchObject({ branches: false, wip: false });
 });

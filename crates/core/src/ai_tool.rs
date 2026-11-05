@@ -161,7 +161,7 @@ fn forbidden_name(c: &str) -> bool {
 fn dotgit(c: &str) -> bool {
     let clean: String = c.chars().filter(|ch| !matches!(ch, '\u{200b}'..='\u{200f}' | '\u{2060}' | '\u{feff}' | '\u{202a}'..='\u{202e}')).collect();
     let n = clean.trim_end_matches([' ', '.']).to_lowercase();
-    n == ".git" || n == ".claude" || n.starts_with("git~") || n.starts_with("claud~")
+    n == ".git" || n == ".claude" || n.starts_with("git~") || n.starts_with("claude~")
 }
 
 fn is_drive(s: &str) -> bool {
@@ -171,6 +171,10 @@ fn is_drive(s: &str) -> bool {
 
 /// 리비전·위치 인자로 쓸 수 있는 글자인가: 옵션처럼 보이지 않고, 절대 경로·`~`·`..` 경로 성분이 없다(저장소 밖을 가리켜 git이 `--no-index`로 바꾸는 것을 막는다)
 fn rev_ok(s: &str) -> Res<()> {
+    // 앱의 백업 ref(`refs/git403/…`)는 ref·리비전 자리에서 언급하는 것도 막는다(커밋 메시지 같은 자유 텍스트는 상관없다)
+    if s.to_ascii_lowercase().contains("refs/git403") {
+        return bad("references under refs/git403/ are reserved");
+    }
     if s.is_empty() || s.contains('\0') || s.starts_with('-') || s.starts_with('/') || s.starts_with('~') || s.starts_with('\\') || is_drive(s) || s.starts_with('+') {
         return bad(format!("not allowed here: {s:?}"));
     }
@@ -246,6 +250,62 @@ pub fn resolve(repo: &Path, p: &str) -> Res<PathBuf> {
     Ok(norm)
 }
 
+/// AI가 **쓰면 안 되는** 경로(정규화된 저장소 상대 경로): 다른 도구·사용자가 나중에 자동으로 읽거나 실행하는 설정이라 AI가 고치면 지속형 인젝션이 된다.
+/// 에디터·에이전트 설정(`.vscode`·`.idea`·`.cursor`·`.windsurf`·`.zed`·`.devcontainer`·`.aider*`·`.continue`, `.mcp.json`·`CLAUDE.md`·`AGENTS.md`·`GEMINI.md`·`.cursorrules`…),
+/// 환경 자동 로드(`.envrc`), 훅 관리 도구(`.githooks`·`.husky`·`.lefthook`·`lefthook.yml`·`.pre-commit-config.yaml` — 이후 사용자의 commit이 실행한다).
+/// 읽기는 막지 않는다. 같은 규칙을 `mv` 인자에도 적용한다(고친 파일을 이 이름으로 옮겨 우회하지 못하게).
+pub fn write_protected(rel: &Path) -> bool {
+    const DIRS: [&str; 10] = [".vscode", ".idea", ".cursor", ".windsurf", ".zed", ".devcontainer", ".githooks", ".husky", ".lefthook", ".continue"];
+    const FILES: [&str; 18] = ["claude.md", "claude.local.md", "agents.md", "gemini.md", ".mcp.json", ".envrc", ".cursorrules", ".windsurfrules", ".aider.conf.yml", ".aiderignore", ".pre-commit-config.yaml", "lefthook.yml", "lefthook.yaml", ".lefthook.yml", ".lefthook.yaml", "copilot-instructions.md", ".clinerules", ".roomodes"];
+    let names: Vec<String> = rel.components().filter_map(|c| matches!(c, Component::Normal(_)).then(|| c.as_os_str().to_string_lossy().to_lowercase())).collect();
+    let n = names.len();
+    names.iter().enumerate().any(|(i, c)| (i + 1 < n && DIRS.contains(&c.as_str())) || (i + 1 == n && (FILES.contains(&c.as_str()) || DIRS.contains(&c.as_str()))) || c.starts_with(".aider"))
+}
+
+/// 저장소 로컬 설정에서 **git이 프로그램을 실행하게 만드는 키**를 찾는다(`git config --list --includes --show-scope -z` 출력 → 키 이름들, 값은 담지 않는다).
+/// 저장소 로컬(local)·worktree 범위만 본다 — 사용자 전역 설정은 사용자 것이다. 표준 git-lfs 필터 정의는 제외.
+/// 키 목록(git 문서 기준): `core.sshCommand|editor|askPass|gitProxy|alternateRefsCommand`, `diff.external`, `diff.<d>.command|textconv`, `merge.<d>.driver`,
+/// `filter.<d>.clean|smudge|process`, `credential[.<url>].helper`, `gpg.program`·`gpg.<fmt>.program`·`gpg.ssh.defaultKeyCommand`, `remote.<n>.uploadpack|receivepack|vcs`,
+/// `sequence.editor`, `trailer.<t>.command|cmd`, 그리고 파일을 읽어 오류로 내용을 드러내는 `blame.ignoreRevsFile`. (`core.fsmonitor`·`core.hooksPath`·`core.pager`는 앱이 `-c`로 덮어써 제외.)
+pub fn exec_config_keys(listing: &str) -> Vec<String> {
+    let toks: Vec<&str> = listing.split('\0').collect();
+    let mut out: Vec<String> = Vec::new();
+    for pair in toks.chunks(2) {
+        let [scope, kv] = pair else { continue };
+        if *scope != "local" && *scope != "worktree" {
+            continue;
+        }
+        let (key, value) = kv.split_once('\n').unwrap_or((kv, ""));
+        let k = key.to_ascii_lowercase();
+        let parts: Vec<&str> = k.split('.').collect();
+        let (first, last) = (parts[0], parts[parts.len() - 1]);
+        let mid = parts.len() > 2;
+        let hit = match first {
+            "core" => parts.len() == 2 && ["sshcommand", "editor", "askpass", "gitproxy", "alternaterefscommand"].contains(&last),
+            "diff" => (parts.len() == 2 && last == "external") || (mid && (last == "command" || last == "textconv")),
+            "merge" => mid && last == "driver",
+            "filter" => mid && ["clean", "smudge", "process"].contains(&last) && !lfs_standard(&k, value),
+            "credential" => last == "helper" && !value.trim().is_empty(),
+            "gpg" => last == "program" || last == "defaultkeycommand",
+            "remote" => mid && ["uploadpack", "receivepack", "vcs"].contains(&last),
+            "sequence" => parts.len() == 2 && last == "editor",
+            "trailer" => mid && (last == "command" || last == "cmd"),
+            "blame" => parts.len() == 2 && last == "ignorerevsfile",
+            _ => false,
+        };
+        if hit && !out.contains(&k) {
+            out.push(k);
+        }
+    }
+    out.sort();
+    out
+}
+
+/// 표준 git-lfs 필터 정의(`git lfs install`이 쓰는 값)인가
+fn lfs_standard(key: &str, value: &str) -> bool {
+    matches!((key, value), ("filter.lfs.clean", "git-lfs clean -- %f") | ("filter.lfs.smudge", "git-lfs smudge -- %f") | ("filter.lfs.process", "git-lfs filter-process"))
+}
+
 /// 브랜치·태그 이름(또는 `refs/heads/…`·`refs/tags/…`). `refs/`의 다른 이름(백업 `refs/git403/`·`refs/stash`·`refs/remotes` 등)·`+`·`:`·글롭·따옴표·공백은 불가
 fn branch_name_ok(s: &str, allow_expr: bool) -> Res<()> {
     rev_ok(s)?;
@@ -301,7 +361,11 @@ fn parse_spec(sp: &Spec, sub: &str, args: &[String], repo: &Path, remotes: &[Str
         let a = &args[i];
         i += 1;
         if after {
-            out.push(path_arg(repo, a)?);
+            let pa = path_arg(repo, a)?;
+            if sub == "mv" && write_protected(Path::new(&pa)) {
+                return bad(format!("moving to or from {a:?} is not allowed (editor/agent/hook configuration)"));
+            }
+            out.push(pa);
             continue;
         }
         if a == "--" {
@@ -384,7 +448,13 @@ fn parse_spec(sp: &Spec, sub: &str, args: &[String], repo: &Path, remotes: &[Str
                     rev_ok(p)?;
                 }
             }
-            Pos::Paths => out[*at] = path_arg(repo, p)?,
+            Pos::Paths => {
+                let a = path_arg(repo, p)?;
+                if sub == "mv" && write_protected(Path::new(&a)) {
+                    return bad(format!("moving to or from {p:?} is not allowed (editor/agent/hook configuration)"));
+                }
+                out[*at] = a;
+            }
             Pos::Remote => {
                 if n == 0 {
                     if !remotes.iter().any(|r| r == p.as_str()) {
@@ -410,6 +480,10 @@ fn parse_spec(sp: &Spec, sub: &str, args: &[String], repo: &Path, remotes: &[Str
     }
     if sp.auto_dd && !has_dd {
         out.push("--".into());
+    }
+    // 인자 없는 fetch·pull·push는 `branch.<b>.remote`·`remote.pushDefault`가 가리키는 곳(URL·경로일 수 있다)으로 간다: 원격 이름을 항상 명시하게 한다
+    if sp.pos == Pos::Remote && pos.is_empty() && !(sub == "fetch" && out.iter().any(|a| a == "--all")) {
+        return bad(format!("{sub} needs an explicit remote name (one of the configured remotes), e.g. [\"{sub}\", \"origin\"]"));
     }
     if sp.pos == Pos::Remote && pos.len() > 1 && out.iter().any(|a| a == "--all") {
         return bad("--all cannot be combined with refspecs");
@@ -438,10 +512,6 @@ pub fn validate(args: &[String], repo: &Path, remotes: &[String]) -> Res<Vec<Str
     let Some(sub) = args.first() else { return bad("no git subcommand") };
     if args.iter().any(|a| a.contains('\0')) {
         return bad("NUL in argument");
-    }
-    // 앱의 백업 ref(`refs/git403/ai-backup/…`)는 이름을 언급하는 것도 막는다
-    if args.iter().any(|a| a.to_ascii_lowercase().contains("git403")) {
-        return bad("references under refs/git403/ are reserved");
     }
     let rest = &args[1..];
     let body: Vec<String> = match sub.as_str() {
@@ -492,9 +562,31 @@ pub fn validate(args: &[String], repo: &Path, remotes: &[String]) -> Res<Vec<Str
             o
         }
     };
-    let mut full: Vec<String> = ["-c", "protocol.ext.allow=never", "-c", "core.fsmonitor=false", "-c", "core.pager=cat", "-c", "core.quotepath=false"].map(String::from).to_vec();
+    let mut body = body;
+    // 하위 명령 바로 뒤에 앱이 넣는 안전 옵션: 설정된 외부 diff·textconv 프로그램과 서브모듈 재귀를 끈다
+    let at = if body[0] == "stash" { 2 } else { 1 };
+    let extra: &[&str] = match (body[0].as_str(), body.get(1).map(String::as_str)) {
+        ("diff" | "log" | "show", _) | ("stash", Some("show")) => &["--no-ext-diff", "--no-textconv"],
+        ("blame", _) => &["--no-textconv"],
+        ("fetch" | "pull" | "push", _) => &["--no-recurse-submodules"],
+        _ => &[],
+    };
+    for (k, e) in extra.iter().enumerate() {
+        body.insert(at + k, (*e).to_string());
+    }
+    let mut full = prefix();
     full.extend(body);
     Ok(full)
+}
+
+/// null 장치(훅 폴더를 비워 훅을 막는 데 쓴다)
+const NULL_DEV: &str = if cfg!(windows) { "NUL" } else { "/dev/null" };
+
+/// 모든 AI git 호출 앞에 붙는 전역 설정: pager 없음, 외부 프로토콜·fsmonitor 끔, **훅 끔**(`core.hooksPath` = null 장치).
+/// 저장소 안 훅 폴더(`.githooks`·husky)를 AI가 고친 뒤 commit이 그것을 실행하는 길과 pull로 받은 원격 훅 실행을 AI 차례 동안 막는다 —
+/// AI 차례의 commit·merge·rebase·push는 훅(pre-commit 등)을 실행하지 않는다.
+pub fn prefix() -> Vec<String> {
+    ["--no-pager", "-c", "protocol.ext.allow=never", "-c", "core.fsmonitor=false", "-c", "core.pager=cat", "-c", "core.quotepath=false", "-c"].map(String::from).into_iter().chain([format!("core.hooksPath={NULL_DEV}")]).collect()
 }
 
 /// 원격 목록 지문: `(이름, URL)` 쌍(가져오기·보내기 URL, `insteadOf` 적용 후)을 정렬·중복 제거해 FNV-1a 64비트로 줄인다.
@@ -532,6 +624,9 @@ pub fn read_file(repo: &Path, path: &str) -> Res<String> {
 /// 읽기와 같은 경로 규칙 + 심볼릭 링크 파일은 수정하지 않는다. 몇 곳을 바꿨는지 돌려준다.
 pub fn edit_file(repo: &Path, path: &str, old: &str, new: &str, all: bool) -> Res<usize> {
     let rel = resolve(repo, path)?;
+    if write_protected(&rel) {
+        return bad(format!("writing {path:?} is not allowed (editor/agent/hook configuration is read by other tools automatically)"));
+    }
     let full = repo.canonicalize().map_err(|e| e.to_string())?.join(rel);
     if let Ok(m) = full.symlink_metadata() {
         if m.file_type().is_symlink() {
@@ -590,15 +685,22 @@ mod tests {
         validate(&v(a), r, &remotes()).is_ok()
     }
     fn args_of(r: &Path, a: &[&str]) -> Vec<String> {
-        validate(&v(a), r, &remotes()).unwrap().split_off(8)
+        validate(&v(a), r, &remotes()).unwrap().split_off(prefix().len())
     }
 
     #[test]
     fn builds_safe_argv_in_original_order() {
         let (_d, r) = repo();
         let full = validate(&v(&["log", "--oneline", "-n", "5", "main", "--", "src/a.rs"]), &r, &remotes()).unwrap();
-        assert_eq!(&full[..8], ["-c", "protocol.ext.allow=never", "-c", "core.fsmonitor=false", "-c", "core.pager=cat", "-c", "core.quotepath=false"]);
-        assert_eq!(&full[8..], ["log", "--oneline", "-n", "5", "main", "--", "src/a.rs"]);
+        assert_eq!(&full[..prefix().len()], &prefix()[..]);
+        let pre = prefix().join(" ");
+        assert!(pre.starts_with("--no-pager -c protocol.ext.allow=never -c core.fsmonitor=false") && pre.contains("-c core.hooksPath=/dev/null"), "훅 끔: {pre}");
+        assert_eq!(&full[prefix().len()..], ["log", "--no-ext-diff", "--no-textconv", "--oneline", "-n", "5", "main", "--", "src/a.rs"], "외부 diff·textconv를 끈다");
+        assert_eq!(args_of(&r, &["diff", "--cached"]), ["diff", "--no-ext-diff", "--no-textconv", "--cached", "--"]);
+        assert_eq!(args_of(&r, &["blame", "--", "src/a.rs"]), ["blame", "--no-textconv", "--", "src/a.rs"]);
+        assert_eq!(args_of(&r, &["stash", "show", "-p"]), ["stash", "show", "--no-ext-diff", "--no-textconv", "-p"]);
+        assert_eq!(args_of(&r, &["fetch", "origin"]), ["fetch", "--no-recurse-submodules", "origin"]);
+        assert_eq!(args_of(&r, &["push", "-u", "origin", "feat"]), ["push", "--no-recurse-submodules", "-u", "origin", "feat"]);
         assert_eq!(args_of(&r, &["add", "./src/../src/a.rs"]), ["add", "src/a.rs"], "경로는 정규화해 넘긴다");
         assert_eq!(args_of(&r, &["add", &format!("{}/src/a.rs", r.display())]), ["add", "src/a.rs"], "저장소 안 절대 경로는 상대로");
         assert_eq!(args_of(&r, &["stash"]), ["stash", "push"]);
@@ -614,7 +716,7 @@ mod tests {
             &["add", "-A"], &["add", "src/a.rs", "README.md"], &["add", "-u"], &["add", "."], &["commit", "-m", "fix: 수정 <a@b.c> !"], &["commit", "-am", "msg"], &["commit", "--amend", "--no-edit"], &["commit", "-m", "-starts-with-dash"], &["commit", "-m", "a", "-m", "b", "--allow-empty"], &["commit", "--fixup", "abc123"],
             &["merge", "feature"], &["merge", "--no-ff", "-m", "merge", "feature"], &["merge", "--abort"], &["merge", "--continue"], &["merge", "-X", "theirs", "feature"], &["rebase", "main"], &["rebase", "--onto", "main", "old", "topic"], &["rebase", "--continue"], &["rebase", "--abort"], &["rebase", "--skip"], &["rebase", "--autostash", "main"],
             &["cherry-pick", "abc123"], &["cherry-pick", "-n", "abc", "def"], &["cherry-pick", "-m", "1", "abc"], &["cherry-pick", "--abort"], &["revert", "abc123"], &["revert", "--no-edit", "abc"],
-            &["fetch"], &["fetch", "origin"], &["fetch", "--all", "--prune"], &["fetch", "origin", "main"], &["fetch", "-p", "upstream"], &["pull"], &["pull", "--rebase"], &["pull", "--rebase=merges", "origin", "main"], &["pull", "--ff-only", "origin"], &["push"], &["push", "origin"], &["push", "origin", "main"], &["push", "-u", "origin", "feat"], &["push", "origin", "HEAD:refs/heads/x"], &["push", "origin", "main:main"], &["push", "-n", "origin", "main"],
+            &["fetch", "origin"], &["fetch", "--all", "--prune"], &["fetch", "origin", "main"], &["fetch", "-p", "upstream"], &["pull", "origin"], &["pull", "--rebase", "origin"], &["pull", "--rebase=merges", "origin", "main"], &["pull", "--ff-only", "origin"], &["push", "origin"], &["push", "origin", "main"], &["push", "-u", "origin", "feat"], &["push", "origin", "HEAD:refs/heads/x"], &["push", "origin", "main:main"], &["push", "-n", "origin", "main"],
             &["switch", "main"], &["switch", "-c", "feat/x"], &["switch", "--create", "x", "origin/main"], &["switch", "-"], &["switch", "-d", "abc123"], &["switch", "-m", "other"], &["reset"], &["reset", "HEAD", "--", "src/a.rs"], &["reset", "--soft", "HEAD~1"], &["reset", "--mixed", "HEAD~2"], &["reset", "-q", "--", "src/a.rs"],
             &["stash"], &["stash", "push", "-m", "wip", "-u"], &["stash", "list"], &["stash", "show", "-p", "stash@{1}"], &["stash", "apply"], &["stash", "apply", "--index", "stash@{0}"], &["rm", "--cached", "src/a.rs"], &["rm", "-r", "src"], &["mv", "src/a.rs", "src/b.rs"],
             &["branch"], &["branch", "-a"], &["branch", "-vv"], &["branch", "--show-current"], &["tag"], &["tag", "-l", "v*"], &["remote"], &["reflog"], &["reflog", "show", "-n", "5", "main"], &["config", "--get", "user.name"], &["config", "--get", "user.email"],
@@ -658,8 +760,8 @@ mod tests {
             vec!["blame", "a.txt"], vec!["blame", "HEAD", "a.txt"], vec!["blame", "-L1,2", "a.txt"], vec!["blame", "a", "b", "--", "c"], vec!["blame", "--", "../x"],
             vec!["fetch", "origin", "main:refs/git403/ai-backup/x"], vec!["fetch", "origin", "main:main"], vec!["fetch", "origin", "+main"], vec!["fetch", "origin", "refs/*:refs/*"], vec!["pull", "origin", "main:main"], vec!["fetch", "origin", "refs/stash"], vec!["fetch", "origin", "refs/remotes/o/x"], vec!["fetch", "origin", "a b"],
             vec!["push", "origin", "main:refs/git403/ai-backup/x"], vec!["push", "origin", "HEAD:refs/stash"], vec!["push", "origin", "main:*"], vec!["push", "origin", "*:*"], vec!["push", "origin", "refs/*:refs/*"], vec!["push", "origin", "main:"], vec!["push", "origin", "HEAD:HEAD:x"], vec!["push", "origin", "refs/git403/ai-backup/x"], vec!["show", "refs/git403/ai-backup/x"], vec!["log", "REFS/GIT403/ai-backup/x"], vec!["reset", "--soft", "refs/git403/x"],
-            vec!["push", "--no-verify"], vec!["commit", "-n", "-m", "x"], vec!["commit", "--no-verify", "-m", "x"], vec!["push", "--all"], vec!["push", "--tags"], vec!["push", "--follow-tags"], vec!["push", "origin", "--tags"],
-            vec!["reset", "a", "b"],
+            vec!["fetch"], vec!["pull"], vec!["push"], vec!["push", "-u"], vec!["pull", "--rebase"], vec!["fetch", "-p"], vec!["add", "CLAUDE~1/x"], vec!["add", "claude~1"], vec!["push", "--no-verify"], vec!["commit", "-n", "-m", "x"], vec!["commit", "--no-verify", "-m", "x"], vec!["push", "--all"], vec!["push", "--tags"], vec!["push", "--follow-tags"], vec!["push", "origin", "--tags"],
+            vec!["reset", "a", "b"], vec!["mv", "a.txt", ".githooks/pre-commit"], vec!["mv", "--", "a.txt", ".husky/pre-commit"], vec!["mv", "a.txt", "CLAUDE.md"], vec!["mv", "a.txt", ".vscode/tasks.json"], vec!["mv", ".mcp.json", "x"],
         ];
         let leaked: Vec<_> = attacks.iter().filter(|a| ok(&r, a)).collect();
         assert!(leaked.is_empty(), "거절돼야 함: {leaked:?}");
@@ -861,5 +963,92 @@ mod tests {
                 assert!(!ok(&r, &[sub, &ab]) && !ok(&r, &[sub, &format!("{ab}=1")]), "{sub} {ab}");
             }
         }
+    }
+
+    #[test]
+    fn persistent_config_paths_are_write_protected_for_edit_and_mv() {
+        let (_d, r) = repo();
+        for p in [".vscode/settings.json", ".idea/workspace.xml", ".cursor/rules/a.mdc", "CLAUDE.md", "sub/CLAUDE.md", "Agents.md", "AGENTS.md", "GEMINI.md", ".mcp.json", ".envrc", ".githooks/pre-commit", ".husky/pre-commit", "a/.husky/_/x", ".pre-commit-config.yaml", "lefthook.yml", ".aider.chat.history.md", ".devcontainer/devcontainer.json", ".github/copilot-instructions.md", ".cursorrules", ".githooks"] {
+            assert!(write_protected(Path::new(p)), "{p}");
+            assert!(edit_file(&r, p, "", "x", false).is_err(), "edit {p}");
+        }
+        std::fs::create_dir_all(r.join(".githooks")).unwrap();
+        std::fs::write(r.join(".githooks/pre-commit"), "#!/bin/sh\n").unwrap();
+        assert!(edit_file(&r, ".githooks/pre-commit", "sh", "bash", false).is_err());
+        assert_eq!(std::fs::read_to_string(r.join(".githooks/pre-commit")).unwrap(), "#!/bin/sh\n");
+        for p in ["src/a.rs", "README.md", "docs/CLAUDE_notes.md", ".github/workflows/ci.yml", "vscode/x", "src/idea.rs"] {
+            assert!(!write_protected(Path::new(p)), "{p}");
+        }
+        assert!(edit_file(&r, "src/a.rs", "fn a()", "fn b()", false).is_ok());
+        assert!(ok(&r, &["mv", "src/a.rs", "src/b.rs"]) && !ok(&r, &["mv", "src/a.rs", ".githooks/x"]) && !ok(&r, &["mv", "--", "src/a.rs", "CLAUDE.md"]));
+        // 8.3 이름: `.claude` → `CLAUDE~1`
+        assert!(resolve(&r, "CLAUDE~1/x").is_err() && resolve(&r, "claude~2").is_err() && resolve(&r, "GIT~1").is_err());
+    }
+
+    #[test]
+    fn exec_config_keys_lists_program_running_settings_from_local_scope_only() {
+        let l = |rows: &[(&str, &str)]| rows.iter().map(|(s, kv)| format!("{s}\0{kv}\0")).collect::<String>();
+        let local = [
+            ("local", "diff.x.textconv\ncat"), ("local", "filter.evil.clean\nsh -c id"), ("local", "filter.evil.smudge\nx"), ("local", "filter.evil.process\nx"), ("local", "core.sshcommand\nssh -v"), ("local", "core.editor\nvim"), ("local", "core.askpass\nx"), ("local", "core.gitproxy\nx"),
+            ("local", "diff.external\nx"), ("local", "diff.d.command\nx"), ("local", "merge.m.driver\nx %O"), ("local", "credential.helper\n!x"), ("local", "credential.https://h.com.helper\n!x"), ("worktree", "gpg.program\nx"), ("local", "gpg.ssh.program\nx"), ("local", "gpg.ssh.defaultkeycommand\nx"),
+            ("local", "remote.origin.uploadpack\nx"), ("local", "remote.origin.receivepack\nx"), ("local", "remote.o.vcs\nx"), ("local", "sequence.editor\nx"), ("local", "trailer.t.command\nx"), ("local", "blame.ignorerevsfile\n/etc/passwd"), ("local", "core.alternaterefscommand\nx"),
+        ];
+        let got = exec_config_keys(&l(&local));
+        assert_eq!(got.len(), local.len(), "{got:?}");
+        assert!(got.contains(&"credential.https://h.com.helper".to_string()) && got.contains(&"filter.evil.clean".to_string()));
+        // 해당 없음: 전역 설정, 표준 LFS 필터, 앱이 덮어쓰는 키, 비어 있는 credential.helper(초기화), 평범한 키
+        let none = l(&[("global", "core.sshcommand\nssh"), ("global", "filter.x.clean\nx"), ("local", "filter.lfs.clean\ngit-lfs clean -- %f"), ("local", "filter.lfs.smudge\ngit-lfs smudge -- %f"), ("local", "filter.lfs.process\ngit-lfs filter-process"), ("local", "filter.lfs.required\ntrue"), ("local", "core.hookspath\n.githooks"), ("local", "core.fsmonitor\nx"), ("local", "core.pager\nless"), ("local", "credential.helper\n"), ("local", "user.name\nt"), ("local", "remote.origin.url\nhttps://x"), ("local", "core.filemode\ntrue"), ("command", "core.sshcommand\nx")]);
+        assert!(exec_config_keys(&none).is_empty(), "{:?}", exec_config_keys(&none));
+        // 표준이 아닌 lfs 정의는 잡는다
+        assert_eq!(exec_config_keys(&l(&[("local", "filter.lfs.clean\nsh -c evil")])), ["filter.lfs.clean"]);
+        assert!(exec_config_keys("").is_empty() && exec_config_keys("garbage").is_empty());
+    }
+
+    /// 3·4차 리뷰의 실행형 설정(textconv·ext-diff·훅·서브모듈)이 앱이 붙인 옵션으로 실제 git에서 실행되지 않는다
+    #[test]
+    fn app_flags_stop_textconv_ext_diff_and_hooks_in_real_git() {
+        if !git_ver() {
+            return;
+        }
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().canonicalize().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let g = |a: &[String]| std::process::Command::new("git").current_dir(&p).env("GIT_EDITOR", "true").env("GIT_TERMINAL_PROMPT", "0").args(a).output().unwrap();
+        let gs = |a: &[&str]| g(&a.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        gs(&["init", "-q", "-b", "main"]);
+        let mark = |n: &str| outside.path().join(n);
+        std::fs::write(p.join(".gitattributes"), "*.txt diff=evil merge=evil\n").unwrap();
+        std::fs::write(p.join("a.txt"), "1\n").unwrap();
+        std::fs::create_dir_all(p.join(".githooks")).unwrap();
+        for h in ["pre-commit", "commit-msg", "post-commit"] {
+            std::fs::write(p.join(".githooks").join(h), format!("#!/bin/sh\ntouch {}\n", mark(&format!("hook-{h}")).display())).unwrap();
+            std::fs::set_permissions(p.join(".githooks").join(h), std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        }
+        gs(&["config", "core.hooksPath", ".githooks"]);
+        gs(&["config", "diff.evil.textconv", &format!("sh -c 'touch {}; cat \"$1\"' --", mark("textconv").display())]);
+        gs(&["config", "diff.external", &format!("sh -c 'touch {}' --", mark("extdiff").display())]);
+        gs(&["-c", "core.hooksPath=/dev/null", "add", "."].map(str::to_string).iter().map(String::as_str).collect::<Vec<_>>());
+        gs(&["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", "commit", "-qm", "a"]);
+        std::fs::write(p.join("a.txt"), "2\n").unwrap();
+        let run = |a: &[&str]| {
+            let full = validate(&v(a), &p, &remotes()).unwrap_or_else(|e| panic!("{a:?}: {e}"));
+            let mut full = full;
+            // 사용자 신원은 시험용으로만 덧붙인다(검증기가 만든 인자 앞)
+            full.splice(0..0, ["-c".to_string(), "user.name=t".into(), "-c".into(), "user.email=t@t".into()]);
+            g(&full)
+        };
+        for a in [&["diff"][..], &["diff", "--cached"], &["log", "-p"], &["show", "HEAD"], &["show", "HEAD:a.txt"], &["stash", "show"], &["blame", "--", "a.txt"], &["status"]] {
+            run(a);
+        }
+        run(&["add", "a.txt"]);
+        let c = run(&["commit", "-m", "two"]);
+        assert!(c.status.success(), "{}", String::from_utf8_lossy(&c.stderr));
+        for n in ["textconv", "extdiff", "hook-pre-commit", "hook-commit-msg", "hook-post-commit"] {
+            assert!(!mark(n).exists(), "{n}: 앱이 붙인 옵션으로도 실행됨");
+        }
+        // 대조: 옵션 없이 실행하면 실제로 textconv·ext-diff·훅이 돈다(시험이 의미 있음을 확인)
+        std::fs::write(p.join("a.txt"), "3\n").unwrap();
+        gs(&["diff"]);
+        assert!(mark("extdiff").exists() || mark("textconv").exists(), "대조군: 설정이 실제로 실행돼야 한다");
     }
 }

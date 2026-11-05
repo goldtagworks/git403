@@ -122,10 +122,13 @@ async function consent() {
 
 /** 공개·다수 협업자·판정 불가 저장소는 대화 첫 실행 전에 OS 확인창으로 묻는다(거절하면 false). 로컬 전용·본인만 쓰는 private은 묻지 않는다 */
 async function confirmRisk(repo: string, risk: AiRisk) {
-  if (risk.level === "none") return true;
+  const exec = risk.exec ?? [];
+  if (risk.level === "none" && !exec.length) return true;
   const key = risk.level === "public" ? "aiChat.confirmPublic" : risk.level === "shared" ? "aiChat.confirmShared" : "aiChat.confirmUnknown";
   const name = repo.split(/[\\/]/).filter(Boolean).pop() ?? repo;
-  return ask(`${t(key, { repo: name, n: risk.collaborators ?? 0 })}\n\n${t("aiChat.confirmScope")}`, { title: t("aiChat.confirmTitle"), kind: "warning" });
+  // 이유 문단: 공개·협업자·판정 불가(레벨) + 저장소 로컬 git 설정의 실행형 키(훅·ext-diff·textconv는 앱이 끄지만 filter·driver 등은 못 끈다)
+  const reasons = [...(risk.level === "none" ? [] : [t(key, { repo: name, n: risk.collaborators ?? 0 })]), ...(exec.length ? [t("aiChat.confirmExec", { keys: exec.slice(0, 6).join(", ") + (exec.length > 6 ? ", …" : "") })] : [])];
+  return ask(`${reasons.join("\n\n")}\n\n${t("aiChat.confirmScope")}`, { title: t("aiChat.confirmTitle"), kind: "warning" });
 }
 
 export const aiChat = {
@@ -217,7 +220,12 @@ export const aiChat = {
   /** 이 차례의 작업을 되돌린다 (OS 확인창 → 진행 중인 git 작업이 있으면 중단 여부를 한 번 더 묻는다) */
   async undo(repo: string, backup: AiBackup) {
     if (!(await ask(t("aiChat.undoAsk"), { title: t("aiChat.undoTitle"), kind: "warning" }))) return;
-    const run = (abort: boolean) => api.aiBackupRestore(repo, backup.id, backup.branch, abort);
+    // 되돌리기 전에 더 되돌릴지 묻는다: 백업 때의 다른 로컬 브랜치(AI가 옮기거나 지웠을 수 있다), 커밋 안 한 변경의 스냅숏(그 파일은 스냅숏 내용으로 덮어쓴다)
+    const more = {
+      branches: (backup.heads ?? 0) > 1 && (await ask(t("aiChat.undoBranchesAsk"), { title: t("aiChat.undoTitle"), kind: "warning" })),
+      wip: !!backup.wip && (await ask(t("aiChat.undoWipAsk"), { title: t("aiChat.undoTitle"), kind: "warning" })),
+    };
+    const run = (abort: boolean) => api.aiBackupRestore(repo, backup.id, backup.branch, abort, more);
     try {
       try {
         await run(false);

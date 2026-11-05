@@ -291,7 +291,8 @@ export interface SettingsApplied {
 
 // ---- AI 채팅 (docs/reuse.md "AI 채팅 IPC") ----
 /** 실행 전 HEAD 백업 (`refs/git403/ai-backup/<id>`). 되돌리기는 `branch`를 그대로 넘긴다 */
-export interface AiBackup { id: string; ref: string; sha: string; branch: string | null }
+/** heads: 백업한 로컬 브랜치 수, wip: 백업 때 더러웠던 작업 트리의 스냅숏 커밋(없으면 null) */
+export interface AiBackup { id: string; ref: string; sha: string; branch: string | null; heads?: number; wip?: string | null }
 /** `ai-chat` 이벤트의 event. 마지막은 done·error·cancelled 중 하나 */
 export type AiChatEvent =
   | { kind: "text"; text: string }
@@ -303,7 +304,7 @@ export type AiChatEvent =
   | { kind: "note"; code: string; message: string }
   | { kind: "cancelled" };
 /** 시작 전 확인이 필요한 저장소인지: none=로컬 전용·본인만 쓰는 private, public=공개, shared=본인 외 협업자 있음, unknown=판정 불가(위험으로 본다) */
-export interface AiRisk { level: "none" | "public" | "shared" | "unknown"; collaborators?: number }
+export interface AiRisk { level: "none" | "public" | "shared" | "unknown"; collaborators?: number; /** 저장소 로컬 git 설정에서 git이 프로그램을 실행하게 만드는 키 이름들(textconv·filter·sshCommand…). 있으면 레벨과 무관하게 확인 필요 */ exec?: string[] }
 /** 한 차례(입력·답)의 이력 한 줄 */
 export interface AiChatEntry { time: number; repo: string; input: string; answer: string; commands: string[]; backup: AiBackup | null; sessionId: string | null; status: "done" | "error" | "cancelled" }
 export interface AiChatSummary { conversation: string; title: string; time: number; turns: number }

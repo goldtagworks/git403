@@ -179,7 +179,7 @@ mod tests {
     fn clear_and_prune_remove_files_and_report_backups() {
         let d = tempfile::tempdir().unwrap();
         let repo = Path::new("/work/a");
-        let bk = |id: &str| Some(Backup { id: id.into(), ref_name: format!("refs/git403/ai-backup/{id}"), sha: "0".repeat(40), branch: None });
+        let bk = |id: &str| Some(Backup { id: id.into(), ref_name: format!("refs/git403/ai-backup/{id}"), sha: "0".repeat(40), branch: None, heads: 0, wip: None });
         let mut old = entry("옛날", 1);
         old.backup = bk("b1");
         append(d.path(), repo, "old", old).unwrap();
