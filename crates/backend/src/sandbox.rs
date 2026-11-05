@@ -3,9 +3,9 @@
 //!
 //! - macOS: `sandbox-exec`(Seatbelt) 프로파일, `deny default`. 쓰기 = 저장소(작업 트리+.git)와 이 서버 전용 임시 폴더, 읽기 = 저장소·시스템 경로·git 설치 경로·사용자 git 설정
 //!   (`~/.gitconfig`·`~/.config/git`·`~/.ssh/config`·`known_hosts`)만(원격 명령에는 ssh 키 `~/.ssh/id_*`·키체인도). 실행 = git 실제 바이너리·exec-path 도우미·ssh·git-lfs·askpass(앱)·
-//!   전역 설정의 절대 경로 credential helper만 — **`/bin/sh` 등 셸은 막는다**(필터·textconv·alias·`!` helper·셸 훅 불가). 예외: 저장소가 표준 git-lfs 필터를 쓰면 `git-lfs`가 셸(`sh -c`)로 실행되므로 셸을 연다(쓰기·읽기·네트워크 제한은 그대로).
+//!   전역 설정의 절대 경로 credential helper만(askpass·helper는 원격 명령에만) — **`/bin/sh` 등 셸은 막는다**(필터·textconv·alias·`!` helper·셸 훅 불가). 예외: 저장소가 `.gitattributes`에 `filter=lfs`를 두고 표준 git-lfs 필터를 쓰면 `git-lfs`가 셸(`sh -c`)로 실행되므로 **네트워크 없는 단계(add·commit·switch·merge…)에서만** 셸을 연다(쓰기·읽기 제한은 그대로, ssh 키·키체인·네트워크는 닫힘). 원격 명령(fetch·pull·push)에는 셸을 절대 열지 않는다.
 //!   네트워크: 원격 명령(fetch·pull·push)만 tcp 443·22·DNS(+ssh-agent 소켓·askpass 로컬 포트), 나머지는 전부 차단.
-//! - Linux: `bwrap`(bubblewrap)이 쓸 수 있으면 같은 정책(읽기 전용 시스템·저장소만 쓰기·네트워크 분리). 셸 실행은 막지 못한다(파일시스템·네트워크 제한만). 이 환경에서는 시험하지 못했다.
+//! - Linux: `bwrap`(bubblewrap)이 쓸 수 있으면 **파일시스템·네트워크 분리**(읽기 전용 시스템·저장소만 쓰기·원격 명령에만 `--share-net`). macOS와 달리 **포트는 제한하지 못하고**(`--share-net`은 전부 연다), 셸은 `sh`·`bash`·`dash` 실행 파일 위에 `/dev/null`을 겹쳐 가리려 **시도**한다(`#!/bin/sh` 스크립트·`sh -c` 실패; 미시험). 원격 명령에는 ssh 키 파일을 연결하지 않고 ssh-agent 소켓만 연결한다. 이 환경에서는 시험하지 못했다(인자 구성만 단위 시험).
 //! - 그 밖(Windows, bubblewrap 없는 Linux): 샌드박스 없음 → 앱이 매 대화 확인창 + 경고를 요구한다(`ai_risk`의 `sandbox: none`). 샌드박스가 있다고 했는데 실행에 실패하면 실행하지 않는다(fail-closed).
 
 use std::path::{Path, PathBuf};
@@ -85,7 +85,7 @@ pub struct Policy {
     pub tmp: PathBuf,
     /// 원격 명령(fetch·pull·push)인가 — 네트워크·ssh 키·키체인을 연다
     pub net: bool,
-    /// 저장소가 표준 git-lfs 필터를 쓴다 — `git-lfs`가 셸로 실행되므로 셸을 연다
+    /// 저장소가 표준 git-lfs 필터를 실제로 쓴다(`.gitattributes`의 `filter=lfs` + 표준 필터 정의) — `git-lfs`가 셸로 실행되므로 셸을 연다. **`net`이면 무시**(원격 명령에는 셸 금지)
     pub allow_sh: bool,
     /// 실행을 허용할 앱 실행 파일(askpass)과 그 로컬 포트
     pub askpass_exe: Option<PathBuf>,
@@ -128,9 +128,13 @@ pub fn seatbelt_profile(g: &GitInfo, p: &Policy, home: &Path) -> String {
     let mut execs: Vec<PathBuf> = vec![g.real.clone(), PathBuf::from("/usr/bin/git"), PathBuf::from("/usr/bin/ssh")];
     execs.extend(which("ssh").and_then(|s| s.canonicalize().ok()));
     execs.extend(which("git-lfs").and_then(|s| s.canonicalize().ok()));
-    execs.extend(p.askpass_exe.clone());
-    execs.extend(p.helpers.clone());
-    if p.allow_sh {
+    // askpass(앱)·credential helper는 원격 명령에만(키·키체인·네트워크와 같은 단계). 셸이 열리는 LFS 단계에는 열지 않는다
+    if p.net {
+        execs.extend(p.askpass_exe.clone());
+        execs.extend(p.helpers.clone());
+    }
+    // **네트워크가 열리는 단계에는 셸을 절대 열지 않는다**(셸 + 네트워크 + ssh 키·키체인 조합 금지)
+    if p.allow_sh && !p.net {
         execs.extend(["/bin/sh", "/bin/bash", "/bin/zsh"].map(PathBuf::from));
     }
     let lits: String = execs.iter().map(|e| format!(" (literal {})", q(e))).collect();
@@ -179,16 +183,22 @@ pub fn bwrap_args(g: &GitInfo, p: &Policy, home: &Path) -> Vec<String> {
     }
     a.extend(["--proc", "/proc", "--dev", "/dev", "--bind", &p.tmp.to_string_lossy(), "/tmp", "--bind", &p.repo.to_string_lossy(), &p.repo.to_string_lossy()].map(String::from));
     let mut ro = vec![home.join(".gitconfig"), home.join(".config/git"), home.join(".ssh/config"), home.join(".ssh/known_hosts")];
+    // 원격 명령: ssh-agent 소켓만(키 파일은 연결하지 않는다 — macOS와 달리 셸을 완전히 막지 못하므로 키를 노출하지 않는다)
     if p.net {
-        if let Ok(rd) = std::fs::read_dir(home.join(".ssh")) {
-            ro.extend(rd.flatten().map(|e| e.path()).filter(|e| e.file_name().is_some_and(|n| n.to_string_lossy().starts_with("id_"))));
-        }
         if let Some(sock) = &p.ssh_sock {
             ro.push(sock.clone());
         }
     }
     for r in ro {
         a.extend(["--ro-bind-try".into(), r.to_string_lossy().into_owned(), r.to_string_lossy().into_owned()]);
+    }
+    // 셸 가리기(시도): 실행 파일 위에 /dev/null을 겹친다. LFS의 네트워크 없는 단계만 예외
+    if !(p.allow_sh && !p.net) {
+        for sh in ["/usr/bin/sh", "/usr/bin/bash", "/usr/bin/dash", "/usr/bin/zsh", "/usr/bin/ash", "/bin/sh", "/bin/bash", "/bin/dash", "/usr/local/bin/bash"] {
+            if Path::new(sh).exists() && !Path::new(sh).is_symlink() {
+                a.extend(["--ro-bind".into(), "/dev/null".into(), sh.into()]);
+            }
+        }
     }
     a.extend(["--setenv", "TMPDIR", "/tmp", "--chdir", &p.repo.to_string_lossy(), "--"].map(String::from));
     a
@@ -252,7 +262,11 @@ mod unit {
         assert!(s.contains("/Applications/git403.app/Contents/MacOS/git403"), "askpass는 실행 허용");
         assert!(!s.contains("/bin/sh"));
         p.allow_sh = true;
-        assert!(seatbelt_profile(&info(), &p, Path::new("/Users/u")).contains("(literal \"/bin/sh\")"), "LFS 저장소만 셸을 연다");
+        assert!(!seatbelt_profile(&info(), &p, Path::new("/Users/u")).contains("/bin/sh"), "원격 명령(net)에는 LFS 저장소여도 셸을 절대 열지 않는다");
+        p.net = false;
+        let lfs = seatbelt_profile(&info(), &p, Path::new("/Users/u"));
+        assert!(lfs.contains("(literal \"/bin/sh\")"), "LFS 저장소의 네트워크 없는 단계만 셸을 연다");
+        assert!(!lfs.contains("network-outbound") && !lfs.contains("id_") && !lfs.contains("Keychains") && !lfs.contains("git403.app"), "셸이 열리는 단계에는 네트워크·ssh 키·키체인·askpass가 닫혀 있다");
         // 경로의 따옴표·역슬래시는 이스케이프
         assert_eq!(q(Path::new("/a\"b\\c")), "\"/a\\\"b\\\\c\"");
     }
@@ -262,9 +276,17 @@ mod unit {
         let a = bwrap_args(&info(), &policy(), Path::new("/home/u")).join(" ");
         assert!(a.contains("--unshare-all") && !a.contains("--share-net") && a.contains("--bind /tmp/git403-mcp-1 /tmp") && a.contains("--bind /work/repo /work/repo") && a.contains("--chdir /work/repo") && a.ends_with(" --"));
         assert!(a.contains("--ro-bind-try /home/u/.gitconfig /home/u/.gitconfig") && !a.contains("id_"));
+        if Path::new("/bin/sh").exists() && !Path::new("/bin/sh").is_symlink() {
+            assert!(a.contains("--ro-bind /dev/null /bin/sh"), "셸 실행 파일을 /dev/null로 가린다(시도): {a}");
+        }
         let mut p = policy();
         p.net = true;
-        assert!(bwrap_args(&info(), &p, Path::new("/home/u")).join(" ").contains("--share-net"));
+        p.ssh_sock = Some("/run/user/1000/agent".into());
+        let n = bwrap_args(&info(), &p, Path::new("/home/u")).join(" ");
+        assert!(n.contains("--share-net") && n.contains("--ro-bind-try /run/user/1000/agent /run/user/1000/agent") && !n.contains("id_"), "원격 명령: agent 소켓만, 키 파일은 연결하지 않는다");
+        p.net = false;
+        p.allow_sh = true;
+        assert!(!bwrap_args(&info(), &p, Path::new("/home/u")).join(" ").contains("--ro-bind /dev/null /bin/sh"), "LFS 네트워크 없는 단계는 셸을 가리지 않는다");
     }
 
     #[test]
@@ -500,5 +522,29 @@ mod real {
         let (c, o) = sb(&e, false, true, &["commit", "-qm", "lfs"]);
         assert_eq!(c, 0, "{o}");
         assert!(raw(&e.repo, &["show", "HEAD:big.bin"]).1.contains("git-lfs.github.com/spec"), "포인터 파일이 커밋돼야 한다");
+    }
+
+    /// 7차: 원격 명령(net)에는 셸이 없다 — LFS 필터를 비우는 `-c` 덮어쓰기면 셸 없이 체크아웃된다(LFS 파일은 포인터로 남음)
+    #[test]
+    fn network_step_never_opens_a_shell_and_lfs_overrides_keep_checkout_working() {
+        if which("git-lfs").is_none() {
+            return;
+        }
+        let e = env();
+        raw(&e.repo, &["lfs", "install", "--local"]);
+        std::fs::write(e.repo.join(".gitattributes"), "*.bin filter=lfs diff=lfs merge=lfs -text\n").unwrap();
+        std::fs::write(e.repo.join("big.bin"), vec![7u8; 4096]).unwrap();
+        raw(&e.repo, &["add", "-A"]);
+        raw(&e.repo, &["commit", "-qm", "lfs"]);
+        std::fs::remove_file(e.repo.join("big.bin")).unwrap();
+        let ov = ["-c", "filter.lfs.smudge=", "-c", "filter.lfs.process=", "-c", "filter.lfs.required=false"];
+        // pull의 체크아웃 단계와 같은 일: 원격 명령 프로필(net)에서는 allow_sh=true여도 셸이 없다
+        let plain: Vec<&str> = ["checkout", "-q", "--", "big.bin"].to_vec();
+        let (c, _) = sb(&e, true, true, &plain);
+        assert!(c != 0, "덮어쓰기 없이는 셸이 없어 LFS 필터가 실패해야 한다");
+        let a: Vec<&str> = ov.iter().copied().chain(plain.iter().copied()).collect();
+        let (c, o) = sb(&e, true, true, &a);
+        assert_eq!(c, 0, "덮어쓰기가 있으면 셸 없이 체크아웃된다: {o}");
+        assert!(std::fs::read_to_string(e.repo.join("big.bin")).unwrap().contains("git-lfs.github.com/spec"), "LFS 파일은 포인터로 남는다");
     }
 }

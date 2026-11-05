@@ -190,6 +190,34 @@ fn remote_fingerprint_is_rechecked_before_network_commands() {
     assert!(run(&good, json!(["push", "origin", "main"])).0.contains("remote configuration changed"));
 }
 
+/// 7차 높음2: LFS 저장소에서는 `push`가 거절된다(원격 명령에 셸을 열지 않으므로 git-lfs 업로드를 할 수 없다). LFS가 아닌 저장소·fetch는 그대로
+#[test]
+fn lfs_repository_refuses_push_but_not_fetch() {
+    let (_d, p) = repo();
+    let url = "https://example.invalid/x.git";
+    git(&p, &["remote", "add", "origin", url]);
+    for (k, v) in [("filter.lfs.clean", "git-lfs clean -- %f"), ("filter.lfs.smudge", "git-lfs smudge -- %f"), ("filter.lfs.process", "git-lfs filter-process")] {
+        git(&p, &["config", k, v]);
+    }
+    std::fs::write(p.join(".gitattributes"), "*.bin filter=lfs diff=lfs merge=lfs -text\n").unwrap();
+    git(&p, &["add", ".gitattributes"]);
+    git(&p, &["commit", "-qm", "lfs"]);
+    let fp = gc_core::ai_tool::remotes_fingerprint(&mut vec![("origin".into(), url.to_string())]);
+    let run = |args: Value| -> (String, bool) {
+        let mut child = Command::new(SERVER).args(["--git403-mcp", p.to_str().unwrap()]).env("GIT403_REMOTE_FP", &fp).env("GIT403_CONFIG_FP", cfg_fp(&p)).env("GIT403_SANDBOX", SANDBOX).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
+        writeln!(child.stdin.take().unwrap(), "{}", json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "git", "arguments": {"args": args}}})).unwrap();
+        let mut l = String::new();
+        BufReader::new(child.stdout.take().unwrap()).read_line(&mut l).unwrap();
+        let _ = child.kill();
+        let r: Value = serde_json::from_str(&l).unwrap();
+        (r["result"]["content"][0]["text"].as_str().unwrap().to_owned(), r["result"]["isError"].as_bool().unwrap())
+    };
+    let (t, e) = run(json!(["push", "origin", "main"]));
+    assert!(e && t.contains("LFS") && !t.starts_with("[git failed]"), "{t}");
+    let (t, _) = run(json!(["fetch", "origin"]));
+    assert!(t.starts_with("[git failed]"), "fetch는 git까지 간다(네트워크 없음): {t}");
+}
+
 /// 실제 claude 2.1.x: 악의적 `.claude/settings.json`(Bash(*)·Edit(*) 허용, SessionStart 훅)이 든 저장소에서 우회 시도를 시킨 뒤
 /// 표식 파일·밖의 파일·다른 저장소·`.git/config`가 그대로인지 본다. 도구가 실제로 쓰였는지(`tried`)와 정상 호출 성공도 확인한다.
 #[test]

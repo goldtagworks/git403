@@ -94,12 +94,24 @@ impl Backend {
         }
         let fp = gc_core::ai_tool::remotes_fingerprint(&mut urls);
         // 같은 컴퓨터의 경로·file://은 여기서 판정하지 않는다(`check`가 거절한다)
-        let hosted: Vec<&(String, String)> = urls.iter().filter(|(_, u)| u.is_empty() || !gc_core::ai_config::is_local_url(u)).collect();
+        let mut hosted: Vec<(String, String)> = urls.iter().filter(|(_, u)| u.is_empty() || !gc_core::ai_config::is_local_url(u)).cloned().collect();
+        // git-lfs 서버(`lfs.url`: 설정·`.lfsconfig`)도 데이터를 보내고 받는 곳이라 원격처럼 판정에 넣는다(지문은 설정 지문이 맡는다)
+        let lfs_file = repo.join(".lfsconfig");
+        let mut lfs_args: Vec<Vec<String>> = vec![["config", "--local", "--get-all", "lfs.url"].map(String::from).to_vec()];
+        if lfs_file.is_file() {
+            lfs_args.push(["config", "--file", &lfs_file.to_string_lossy(), "--get-all", "lfs.url"].map(String::from).to_vec());
+        }
+        for a in lfs_args {
+            let argv: Vec<&str> = a.iter().map(String::as_str).collect();
+            if let Ok(o) = self.backend.run(repo, &argv, &[1]).await {
+                hosted.extend(String::from_utf8_lossy(&o).lines().map(|l| ("lfs".to_string(), l.trim().to_owned())).filter(|(_, u)| !u.is_empty() && !gc_core::ai_config::is_local_url(u)));
+            }
+        }
         let mut all = Vec::new();
         if !hosted.is_empty() {
             let accts = self.hosting.accounts();
             let accounts = crate::util::off(move || accts.list().map_err(|e| e.ipc())).await.unwrap_or_default();
-            for (name, url) in hosted {
+            for (name, url) in &hosted {
                 // 해석할 수 없는 원격(알 수 없는 URL 형식·빈 값)은 불명
                 let Some(parsed) = gc_hosting::parse_remote(url) else {
                     all.push(risk(Level::Unknown, None));

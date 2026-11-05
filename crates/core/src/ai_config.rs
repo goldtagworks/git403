@@ -167,7 +167,10 @@ fn judge_entry(key: &str, value: &str, src: &Source, repo: &Path) -> J {
         ("filter", false) => {
             if sub == "lfs" && (lfs_standard(key, value) || (var == "required" && val_ok(Vk::Bool, value))) { J::Safe } else { J::Review }
         }
-        ("lfs", true) if var == "url" => if value.starts_with("https://") || value.starts_with("http://") { J::Safe } else { J::Review },
+        // `lfs.url`: git-lfs 서버(대용량 파일을 보내고 받는 곳). 같은 컴퓨터의 경로는 거절, http(s)만 안전
+        ("lfs", true) if var == "url" => {
+            if is_local_url(value) { J::Refuse(format!("lfs.url points to a local path or file:// URL ({value})")) } else if value.starts_with("https://") || value.starts_with("http://") { J::Safe } else { J::Review }
+        }
         ("submodule", false) => match var {
             "url" => J::Safe,
             "active" => v(Vk::Bool),
@@ -427,6 +430,12 @@ pub fn check(repo: &Path, git: &str) -> Verdict {
             Ok(_) => refuse.push(format!("submodule {path}/.git is a symbolic link")),
             Err(_) => {}
         }
+    }
+    // 저장소가 담은 `.lfsconfig`(git-lfs가 읽는 `lfs.url` 등): 설정 파일과 같은 규칙으로 판정하고 지문에도 넣는다(심볼릭 링크면 거절)
+    match root.join(".lfsconfig").symlink_metadata() {
+        Ok(m) if m.file_type().is_symlink() => refuse.push(".lfsconfig is a symbolic link".into()),
+        Ok(m) if m.is_file() => files.push(root.join(".lfsconfig")),
+        _ => {}
     }
     // include 대상(조건과 무관하게)을 따라가며 파일을 더한다(깊이 5)
     let base = if gitdir.as_os_str().is_empty() { repo.join(".git") } else { gitdir.clone() };
@@ -724,5 +733,24 @@ mod tests {
         // 로컬 경로 원격이 그대로면 거절
         sh(&dest, &["remote", "set-url", "origin", &sub.to_string_lossy()]);
         assert!(!check(&r, "git").refuse.is_empty());
+    }
+
+    /// 7차 리뷰: `.lfsconfig`의 `lfs.url`(로컬 경로 거절·http(s)만 안전, 목록 밖 `lfs.*`는 확인)
+    #[test]
+    fn lfsconfig_is_judged_like_a_config_file() {
+        let (_d, r) = repo();
+        let base = check(&r, "git");
+        std::fs::write(r.join(".lfsconfig"), "[lfs]\n\turl = https://lfs.example.com/o/r.git/info/lfs\n").unwrap();
+        let v = check(&r, "git");
+        assert!(v.refuse.is_empty() && v.review.is_empty(), "{v:?}");
+        assert_ne!(v.fingerprint, base.fingerprint, ".lfsconfig는 지문에 들어간다");
+        std::fs::write(r.join(".lfsconfig"), "[lfs]\n\turl = /srv/evil-lfs\n").unwrap();
+        assert!(check(&r, "git").refuse.iter().any(|x| x.contains("lfs.url")));
+        std::fs::write(r.join(".lfsconfig"), "[lfs]\n\tstandalonetransferagent = evil\n[lfs \"customtransfer.evil\"]\n\tpath = /bin/sh\n").unwrap();
+        let v = check(&r, "git");
+        assert!(v.review.iter().any(|k| k.contains("standalonetransferagent")) && v.review.iter().any(|k| k.contains("customtransfer")), "{v:?}");
+        std::fs::remove_file(r.join(".lfsconfig")).unwrap();
+        std::os::unix::fs::symlink("/etc/hosts", r.join(".lfsconfig")).unwrap();
+        assert!(check(&r, "git").refuse.iter().any(|x| x.contains(".lfsconfig")));
     }
 }

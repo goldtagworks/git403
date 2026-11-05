@@ -255,14 +255,14 @@ pub fn resolve(repo: &Path, p: &str) -> Res<PathBuf> {
 /// - 환경 자동 로드: `.envrc`, 도구 버전 관리 `mise*.toml`·`.tool-versions`
 /// - 훅 관리 도구(이후 사용자의 commit이 실행): `.githooks`·`.husky`·`.lefthook`·`lefthook.yml`·`.pre-commit-config.yaml`
 /// - CI·빌드·패키지 설정: `.github/**`(workflows·actions), `.gitlab-ci.yml`·`.gitlab`, `.circleci`, `.travis.yml`, `azure-pipelines.yml`, `bitbucket-pipelines.yml`, `Jenkinsfile`,
-///   `.cargo/config*`(링커·rustflags가 빌드 때 실행), `.npmrc`·`.yarnrc*`·`.pnpmfile.cjs`(스크립트·레지스트리·훅), `.gitmodules`·`.gitattributes`(서브모듈 URL·필터·diff 드라이버 지정)
+///   `.cargo/config*`(링커·rustflags가 빌드 때 실행), `.npmrc`·`.yarnrc*`·`.pnpmfile.cjs`(스크립트·레지스트리·훅), `.gitmodules`·`.gitattributes`(서브모듈 URL·필터·diff 드라이버 지정)·`.lfsconfig`(git-lfs 서버 URL·전송 설정)
 /// `package.json`·`Makefile`·`build.rs` 같은 **프로젝트 본문**은 막지 않는다 — 막으면 AI 작업의 대부분이 불가능하고, 실행은 사용자가 빌드·실행할 때 일어나며 diff에 보인다(문서에 명시한 수용 위험).
 /// 읽기는 막지 않는다. 같은 규칙을 `mv` 인자와, 작업 트리를 바꾸는 git 작업이 들여오는 변경(`mcp::preflight`)에도 적용한다.
 pub fn write_protected(rel: &Path) -> bool {
     const DIRS: [&str; 13] = [".vscode", ".idea", ".cursor", ".windsurf", ".zed", ".devcontainer", ".githooks", ".husky", ".lefthook", ".continue", ".github", ".gitlab", ".circleci"];
-    const FILES: [&str; 33] = [
+    const FILES: [&str; 34] = [
         "claude.md", "claude.local.md", "agents.md", "gemini.md", ".mcp.json", ".envrc", ".cursorrules", ".windsurfrules", ".aider.conf.yml", ".aiderignore", ".pre-commit-config.yaml", "lefthook.yml", "lefthook.yaml", ".lefthook.yml", ".lefthook.yaml", "copilot-instructions.md", ".clinerules", ".roomodes",
-        ".gitlab-ci.yml", ".travis.yml", "azure-pipelines.yml", "bitbucket-pipelines.yml", "jenkinsfile", ".npmrc", ".yarnrc", ".yarnrc.yml", ".pnpmfile.cjs", ".tool-versions", ".gitmodules", ".gitattributes", ".gitpod.yml", ".mise.toml", "mise.toml",
+        ".gitlab-ci.yml", ".travis.yml", "azure-pipelines.yml", "bitbucket-pipelines.yml", "jenkinsfile", ".npmrc", ".yarnrc", ".yarnrc.yml", ".pnpmfile.cjs", ".tool-versions", ".gitmodules", ".gitattributes", ".gitpod.yml", ".mise.toml", "mise.toml", ".lfsconfig",
     ];
     let names: Vec<String> = rel.components().filter_map(|c| matches!(c, Component::Normal(_)).then(|| c.as_os_str().to_string_lossy().to_lowercase())).collect();
     let n = names.len();
@@ -545,6 +545,12 @@ pub fn validate(args: &[String], repo: &Path, remotes: &[String]) -> Res<Vec<Str
     }
     // 원격 명령은 그 원격의 prune·mirror 설정도 꺼 둔다(저장소 설정이 있어도 이긴다)
     let mut full = prefix(repo);
+    // fetch·pull은 LFS 필터를 끈다(체크아웃이 포인터 파일로 남는다): 원격 명령에는 셸을 열 수 없는데 LFS의 smudge는 셸로 실행된다. push는 mcp가 LFS 저장소면 거절한다
+    if matches!(body[0].as_str(), "fetch" | "pull") {
+        for c in ["filter.lfs.smudge=", "filter.lfs.process=", "filter.lfs.required=false"] {
+            full.extend(["-c".to_string(), c.to_string()]);
+        }
+    }
     if let ("fetch" | "pull" | "push", Some(r)) = (body[0].as_str(), body.iter().skip(1).find(|a| remotes.contains(a))) {
         full.extend(["-c".to_string(), format!("remote.{r}.prune=false"), "-c".into(), format!("remote.{r}.mirror=false"), "-c".into(), format!("remote.{r}.pruneTags=false")]);
     }
@@ -670,7 +676,7 @@ mod tests {
         {
             let mut x = validate(&v(a), r, &remotes()).unwrap().split_off(prefix(r).len());
             // 원격 명령은 앞에 원격별 `-c remote.<r>.…` 설정이 더 붙는다
-            while x.first().is_some_and(|t| t == "-c") && x.get(1).is_some_and(|t| t.starts_with("remote.")) {
+            while x.first().is_some_and(|t| t == "-c") && x.get(1).is_some_and(|t| t.starts_with("remote.") || t.starts_with("filter.lfs.")) {
                 x.drain(..2);
             }
             x
@@ -964,7 +970,7 @@ mod tests {
     #[test]
     fn persistent_config_paths_are_write_protected_for_edit_and_mv() {
         let (_d, r) = repo();
-        for p in [".vscode/settings.json", ".idea/workspace.xml", ".cursor/rules/a.mdc", "CLAUDE.md", "sub/CLAUDE.md", "Agents.md", "AGENTS.md", "GEMINI.md", ".mcp.json", ".envrc", ".githooks/pre-commit", ".husky/pre-commit", "a/.husky/_/x", ".pre-commit-config.yaml", "lefthook.yml", ".aider.chat.history.md", ".devcontainer/devcontainer.json", ".github/copilot-instructions.md", ".cursorrules", ".githooks", ".github/workflows/ci.yml", ".github", ".gitlab-ci.yml", ".circleci/config.yml", ".cargo/config.toml", ".cargo/config", ".npmrc", ".yarnrc.yml", ".yarnrc", ".pnpmfile.cjs", "mise.toml", ".mise.toml", "mise.local.toml", ".tool-versions", ".gitmodules", ".gitattributes", "sub/.gitattributes", "Jenkinsfile", "azure-pipelines.yml"] {
+        for p in [".vscode/settings.json", ".idea/workspace.xml", ".cursor/rules/a.mdc", "CLAUDE.md", "sub/CLAUDE.md", "Agents.md", "AGENTS.md", "GEMINI.md", ".mcp.json", ".envrc", ".githooks/pre-commit", ".husky/pre-commit", "a/.husky/_/x", ".pre-commit-config.yaml", "lefthook.yml", ".aider.chat.history.md", ".devcontainer/devcontainer.json", ".github/copilot-instructions.md", ".cursorrules", ".githooks", ".github/workflows/ci.yml", ".github", ".gitlab-ci.yml", ".circleci/config.yml", ".cargo/config.toml", ".cargo/config", ".npmrc", ".yarnrc.yml", ".yarnrc", ".pnpmfile.cjs", "mise.toml", ".mise.toml", "mise.local.toml", ".tool-versions", ".lfsconfig", "sub/.lfsconfig", ".gitmodules", ".gitattributes", "sub/.gitattributes", "Jenkinsfile", "azure-pipelines.yml"] {
             assert!(write_protected(Path::new(p)), "{p}");
             assert!(edit_file(&r, p, "", "x", false).is_err(), "edit {p}");
         }

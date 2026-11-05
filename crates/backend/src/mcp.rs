@@ -105,6 +105,27 @@ fn private_tmp() -> PathBuf {
     .clone()
 }
 
+/// 저장소가 git-lfs를 **실제로** 쓰는가: `.gitattributes`(추적되는 모든 것과 `.git/info/attributes`)에 `filter=lfs`가 있고 표준 LFS 필터 정의가 유효하다.
+/// (전역 설정에 `git lfs install`이 있다는 이유만으로는 셸을 열지 않는다 — 한 번만 구해 캐시한다: 저장소 설정·`.gitattributes`는 지문·사전 검사가 바뀌지 않게 지킨다)
+fn lfs_shell_needed(repo: &Path) -> bool {
+    static LFS: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *LFS.get_or_init(|| lfs_shell_needed_uncached(repo))
+}
+
+fn lfs_shell_needed_uncached(repo: &Path) -> bool {
+    {
+        let git = std::env::var(GIT_BIN).unwrap_or_else(|_| "git".into());
+        let out = |a: &[&str]| Command::new(&git).args(a).current_dir(repo).stdin(Stdio::null()).output().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
+        if out(&["config", "--get", "filter.lfs.process"]).trim() != "git-lfs filter-process" {
+            return false;
+        }
+        let tracked = out(&["ls-files", "-z", "--", ".gitattributes", ":(glob)**/.gitattributes"]);
+        let mut files: Vec<PathBuf> = tracked.split('\0').filter(|p| !p.is_empty()).map(|p| repo.join(p)).collect();
+        files.push(repo.join(".git/info/attributes"));
+        files.iter().any(|f| f.symlink_metadata().is_ok_and(|m| m.is_file() && m.len() < (1 << 20)) && std::fs::read_to_string(f).is_ok_and(|t| t.lines().any(|l| !l.trim_start().starts_with('#') && l.contains("filter=lfs"))))
+    }
+}
+
 /// git 자식 정책(원격 명령이면 `net`). askpass·credential helper·LFS 여부는 한 번만 구한다
 fn policy(repo: &Path, net: bool) -> Policy {
     static STATIC: std::sync::OnceLock<(Option<PathBuf>, Option<u16>, Vec<PathBuf>)> = std::sync::OnceLock::new();
@@ -118,10 +139,9 @@ fn policy(repo: &Path, net: bool) -> Policy {
         let helpers = cfg(&["config", "--global", "--get-all", "credential.helper"]).lines().map(str::trim).filter(|l| l.starts_with('/')).filter_map(|l| l.split_whitespace().next()).map(PathBuf::from).collect();
         (exe, port, helpers)
     });
-    // 표준 git-lfs 필터를 쓰는 저장소는 git-lfs가 셸로 실행되므로 셸을 연다
-    let git = std::env::var(GIT_BIN).unwrap_or_else(|_| "git".into());
-    let lfs_standard = Command::new(&git).args(["config", "--get", "filter.lfs.process"]).current_dir(repo).stdin(Stdio::null()).output().is_ok_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "git-lfs filter-process");
-    Policy { repo: repo.canonicalize().unwrap_or_else(|_| repo.to_path_buf()), tmp: private_tmp(), net, allow_sh: lfs_standard, askpass_exe: exe.clone(), askpass_port: *port, ssh_sock: std::env::var_os("SSH_AUTH_SOCK").map(PathBuf::from), helpers: helpers.clone() }
+    // LFS 저장소(아래)의 네트워크 없는 단계만 셸을 연다. 원격 명령에는 절대 열지 않는다(`sandbox`가 net이면 무시)
+    let lfs = lfs_shell_needed(repo);
+    Policy { repo: repo.canonicalize().unwrap_or_else(|_| repo.to_path_buf()), tmp: private_tmp(), net, allow_sh: lfs && !net, askpass_exe: exe.clone(), askpass_port: *port, ssh_sock: std::env::var_os("SSH_AUTH_SOCK").map(PathBuf::from), helpers: helpers.clone() }
 }
 
 /// git 자식: **샌드박스 안에서**(설정된 방식, 실패하면 실행하지 않는다) + 보정된 환경(askpass 등) + 편집기·pager·프롬프트 차단, 저장소 밖을 가리키는 git 환경 변수 제거
@@ -286,6 +306,10 @@ fn git_call(repo: &Path, args: &[String], ok: &Confirmed) -> Result<String, Stri
             Some(_) => {}
         }
     }
+    // LFS 저장소의 push는 거절: AI 차례는 훅을 끄므로 LFS의 `pre-push` 훅이 객체를 올리지 못해 원격에 포인터만 올라가 망가진다
+    if args.first().map(String::as_str) == Some("push") && lfs_shell_needed(repo) {
+        return Err("this repository uses git-lfs: push is disabled in AI chat because git hooks are off, so LFS objects would not be uploaded (the remote would receive only pointer files). Ask the user to push it themselves.".into());
+    }
     let argv = ai_tool::validate(args, repo, &names)?;
     // 3) 작업 트리를 바꾸는 git 작업이 들여오는 변경에 보호 경로(CI·에디터·훅·에이전트 설정…)가 있으면 실행 전에 빠르게 거절한다(사전 검사)
     preflight(repo, args)?;
@@ -297,12 +321,15 @@ fn git_call(repo: &Path, args: &[String], ok: &Confirmed) -> Result<String, Stri
 
 /// 보호 경로(추적·untracked·ignored 모두)의 내용 스냅숏. `None` = 파일 없음
 type Protected = std::collections::BTreeMap<String, Option<Vec<u8>>>;
+/// 작업 트리의 모든 심볼릭 링크(추적·untracked·ignored): 경로 → 링크 대상
+type Links = std::collections::BTreeMap<String, String>;
 
 struct Snap {
     head: String,
     /// `symbolic-ref`의 브랜치 이름(분리 HEAD면 None)
     branch: Option<String>,
     protected: Protected,
+    links: Links,
 }
 
 const SNAP_FILE_LIMIT: u64 = 4 << 20;
@@ -322,18 +349,95 @@ fn snapshot(repo: &Path) -> Snap {
             paths.extend(t.split('\0').filter(|p| !p.is_empty()).map(str::to_owned));
         }
     }
-    let mut protected = Protected::new();
-    for p in paths.into_iter().filter(|p| ai_tool::write_protected(Path::new(p))) {
+    let (mut protected, mut links) = (Protected::new(), Links::new());
+    for p in paths {
         let full = repo.join(&p);
-        let content = match full.symlink_metadata() {
-            Ok(m) if m.file_type().is_symlink() => std::fs::read_link(&full).ok().map(|t| [b"symlink:".to_vec(), t.to_string_lossy().into_owned().into_bytes()].concat()),
-            Ok(m) if m.is_file() && m.len() <= SNAP_FILE_LIMIT => std::fs::read(&full).ok(),
-            Ok(m) if m.is_file() => Some(format!("big:{}", m.len()).into_bytes()),
+        // 경로 중간에 심볼릭 링크가 있으면 그 너머를 읽지 않는다(링크 자체는 아래 `links`가 잡는다)
+        let through_link = ai_tool::resolve(repo, &p).is_err();
+        let meta = full.symlink_metadata().ok();
+        if let Some(m) = meta.as_ref().filter(|m| m.file_type().is_symlink()) {
+            let _ = m;
+            links.insert(p.clone(), std::fs::read_link(&full).map(|t| t.to_string_lossy().into_owned()).unwrap_or_default());
+        }
+        if !ai_tool::write_protected(Path::new(&p)) {
+            continue;
+        }
+        let content = match meta {
+            _ if through_link && !meta_is_symlink(&full) => Some(b"link-path".to_vec()),
+            Some(m) if m.file_type().is_symlink() => Some([b"symlink:".to_vec(), std::fs::read_link(&full).map(|t| t.to_string_lossy().into_owned()).unwrap_or_default().into_bytes()].concat()),
+            Some(m) if m.is_file() && m.len() <= SNAP_FILE_LIMIT => std::fs::read(&full).ok(),
+            Some(m) if m.is_file() => Some(format!("big:{}", m.len()).into_bytes()),
             _ => None,
         };
         protected.insert(p, content);
     }
-    Snap { head, branch, protected }
+    Snap { head, branch, protected, links }
+}
+
+fn meta_is_symlink(p: &Path) -> bool {
+    p.symlink_metadata().is_ok_and(|m| m.file_type().is_symlink())
+}
+
+/// **서버(샌드박스 밖)가 하는 파일 쓰기·삭제는 전부 이 함수들을 거친다**: 모든 경로 성분이 심볼릭 링크가 아니고 정규화한 위치가 저장소 안일 때만 하고,
+/// 아니면 쓰지 않는다(링크 너머 `$HOME` 등에 쓰는 일을 막는다). 마지막 성분도 `O_NOFOLLOW`로 연다.
+fn safe_write(repo: &Path, rel: &str, bytes: &[u8]) -> bool {
+    let Ok(norm) = ai_tool::resolve(repo, rel) else { return false };
+    let Ok(root) = repo.canonicalize() else { return false };
+    let full = root.join(&norm);
+    if let Some(dir) = full.parent() {
+        if std::fs::create_dir_all(dir).is_err() || ai_tool::resolve(repo, &norm.to_string_lossy()).is_err() {
+            return false;
+        }
+    }
+    let mut o = std::fs::OpenOptions::new();
+    o.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::custom_flags(&mut o, libc::O_NOFOLLOW);
+    o.open(&full).and_then(|mut f| f.write_all(bytes)).is_ok()
+}
+
+/// 일반 파일 삭제(경로에 심볼릭 링크 성분이 있으면 안 함)
+fn safe_remove(repo: &Path, rel: &str) -> bool {
+    let Ok(norm) = ai_tool::resolve(repo, rel) else { return false };
+    let Ok(root) = repo.canonicalize() else { return false };
+    std::fs::remove_file(root.join(norm)).is_ok()
+}
+
+/// 심볼릭 링크 자체를 지운다(앞쪽 성분은 심볼릭 링크가 아니어야 하고, 마지막 성분은 링크여야 한다). 링크가 가리키는 쪽은 건드리지 않는다
+fn safe_remove_link(repo: &Path, rel: &str) -> bool {
+    let p = Path::new(rel);
+    let Some(parent) = p.parent().map(|q| q.to_string_lossy().into_owned()) else { return false };
+    if !parent.is_empty() && ai_tool::resolve(repo, &parent).is_err() {
+        return false;
+    }
+    let Ok(root) = repo.canonicalize() else { return false };
+    let full = root.join(rel);
+    full.symlink_metadata().is_ok_and(|m| m.file_type().is_symlink()) && std::fs::remove_file(&full).is_ok()
+}
+
+/// 심볼릭 링크를 (이전 대상으로) 다시 만든다. 이미 있는 경로는 링크일 때만 바꾼다
+#[cfg(unix)]
+fn safe_make_link(repo: &Path, rel: &str, target: &str) -> bool {
+    let p = Path::new(rel);
+    let Some(parent) = p.parent().map(|q| q.to_string_lossy().into_owned()) else { return false };
+    if !parent.is_empty() && ai_tool::resolve(repo, &parent).is_err() {
+        return false;
+    }
+    let Ok(root) = repo.canonicalize() else { return false };
+    let full = root.join(rel);
+    if let Some(d) = full.parent() {
+        if std::fs::create_dir_all(d).is_err() {
+            return false;
+        }
+    }
+    if full.symlink_metadata().is_ok() && !safe_remove_link(repo, rel) {
+        return false;
+    }
+    std::os::unix::fs::symlink(target, &full).is_ok()
+}
+#[cfg(not(unix))]
+fn safe_make_link(_: &Path, _: &str, _: &str) -> bool {
+    false
 }
 
 /// 진행 중인 merge·rebase·cherry-pick·revert를 `--abort`한다
@@ -349,7 +453,8 @@ fn abort_in_progress(repo: &Path) {
     }
 }
 
-/// 작업 트리를 바꿀 수 있는 명령을 실행하고, 보호 경로가 달라졌으면 그 명령의 효과를 되돌린다(HEAD·브랜치 원위치 + 보호 경로 파일 원복). 되돌림까지 확인하지 못하면 그 사실을 오류에 담는다.
+/// 작업 트리를 바꿀 수 있는 명령을 실행하고, **보호 경로 내용이나 심볼릭 링크(추가·변경·삭제)**가 달라졌으면 그 명령의 효과를 되돌린다
+/// (HEAD·브랜치 원위치 + 링크 원복 + 보호 경로 파일 원복). 되돌림까지 확인하지 못하면 그 사실을 오류에 담는다. 서버가 하는 파일 쓰기는 모두 `safe_*`(심볼릭 링크 성분 거절).
 fn run_guarded(repo: &Path, argv: &[String], cmd: &str, tree_changing: bool) -> Result<(String, bool), String> {
     let net = matches!(cmd, "fetch" | "pull" | "push");
     if !tree_changing {
@@ -358,11 +463,12 @@ fn run_guarded(repo: &Path, argv: &[String], cmd: &str, tree_changing: bool) -> 
     let before = snapshot(repo);
     let out = run_git_with(repo, argv, net);
     let after = snapshot(repo);
-    let changed: Vec<String> = before.protected.keys().chain(after.protected.keys()).filter(|p| before.protected.get(*p) != after.protected.get(*p)).cloned().collect::<std::collections::BTreeSet<_>>().into_iter().collect();
-    if changed.is_empty() {
+    let prot: Vec<String> = before.protected.keys().chain(after.protected.keys()).filter(|p| before.protected.get(*p) != after.protected.get(*p)).cloned().collect::<std::collections::BTreeSet<_>>().into_iter().collect();
+    let links: Vec<String> = before.links.keys().chain(after.links.keys()).filter(|p| before.links.get(*p) != after.links.get(*p)).cloned().collect::<std::collections::BTreeSet<_>>().into_iter().collect();
+    if prot.is_empty() && links.is_empty() {
         return Ok(out);
     }
-    // 되돌리기: (1) 진행 중 작업 중단 (2) 브랜치·HEAD 원위치(`reset --keep`: 작업 중이던 변경은 보존) (3) 보호 경로 파일 원복
+    // 되돌리기: (1) 진행 중 작업 중단 (2) 브랜치·HEAD 원위치(`reset --keep`: 작업 중이던 변경은 보존) (3) 심볼릭 링크 원복 (4) 보호 경로 파일 원복 — 파일 쓰기는 전부 safe_*
     abort_in_progress(repo);
     let git = |a: &[&str]| {
         let mut v = ai_tool::prefix(repo);
@@ -379,29 +485,37 @@ fn run_guarded(repo: &Path, argv: &[String], cmd: &str, tree_changing: bool) -> 
     if snapshot_head(repo) != before.head && !before.head.is_empty() {
         let _ = git(&["reset", "--keep", &before.head]);
     }
-    for p in &changed {
-        let full = repo.join(p);
-        match before.protected.get(p).cloned().flatten() {
-            Some(bytes) if !bytes.starts_with(b"symlink:") && !bytes.starts_with(b"big:") => {
-                if let Some(dir) = full.parent() {
-                    let _ = std::fs::create_dir_all(dir);
-                }
-                let _ = std::fs::remove_file(&full);
-                let _ = std::fs::write(&full, bytes);
-            }
-            Some(_) => {} // 심볼릭 링크·큰 파일은 원복하지 못한다(아래 검증이 알린다)
+    // 링크: 생긴 것은 링크만 지우고(그 자리에 있던 추적 파일은 HEAD에서 되살림), 사라지거나 바뀐 것은 이전 대상으로 다시 만든다
+    for p in &links {
+        match before.links.get(p) {
             None => {
-                let _ = std::fs::remove_file(&full);
+                let _ = safe_remove_link(repo, p);
+                let _ = git(&["restore", "--worktree", "--source=HEAD", "--", p]);
+            }
+            Some(t) => {
+                let _ = safe_make_link(repo, p, t);
+            }
+        }
+    }
+    for p in &prot {
+        match before.protected.get(p).cloned().flatten() {
+            Some(bytes) if !bytes.starts_with(b"symlink:") && !bytes.starts_with(b"big:") && bytes != b"link-path" => {
+                let _ = safe_remove(repo, p);
+                let _ = safe_write(repo, p, &bytes);
+            }
+            Some(_) => {} // 링크·큰 파일은 원복하지 못한다(아래 검증이 알린다)
+            None => {
+                let _ = safe_remove(repo, p);
             }
         }
     }
     let fin = snapshot(repo);
-    let restored = fin.head == before.head && fin.branch == before.branch && fin.protected == before.protected;
-    let list = changed.join(", ");
+    let restored = fin.head == before.head && fin.branch == before.branch && fin.protected == before.protected && fin.links == before.links;
+    let list = prot.iter().chain(links.iter()).cloned().collect::<std::collections::BTreeSet<_>>().into_iter().collect::<Vec<_>>().join(", ");
     Err(if restored {
-        format!("refusing: this {cmd} changed protected configuration files (CI workflows, editor/agent settings, hooks, package-manager and build configuration): {list}. Its effects were reverted (HEAD, branch and those files are back as before). Ask the user to run it themselves.")
+        format!("refusing: this {cmd} changed protected configuration files or symbolic links (CI workflows, editor/agent settings, hooks, package-manager and build configuration): {list}. Its effects were reverted (HEAD, branch, those files and links are back as before). Ask the user to run it themselves.")
     } else {
-        format!("WARNING: this {cmd} changed protected configuration files ({list}) and the automatic revert could not fully restore the previous state. Tell the user to inspect `git status` and those files before running anything.")
+        format!("WARNING: this {cmd} changed protected configuration files or symbolic links ({list}) and the automatic revert could not fully restore the previous state. Tell the user to inspect `git status` and those files before running anything.")
     })
 }
 
@@ -411,12 +525,27 @@ fn snapshot_head(repo: &Path) -> String {
     run_git(repo, &argv).0.trim().to_owned()
 }
 
-/// `a`와 `b` 사이에 바뀐 경로들(이름 변경은 양쪽)
-fn changed_between(repo: &Path, a: &str, b: &str) -> Vec<String> {
+/// `git diff --raw -z`·`diff-tree --raw -z` 출력 → (경로, 새 모드가 심볼릭 링크(120000)인가)
+fn parse_raw(out: &str) -> Vec<(String, bool)> {
+    let mut v = Vec::new();
+    let mut toks = out.split('\0').filter(|t| !t.is_empty());
+    while let Some(t) = toks.next() {
+        if let Some(meta) = t.strip_prefix(':') {
+            let link = meta.split(' ').nth(1) == Some("120000");
+            if let Some(path) = toks.next() {
+                v.push((path.to_owned(), link));
+            }
+        }
+    }
+    v
+}
+
+/// `a`와 `b` 사이에 바뀐 경로들(이름 변경은 양쪽)과 심볼릭 링크 여부
+fn changed_between(repo: &Path, a: &str, b: &str) -> Vec<(String, bool)> {
     let mut argv = ai_tool::prefix(repo);
-    argv.extend(["diff", "--name-only", "--no-renames", "--no-ext-diff", "--no-textconv", "-z", a, b, "--"].map(String::from));
+    argv.extend(["diff", "--raw", "--no-renames", "--no-ext-diff", "--no-textconv", "-z", a, b, "--"].map(String::from));
     let (t, err) = run_git(repo, &argv);
-    if err { vec![] } else { t.split('\0').map(str::to_owned).filter(|p| !p.is_empty()).collect() }
+    if err { vec![] } else { parse_raw(&t) }
 }
 
 /// 위치 인자(옵션과 그 값 제외)
@@ -444,7 +573,19 @@ fn positionals<'a>(args: &'a [String], value_opts: &[&str]) -> Vec<&'a str> {
 fn preflight(repo: &Path, args: &[String]) -> Result<(), String> {
     let sub = args.first().map(String::as_str).unwrap_or_default();
     let has = |f: &str| args.iter().any(|a| a == f);
-    let mut incoming: Vec<String> = Vec::new();
+    let mut incoming: Vec<(String, bool)> = Vec::new();
+    let tree = |r: &str| -> Vec<(String, bool)> {
+        let mut argv = ai_tool::prefix(repo);
+        argv.extend(["ls-tree", "-r", "-z", r].map(String::from));
+        let (o, err) = run_git(repo, &argv);
+        if err { vec![] } else { o.split('\0').filter_map(|e| e.split_once('\t').map(|(m, p)| (p.to_owned(), m.starts_with("120000")))).collect() }
+    };
+    let commit_changes = |t: &str| -> Vec<(String, bool)> {
+        let mut argv = ai_tool::prefix(repo);
+        argv.extend(["diff-tree", "--no-commit-id", "--raw", "--no-renames", "-r", "-m", "-z", t].map(String::from));
+        let (o, err) = run_git(repo, &argv);
+        if err { vec![] } else { parse_raw(&o) }
+    };
     match sub {
         // `switch <브랜치>`의 대상, `switch -c <새 이름> <시작점>`의 시작점(첫 위치 인자)
         "switch" => {
@@ -454,27 +595,15 @@ fn preflight(repo: &Path, args: &[String]) -> Result<(), String> {
         }
         "merge" if !(has("--abort") || has("--continue") || has("--quit")) => {
             for t in positionals(args, &["-m", "--message", "-X"]) {
-                // 병합이 들여오는 것 = 공통 조상에서 t까지의 변경
-                let mut argv = ai_tool::prefix(repo);
-                argv.extend(["diff", "--name-only", "--no-renames", "--no-ext-diff", "--no-textconv", "-z", &format!("HEAD...{t}"), "--"].map(String::from));
-                let (o, err) = run_git(repo, &argv);
-                if !err {
-                    incoming.extend(o.split('\0').map(str::to_owned).filter(|p| !p.is_empty()));
-                }
+                incoming.extend(changed_between(repo, &format!("HEAD...{t}"), ""));
             }
         }
         "cherry-pick" | "revert" if !(has("--abort") || has("--continue") || has("--quit") || has("--skip")) => {
             for t in positionals(args, &["-m", "--mainline"]) {
-                let mut argv = ai_tool::prefix(repo);
-                argv.extend(["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-r", "-m", "-z", t].map(String::from));
-                let (o, err) = run_git(repo, &argv);
-                if !err {
-                    incoming.extend(o.split('\0').map(str::to_owned).filter(|p| !p.is_empty()));
-                }
+                incoming.extend(commit_changes(t));
             }
         }
         "rebase" if !(has("--abort") || has("--continue") || has("--quit") || has("--skip")) => {
-            // 다시 쌓는 대상(--onto 또는 upstream)의 내용이 작업 트리가 된다
             // `rebase <upstream> [<branch>]`·`--onto <X> <upstream> <branch>`: 새 바탕(X 또는 upstream)과 다시 쌓을 브랜치 모두
             let onto = args.iter().position(|a| a == "--onto").and_then(|i| args.get(i + 1)).map(String::as_str);
             let pos = positionals(args, &["--onto", "--empty", "-X"]);
@@ -486,20 +615,15 @@ fn preflight(repo: &Path, args: &[String]) -> Result<(), String> {
             let r = positionals(&args[1..], &[]).first().map_or("stash@{0}".to_string(), |s| s.to_string());
             incoming.extend(changed_between(repo, &format!("{r}^"), &r));
             // untracked 파일을 담은 세 번째 부모(`stash push -u`)
-            let mut argv = ai_tool::prefix(repo);
-            argv.extend(["ls-tree", "-r", "--name-only", "-z", &format!("{r}^3")].map(String::from));
-            let (o, err) = run_git(repo, &argv);
-            if !err {
-                incoming.extend(o.split('\0').map(str::to_owned).filter(|p| !p.is_empty()));
-            }
+            incoming.extend(tree(&format!("{r}^3")));
         }
         _ => {}
     }
-    let hits: Vec<String> = incoming.into_iter().filter(|p| ai_tool::write_protected(Path::new(p))).collect::<std::collections::BTreeSet<_>>().into_iter().collect();
+    let hits: Vec<String> = incoming.into_iter().filter(|(p, link)| *link || ai_tool::write_protected(Path::new(p))).map(|(p, link)| if link { format!("{p} (symbolic link)") } else { p }).collect::<std::collections::BTreeSet<_>>().into_iter().collect();
     if hits.is_empty() {
         Ok(())
     } else {
-        Err(format!("refusing: this {sub} would change protected configuration files (CI workflows, editor/agent settings, hooks, package-manager and build configuration): {}. Ask the user to run it themselves.", hits.join(", ")))
+        Err(format!("refusing: this {sub} would change protected configuration files (CI workflows, editor/agent settings, hooks, package-manager and build configuration) or add symbolic links: {}. Ask the user to run it themselves.", hits.join(", ")))
     }
 }
 
@@ -875,5 +999,119 @@ mod tests {
         assert!(e.contains(".github/ci.yml") && e.contains("reverted"), "{e}");
         assert_eq!((head_of(&p), status_of(&p)), (h0, s0));
         assert!(!p.join(".github").exists());
+    }
+
+    fn link(target: &Path, at: &Path) {
+        std::os::unix::fs::symlink(target, at).unwrap();
+    }
+
+    /// 7차 치명1: 서버(샌드박스 밖)의 파일 쓰기·삭제는 심볼릭 링크 성분을 따라가지 않는다
+    #[test]
+    fn server_side_file_writes_never_follow_symlinks() {
+        let (_d, p) = repo();
+        let home = tempfile::tempdir().unwrap();
+        let h = home.path().canonicalize().unwrap();
+        std::fs::create_dir_all(h.join(".cargo")).unwrap();
+        std::fs::write(h.join(".cargo/config.toml"), "ORIG").unwrap();
+        std::fs::write(h.join("victim"), "ORIG").unwrap();
+        link(&h, &p.join("x"));
+        link(&h.join("victim"), &p.join("flink"));
+        assert!(!safe_write(&p, "x/.cargo/config.toml", b"PWN") && !safe_write(&p, "flink", b"PWN") && !safe_write(&p, "x/new.txt", b"PWN"));
+        assert!(!safe_remove(&p, "x/.cargo/config.toml") && !safe_remove(&p, "flink"));
+        assert_eq!((std::fs::read_to_string(h.join(".cargo/config.toml")).unwrap(), std::fs::read_to_string(h.join("victim")).unwrap()), ("ORIG".into(), "ORIG".into()));
+        assert!(!h.join("new.txt").exists());
+        // 링크 자체는 지울 수 있고 가리키는 쪽은 그대로
+        assert!(safe_remove_link(&p, "flink") && !p.join("flink").exists() && h.join("victim").exists());
+        assert!(!safe_remove_link(&p, "x/.cargo"), "링크 성분 너머는 지우지 않는다");
+        assert!(safe_remove_link(&p, "x"));
+        // 정상 경로는 쓰고 지운다. `.git`·밖은 거절
+        assert!(safe_write(&p, "sub/dir/ok.txt", b"ok") && std::fs::read_to_string(p.join("sub/dir/ok.txt")).unwrap() == "ok");
+        assert!(safe_remove(&p, "sub/dir/ok.txt"));
+        assert!(!safe_write(&p, ".git/config", b"x") && !safe_write(&p, "../escape", b"x") && !safe_write(&p, &format!("{}/abs", h.display()), b"x"));
+        assert!(safe_make_link(&p, "newlink", "target") && std::fs::read_link(p.join("newlink")).unwrap() == Path::new("target"));
+        assert!(!safe_make_link(&p, "nolink/in/dir", "t") || p.join("nolink/in/dir").is_symlink());
+    }
+
+    /// 7차 치명1 재현: 무시된 `x/.cargo/config.toml`이 있는 디렉터리 `x`를 심볼릭 링크로 바꾸는 작업 → 되돌림이 링크 너머(홈)에 쓰지 않고 `x`를 원래대로
+    #[test]
+    fn revert_does_not_write_through_a_directory_replaced_by_a_symlink() {
+        let (_d, p) = repo();
+        let home = tempfile::tempdir().unwrap();
+        let h = home.path().canonicalize().unwrap();
+        std::fs::create_dir_all(h.join(".cargo")).unwrap();
+        std::fs::write(h.join(".cargo/config.toml"), "HOME ORIG").unwrap();
+        // 브랜치 evil: 심볼릭 링크 x -> 홈을 추적한다
+        git_ok(&p, &["switch", "-qc", "evil"]);
+        link(&h, &p.join("x"));
+        git_ok(&p, &["add", "x"]);
+        git_ok(&p, &["commit", "-qm", "link"]);
+        git_ok(&p, &["switch", "-q", "main"]);
+        // main 작업 트리: 무시된 실제 디렉터리 x (보호 경로 .cargo/config.toml 포함)
+        std::fs::write(p.join(".gitignore"), "x/\n").unwrap();
+        git_ok(&p, &["add", ".gitignore"]);
+        git_ok(&p, &["commit", "-qm", "ignore"]);
+        std::fs::create_dir_all(p.join("x/.cargo")).unwrap();
+        std::fs::write(p.join("x/.cargo/config.toml"), "REPO ORIG").unwrap();
+        std::fs::write(p.join("x/keep.txt"), "keep").unwrap();
+        let argv = [ai_tool::prefix(&p), vec!["switch".to_string(), "evil".to_string()]].concat(); // --no-overwrite-ignore 없이: 무시된 파일은 조용히 덮어써진다
+        let head0 = head_of(&p);
+        let e = run_guarded(&p, &argv, "switch", true).expect_err("통과함");
+        assert!(e.contains("protected configuration files or symbolic links"), "{e}");
+        assert_eq!(std::fs::read_to_string(h.join(".cargo/config.toml")).unwrap(), "HOME ORIG", "링크 너머(홈)에 쓰면 안 된다");
+        assert!(!h.join(".cargo/config.toml.tmp").exists());
+        assert!(!p.join("x").is_symlink(), "x는 다시 실제 디렉터리여야 한다");
+        assert_eq!(std::fs::read_to_string(p.join("x/.cargo/config.toml")).unwrap(), "REPO ORIG", "보호 파일은 원래 내용으로");
+        assert_eq!(head_of(&p), head0);
+        assert!(e.contains("reverted"), "{e}");
+    }
+
+    /// 심볼릭 링크만 들어오는 경우(`stash apply` untracked ^3, merge, cherry-pick, switch): 사전 검사가 거절하고, 사전 검사를 건너뛰어도 전후 비교가 링크를 지운다
+    #[test]
+    fn incoming_symlinks_are_refused_before_and_removed_after() {
+        let (_d, p) = repo();
+        let home = tempfile::tempdir().unwrap();
+        let h = home.path().canonicalize().unwrap();
+        git_ok(&p, &["switch", "-qc", "evil"]);
+        link(&h, &p.join("x"));
+        git_ok(&p, &["add", "x"]);
+        git_ok(&p, &["commit", "-qm", "link"]);
+        let evil = head_of(&p);
+        git_ok(&p, &["switch", "-q", "main"]);
+        for a in [json!(["switch", "evil"]), json!(["merge", "evil"]), json!(["cherry-pick", &evil]), json!(["rebase", "evil"])] {
+            let (t, e) = tool(&p, "git", json!({"args": a.clone()}));
+            assert!(e && t.contains("symbolic link"), "{a}: {t}");
+        }
+        assert!(!p.join("x").exists());
+        // untracked 심볼릭 링크를 담은 스태시
+        link(&h, &p.join("y"));
+        git_ok(&p, &["stash", "push", "-q", "-u"]);
+        let (t, e) = tool(&p, "git", json!({"args": ["stash", "apply"]}));
+        assert!(e && t.contains("symbolic link"), "{t}");
+        assert!(!p.join("y").exists());
+        // 사전 검사를 건너뛰고 실행하면 전후 비교가 링크를 지운다(링크가 가리키는 홈은 그대로)
+        std::fs::write(h.join("victim"), "V").unwrap();
+        let argv = ai_tool::validate(&["stash".to_string(), "apply".to_string()], &p, &[]).unwrap();
+        let e = run_guarded(&p, &argv, "stash", true).expect_err("통과함");
+        assert!(e.contains("reverted"), "{e}");
+        assert!(!p.join("y").exists() && std::fs::read_to_string(h.join("victim")).unwrap() == "V");
+    }
+
+    /// 7차 높음2: LFS 판정은 저장소 `.gitattributes`에 `filter=lfs`가 있고 표준 필터 정의가 있을 때만(전역 설정만으로는 셸을 열지 않는다)
+    #[test]
+    fn lfs_shell_is_needed_only_when_the_repo_really_uses_lfs() {
+        let (_d, p) = repo();
+        assert!(!lfs_shell_needed_uncached(&p));
+        for (k, v) in [("filter.lfs.clean", "git-lfs clean -- %f"), ("filter.lfs.smudge", "git-lfs smudge -- %f"), ("filter.lfs.process", "git-lfs filter-process")] {
+            git_ok(&p, &["config", k, v]);
+        }
+        assert!(!lfs_shell_needed_uncached(&p), "표준 LFS 설정만 있고 .gitattributes에 filter=lfs가 없으면 셸을 열지 않는다");
+        std::fs::write(p.join(".gitattributes"), "# *.bin filter=lfs\n*.txt text\n").unwrap();
+        git_ok(&p, &["add", ".gitattributes"]);
+        assert!(!lfs_shell_needed_uncached(&p), "주석은 무시");
+        std::fs::write(p.join(".gitattributes"), "*.bin filter=lfs diff=lfs merge=lfs -text\n").unwrap();
+        git_ok(&p, &["add", ".gitattributes"]);
+        assert!(lfs_shell_needed_uncached(&p));
+        git_ok(&p, &["config", "filter.lfs.process", "sh -c evil"]);
+        assert!(!lfs_shell_needed_uncached(&p), "비표준 정의는 셸을 열지 않는다");
     }
 }
