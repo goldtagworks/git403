@@ -8,6 +8,7 @@ import { FLOW_OPS, ops } from "../../shared/model/ops";
 import { pref, setPref } from "../../shared/lib/settings";
 import { supports, useCaps } from "../../shared/lib/caps";
 import { isMobile } from "../../shared/lib/platform";
+import { aiChat } from "../../shared/model/aichat";
 import { countRender } from "../../shared/lib/profile";
 import type { ThemeMode } from "../../shared/lib/theme";
 import type { Ref, Status } from "../../shared/api/types";
@@ -179,6 +180,7 @@ export const Toolbar = memo(function Toolbar(p: Props) {
       <Tool op="stash" icon="stashPush" label={t("toolbar.stash")} onClick={ops.stash} menu={() => [{ label: t("toolbar.stashMenu"), op: "stash", action: ops.stash }, { label: t("toolbar.snapshot"), op: "stash", action: ops.snapshot }]} disabled={none || !p.status?.files.length} why={none ? needRepo : t("toolbar.noChanges")} />
       <Tool op="stash" icon="stashPop" label={t("toolbar.pop")} onClick={() => ops.pop()} badge={stashes} disabled={none || !stashes} why={none ? needRepo : t("toolbar.noStash")} />
       <div className="tool-sep" />
+      {aiChat.available && <Tool icon="sparkle" label={t("aiChat.title")} onClick={ops.aiChatToggle} disabled={none} why={needRepo} />}
       <Tool icon="launch" label={t("toolbar.quick")} onClick={p.onQuickLaunch} />
       {!isMobile && <Tool
         icon="terminal"

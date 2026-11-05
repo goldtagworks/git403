@@ -37,6 +37,12 @@ test("⌘J로 열고 닫고, 저장소별로 열림을 기억한다", async ({ p
   await page.getByRole("dialog", { name: "빠른 실행" }).getByRole("textbox").fill("AI 채팅");
   await page.getByRole("dialog", { name: "빠른 실행" }).getByRole("option", { name: /AI 채팅 열기·닫기/ }).click();
   await expect(col(page)).toBeVisible();
+  // 툴바 버튼으로도 열고 닫는다
+  const btn = page.locator(".toolbar").getByRole("button", { name: "AI 채팅", exact: true });
+  await btn.click();
+  await expect(col(page)).toHaveCount(0);
+  await btn.click();
+  await expect(col(page)).toBeVisible();
 });
 
 test("보내면 입력·AI 글·도구 줄이 스트림으로 나오고, 도구는 접힌 한 줄이며 펼치면 출력이 보인다", async ({ page }) => {
