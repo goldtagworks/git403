@@ -105,6 +105,8 @@ export const ru: Record<Key, string> = {
   "ops.branch.deleting": "Удаление ветки {name}.",
   "ops.branch.forceDel": "Удалить, даже если не слита",
   "ops.stash.gone": "Этого stash больше нет (применён или удалён в другом месте). Список обновлён.",
+  "ops.stash.conflict": "Стэш применён с конфликтами. Разрешите их; стэш сохранён.",
+  "ops.stash.unresolved": "Нельзя применить стэш, пока есть неразрешённые конфликты. Сначала разрешите или отмените их.",
   "ops.branch.delWorktree": "Также удалить worktree, который её использует ({path})",
   "ops.branch.unmergedMsg": "В '{name}' есть неслитые коммиты. Всё равно удалить?",
   "ops.deleteBtn": "Удалить",

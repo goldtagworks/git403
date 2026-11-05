@@ -126,10 +126,7 @@ impl GitRunner {
         cmd.envs(envs.iter().copied());
         let out = cmd.output().await?;
         if !out.status.success() {
-            return Err(Error::Exit {
-                code: out.status.code(),
-                stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
-            });
+            return Err(exit_error(&out));
         }
         Ok(out.stdout)
     }
@@ -145,10 +142,7 @@ impl GitRunner {
         drop(stdin);
         let out = child.wait_with_output().await?;
         if !out.status.success() {
-            return Err(Error::Exit {
-                code: out.status.code(),
-                stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
-            });
+            return Err(exit_error(&out));
         }
         Ok(out.stdout)
     }
@@ -158,10 +152,7 @@ impl GitRunner {
         let out = self.command(repo, args).output().await?;
         let allowed = out.status.code().is_some_and(|c| ok_codes.contains(&c));
         if !out.status.success() && !allowed {
-            return Err(Error::Exit {
-                code: out.status.code(),
-                stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
-            });
+            return Err(exit_error(&out));
         }
         Ok(out.stdout)
     }
@@ -204,6 +195,12 @@ impl GitRunner {
     ) -> Result<(JobHandle, tokio::task::JoinHandle<Result<()>>)> {
         run_job(self.shell_command(repo, script), events)
     }
+}
+
+/// 실패한 실행의 오류. stderr가 비면 stdout을 쓴다 (`stash apply`·`merge`는 CONFLICT를 stdout에만 쓴다)
+fn exit_error(out: &std::process::Output) -> Error {
+    let text = if out.stderr.trim_ascii().is_empty() { &out.stdout } else { &out.stderr };
+    Error::Exit { code: out.status.code(), stderr: String::from_utf8_lossy(text).into_owned() }
 }
 
 #[cfg(all(test, unix))]
@@ -252,3 +249,4 @@ mod tests {
         d
     }
 }
+

@@ -105,6 +105,8 @@ export const ja: Record<Key, string> = {
   "ops.branch.deleting": "ブランチ {name} を削除します。",
   "ops.branch.forceDel": "マージされていなくても削除",
   "ops.stash.gone": "そのスタッシュはもうありません(別の場所で pop または削除されました)。一覧を更新しました。",
+  "ops.stash.conflict": "スタッシュを適用しましたが競合が発生しました。競合を解決してください。スタッシュは残してあります。",
+  "ops.stash.unresolved": "未解決の競合があるためスタッシュを適用できません。先に競合を解決するか破棄してください。",
   "ops.branch.delWorktree": "このブランチを使う worktree も削除 ({path})",
   "ops.branch.unmergedMsg": "'{name}' にはマージされていないコミットがあります。それでも削除しますか?",
   "ops.deleteBtn": "削除",

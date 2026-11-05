@@ -105,6 +105,8 @@ export const it: Record<Key, string> = {
   "ops.branch.deleting": "Elimina il branch {name}.",
   "ops.branch.forceDel": "Elimina anche se non unito",
   "ops.stash.gone": "Quello stash non esiste più (applicato o eliminato altrove). Elenco aggiornato.",
+  "ops.stash.conflict": "Lo stash è stato applicato con conflitti. Risolvili; lo stash è stato mantenuto.",
+  "ops.stash.unresolved": "Impossibile applicare lo stash con conflitti irrisolti. Risolvili o scartali prima.",
   "ops.branch.delWorktree": "Rimuovi anche il worktree che lo usa ({path})",
   "ops.branch.unmergedMsg": "'{name}' ha commit non uniti. Eliminare comunque?",
   "ops.deleteBtn": "Elimina",

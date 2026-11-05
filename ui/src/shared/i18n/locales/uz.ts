@@ -105,6 +105,8 @@ export const uz: Record<Key, string> = {
   "ops.branch.deleting": "{name} tarmog'i o'chiriladi.",
   "ops.branch.forceDel": "Birlashtirilmagan bo'lsa ham o'chirish",
   "ops.stash.gone": "Bu stash endi yo‘q (boshqa joyda pop qilingan yoki o‘chirilgan). Ro‘yxat yangilandi.",
+  "ops.stash.conflict": "Stash ziddiyatlar bilan qo‘llandi. Ularni hal qiling; stash saqlab qolindi.",
+  "ops.stash.unresolved": "Hal qilinmagan ziddiyatlar bor ekan, stash qo‘llab bo‘lmaydi. Avval ularni hal qiling yoki bekor qiling.",
   "ops.branch.delWorktree": "Uni ishlatayotgan worktree’ni ham o‘chirish ({path})",
   "ops.branch.unmergedMsg": "'{name}' da birlashtirilmagan commitlar bor. Baribir o‘chirilsinmi?",
   "ops.deleteBtn": "O'chirish",

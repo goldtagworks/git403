@@ -105,6 +105,8 @@ export const vi: Record<Key, string> = {
   "ops.branch.deleting": "Xóa nhánh {name}.",
   "ops.branch.forceDel": "Xóa kể cả khi chưa merge",
   "ops.stash.gone": "Stash đó không còn nữa (đã pop hoặc xóa ở nơi khác). Đã làm mới danh sách.",
+  "ops.stash.conflict": "Đã áp dụng stash nhưng có xung đột. Hãy giải quyết; stash vẫn được giữ lại.",
+  "ops.stash.unresolved": "Không thể áp dụng stash khi còn xung đột chưa giải quyết. Hãy giải quyết hoặc hủy chúng trước.",
   "ops.branch.delWorktree": "Xóa luôn worktree đang dùng nhánh này ({path})",
   "ops.branch.unmergedMsg": "'{name}' có commit chưa merge. Vẫn xóa?",
   "ops.deleteBtn": "Xóa",

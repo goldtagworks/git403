@@ -105,6 +105,8 @@ export const uk: Record<Key, string> = {
   "ops.branch.deleting": "Видалення гілки {name}.",
   "ops.branch.forceDel": "Видалити, навіть якщо не злито",
   "ops.stash.gone": "Цього stash більше немає (застосовано або видалено деінде). Список оновлено.",
+  "ops.stash.conflict": "Стеш застосовано з конфліктами. Розв’яжіть їх; стеш збережено.",
+  "ops.stash.unresolved": "Неможливо застосувати стеш, поки є нерозв’язані конфлікти. Спершу розв’яжіть або скасуйте їх.",
   "ops.branch.delWorktree": "Також видалити worktree, що її використовує ({path})",
   "ops.branch.unmergedMsg": "У '{name}' є незлиті коміти. Все одно видалити?",
   "ops.deleteBtn": "Видалити",

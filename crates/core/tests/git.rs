@@ -66,6 +66,28 @@ async fn spawn_returns_immediately_and_can_be_cancelled() {
     assert!(matches!(result, Err(Error::Cancelled)));
 }
 
+/// `stash apply` 충돌은 stderr가 비고 CONFLICT가 stdout에만 나온다 → 오류에 stdout이 실린다
+#[tokio::test]
+async fn stash_conflict_error_carries_stdout() {
+    let tmp = tempfile::tempdir().unwrap();
+    let d = tmp.path();
+    git(d, &["init", "-q"]);
+    std::fs::write(d.join("f"), "a").unwrap();
+    git(d, &["add", "f"]);
+    git(d, &["commit", "-qm", "i"]);
+    std::fs::write(d.join("f"), "b").unwrap();
+    git(d, &["stash", "-q"]);
+    std::fs::write(d.join("f"), "c").unwrap();
+    git(d, &["commit", "-qam", "c"]);
+    let g = GitRunner::default();
+    let e = g.output(d, &["stash", "apply"]).await.unwrap_err();
+    assert!(matches!(&e, Error::Exit { code: Some(1), stderr } if stderr.contains("CONFLICT")), "{e:?}");
+    assert!(e.to_string().starts_with("git exited with code 1: "), "{e}");
+    // 충돌을 풀지 않고 다시 적용하면 git은 "could not write index"로 거부한다
+    let e = g.output(d, &["stash", "apply"]).await.unwrap_err().to_string();
+    assert!(e.contains("could not write index"), "{e}");
+}
+
 #[tokio::test]
 async fn failed_command_reports_stderr() {
     let (_tmp, repo) = setup();

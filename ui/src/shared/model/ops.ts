@@ -259,8 +259,12 @@ async function stashGit(args: string[], done: string) {
     await api.git(ctx.repo, args);
     ctx.notify(done);
   } catch (e) {
-    if (/is not a valid reference|No stash entries found/.test(String(e))) ctx.notify(t("ops.stash.gone"), { kind: "info" });
-    else ctx.error(String(e));
+    const m = String(e);
+    if (/is not a valid reference|No stash entries found/.test(m)) ctx.notify(t("ops.stash.gone"), { kind: "info" });
+    // 충돌: 변경은 작업 트리에 들어왔고 스태시는 남는다(pop도 지우지 않음) / 미해결 충돌이 있으면 git이 index를 못 써서 거부
+    else if (/^CONFLICT /m.test(m)) ctx.notify(t("ops.stash.conflict"), { kind: "info" });
+    else if (/needs merge|could not write index/.test(m)) ctx.error(t("ops.stash.unresolved"));
+    else ctx.error(m);
   }
   ctx.reload();
 }

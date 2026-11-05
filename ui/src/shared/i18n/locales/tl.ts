@@ -105,6 +105,8 @@ export const tl: Record<Key, string> = {
   "ops.branch.deleting": "Buburahin ang branch na {name}.",
   "ops.branch.forceDel": "Burahin kahit hindi pa naka-merge",
   "ops.stash.gone": "Wala na ang stash na iyon (na-pop o binura sa ibang lugar). Ni-refresh ang listahan.",
+  "ops.stash.conflict": "Na-apply ang stash nang may conflict. Lutasin ang mga ito; itinago pa rin ang stash.",
+  "ops.stash.unresolved": "Hindi ma-apply ang stash habang may hindi pa nalulutas na conflict. Lutasin o itapon muna ang mga ito.",
   "ops.branch.delWorktree": "Alisin din ang worktree na gumagamit nito ({path})",
   "ops.branch.unmergedMsg": "May hindi pa na-merge na commit ang '{name}'. Burahin pa rin?",
   "ops.deleteBtn": "Burahin",

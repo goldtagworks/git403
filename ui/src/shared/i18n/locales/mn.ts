@@ -105,6 +105,8 @@ export const mn: Record<Key, string> = {
   "ops.branch.deleting": "{name} салбарыг устгана.",
   "ops.branch.forceDel": "Merge хийгдээгүй ч устгах",
   "ops.stash.gone": "Тэр stash байхгүй болсон (өөр газар pop эсвэл устгасан). Жагсаалтыг шинэчиллээ.",
+  "ops.stash.conflict": "Stash-ийг зөрчилтэйгээр хэрэгжүүллээ. Зөрчлийг шийдээрэй; stash хадгалагдсан.",
+  "ops.stash.unresolved": "Шийдэгдээгүй зөрчил байгаа тул stash-ийг хэрэгжүүлэх боломжгүй. Эхлээд шийдэх эсвэл цуцлана уу.",
   "ops.branch.delWorktree": "Үүнийг ашиглаж буй worktree-г мөн устгах ({path})",
   "ops.branch.unmergedMsg": "'{name}' нэгтгэгдээгүй commit-тэй. Устгах уу?",
   "ops.deleteBtn": "Устгах",

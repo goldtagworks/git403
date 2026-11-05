@@ -338,6 +338,36 @@ try {
     }
   });
 
+  await step("스태시 팝이 충돌하면 충돌 안내(스태시 유지), 미해결 상태로 다시 팝하면 '충돌 먼저 해결' 안내 (진짜 git stash pop)", async () => {
+    const orig = git("rev-parse", "HEAD");
+    writeFileSync(join(repo, "sc.txt"), "a\n");
+    git("add", "sc.txt");
+    git("commit", "-qm", "스태시 충돌 기준");
+    writeFileSync(join(repo, "sc.txt"), "스태시 쪽\n");
+    git("stash", "push", "-q", "-m", "충돌 스태시");
+    writeFileSync(join(repo, "sc.txt"), "커밋 쪽\n");
+    git("commit", "-qam", "스태시 충돌 커밋 쪽");
+    await js(`setTimeout(() => location.reload(), 0);`); // 밖에서 만든 스태시를 새로 읽게
+    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      const pop = `press(await waitFor(() => $$('.toolbar button[aria-label="팝"]').find((b) => !b.disabled), "팝 버튼"));`;
+      await js(`
+        ${pop}
+        await waitFor(() => byText(".toast *", "스태시를 적용했지만 충돌이 생겼습니다"), "충돌 안내 토스트", 20000);
+        if (byText(".toast *", "git exited")) throw new Error("원시 git 오류가 보임");
+      `);
+      eq(git("diff", "--name-only", "--diff-filter=U"), "sc.txt", "충돌 상태");
+      eq(git("stash", "list", "--format=%s"), "On main: 충돌 스태시", "충돌 시 스태시는 남음");
+      await js(`
+        ${pop}
+        await waitFor(() => byText(".toast *", "해결하지 않은 충돌이 있어 스태시를 적용할 수 없습니다"), "미해결 안내 토스트", 20000);
+      `);
+    } finally {
+      git("reset", "-q", "--hard", orig);
+      git("stash", "clear");
+    }
+  });
+
   await step("상세 오른쪽 배치(기본값): 그래프 | 상세 열, 파일을 누르면 진짜 diff가 그래프 자리에 열리고 Esc로 돌아온다", async () => {
     await js(`localStorage.removeItem("detailLayout"); setTimeout(() => location.reload(), 0);`);
     await new Promise((r) => setTimeout(r, 1000));

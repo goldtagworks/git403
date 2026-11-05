@@ -105,6 +105,8 @@ export const pl: Record<Key, string> = {
   "ops.branch.deleting": "Usuwanie gałęzi {name}.",
   "ops.branch.forceDel": "Usuń nawet, jeśli nie jest scalona",
   "ops.stash.gone": "Ten stash już nie istnieje (zdjęty lub usunięty gdzie indziej). Odświeżono listę.",
+  "ops.stash.conflict": "Stash zastosowano z konfliktami. Rozwiąż je; stash został zachowany.",
+  "ops.stash.unresolved": "Nie można zastosować stasha przy nierozwiązanych konfliktach. Najpierw je rozwiąż lub odrzuć.",
   "ops.branch.delWorktree": "Usuń też worktree, który jej używa ({path})",
   "ops.branch.unmergedMsg": "'{name}' ma niescalone commity. Usunąć mimo to?",
   "ops.deleteBtn": "Usuń",

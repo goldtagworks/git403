@@ -105,6 +105,8 @@ export const ne: Record<Key, string> = {
   "ops.branch.deleting": "ब्रान्च {name} मेटाउनुहोस्।",
   "ops.branch.forceDel": "merge नभए पनि मेटाउनुहोस्",
   "ops.stash.gone": "त्यो stash अब छैन (अन्यत्र pop वा मेटाइयो)। सूची ताजा गरियो।",
+  "ops.stash.conflict": "स्ट्यास लागू भयो तर द्वन्द्व देखियो। तिनलाई समाधान गर्नुहोस्; स्ट्यास राखिएको छ।",
+  "ops.stash.unresolved": "समाधान नभएका द्वन्द्व भएकाले स्ट्यास लागू गर्न सकिँदैन। पहिले समाधान गर्नुहोस् वा त्याग्नुहोस्।",
   "ops.branch.delWorktree": "यसलाई प्रयोग गर्ने worktree पनि हटाउनुहोस् ({path})",
   "ops.branch.unmergedMsg": "'{name}' मा merge नभएका commit छन्। तैपनि मेटाउने?",
   "ops.deleteBtn": "मेटाउनुहोस्",

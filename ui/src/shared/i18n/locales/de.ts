@@ -105,6 +105,8 @@ export const de: Record<Key, string> = {
   "ops.branch.deleting": "Branch {name} löschen.",
   "ops.branch.forceDel": "Auch löschen, wenn nicht gemergt",
   "ops.stash.gone": "Dieser Stash existiert nicht mehr (anderswo angewendet oder gelöscht). Liste aktualisiert.",
+  "ops.stash.conflict": "Der Stash wurde mit Konflikten angewendet. Löse sie; der Stash wurde behalten.",
+  "ops.stash.unresolved": "Der Stash kann bei ungelösten Konflikten nicht angewendet werden. Löse oder verwirf sie zuerst.",
   "ops.branch.delWorktree": "Auch das Worktree entfernen, das ihn nutzt ({path})",
   "ops.branch.unmergedMsg": "'{name}' hat nicht gemergte Commits. Trotzdem löschen?",
   "ops.deleteBtn": "Löschen",

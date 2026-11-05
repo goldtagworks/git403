@@ -105,6 +105,8 @@ export const ptBR: Record<Key, string> = {
   "ops.branch.deleting": "Excluir o branch {name}.",
   "ops.branch.forceDel": "Excluir mesmo sem merge",
   "ops.stash.gone": "Esse stash não existe mais (aplicado ou removido em outro lugar). Lista atualizada.",
+  "ops.stash.conflict": "O stash foi aplicado com conflitos. Resolva-os; o stash foi mantido.",
+  "ops.stash.unresolved": "Não é possível aplicar o stash com conflitos não resolvidos. Resolva-os ou descarte-os primeiro.",
   "ops.branch.delWorktree": "Remover também o worktree que o usa ({path})",
   "ops.branch.unmergedMsg": "'{name}' tem commits não mesclados. Excluir mesmo assim?",
   "ops.deleteBtn": "Excluir",

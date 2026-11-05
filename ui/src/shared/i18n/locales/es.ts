@@ -105,6 +105,8 @@ export const es: Record<Key, string> = {
   "ops.branch.deleting": "Eliminar la rama {name}.",
   "ops.branch.forceDel": "Eliminar aunque no esté fusionada",
   "ops.stash.gone": "Ese stash ya no existe (aplicado o eliminado en otro lugar). Se actualizó la lista.",
+  "ops.stash.conflict": "El stash se aplicó con conflictos. Resuélvelos; el stash se conservó.",
+  "ops.stash.unresolved": "No se puede aplicar el stash con conflictos sin resolver. Resuélvelos o descártalos primero.",
   "ops.branch.delWorktree": "Eliminar también el worktree que la usa ({path})",
   "ops.branch.unmergedMsg": "'{name}' tiene commits sin fusionar. ¿Eliminar de todos modos?",
   "ops.deleteBtn": "Eliminar",

@@ -105,6 +105,8 @@ export const lo: Record<Key, string> = {
   "ops.branch.deleting": "ລຶບບຣານຊ໌ {name}.",
   "ops.branch.forceDel": "ລຶບເຖິງແມ່ນຍັງບໍ່ໄດ້ merge",
   "ops.stash.gone": "stash ນັ້ນບໍ່ມີແລ້ວ (ຖືກ pop ຫຼືລຶບຢູ່ບ່ອນອື່ນ). ໂຫຼດລາຍການໃໝ່ແລ້ວ.",
+  "ops.stash.conflict": "ນຳໃຊ້ stash ແລ້ວແຕ່ມີການຂັດແຍ່ງ. ກະລຸນາແກ້ໄຂ; stash ຍັງຖືກເກັບໄວ້.",
+  "ops.stash.unresolved": "ບໍ່ສາມາດນຳໃຊ້ stash ໄດ້ ເນື່ອງຈາກມີການຂັດແຍ່ງທີ່ຍັງບໍ່ໄດ້ແກ້ໄຂ. ກະລຸນາແກ້ໄຂ ຫຼື ຍົກເລີກກ່ອນ.",
   "ops.branch.delWorktree": "ລຶບ worktree ທີ່ໃຊ້ມັນນຳ ({path})",
   "ops.branch.unmergedMsg": "'{name}' ມີ commit ທີ່ຍັງບໍ່ merge. ລຶບຢູ່ບໍ?",
   "ops.deleteBtn": "ລຶບ",

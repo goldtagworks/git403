@@ -105,6 +105,8 @@ export const km: Record<Key, string> = {
   "ops.branch.deleting": "លុប branch {name}។",
   "ops.branch.forceDel": "លុបទោះបីមិនទាន់ merge ក៏ដោយ",
   "ops.stash.gone": "stash នោះលែងមានទៀតហើយ (ត្រូវបាន pop ឬលុបនៅកន្លែងផ្សេង)។ បានធ្វើបច្ចុប្បន្នភាពបញ្ជី។",
+  "ops.stash.conflict": "Stash ត្រូវបានអនុវត្តជាមួយការប៉ះទង្គិច។ សូមដោះស្រាយវា; stash ត្រូវបានរក្សាទុក។",
+  "ops.stash.unresolved": "មិនអាចអនុវត្ត stash បានទេ ខណៈមានការប៉ះទង្គិចមិនទាន់ដោះស្រាយ។ សូមដោះស្រាយ ឬបោះបង់វាជាមុនសិន។",
   "ops.branch.delWorktree": "លុប worktree ដែលប្រើវាផងដែរ ({path})",
   "ops.branch.unmergedMsg": "'{name}' មាន commit មិនទាន់ merge។ លុបដដែលឬ?",
   "ops.deleteBtn": "លុប",

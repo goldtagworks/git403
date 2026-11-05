@@ -105,6 +105,8 @@ export const zhCN: Record<Key, string> = {
   "ops.branch.deleting": "删除分支 {name}。",
   "ops.branch.forceDel": "即使未合并也删除",
   "ops.stash.gone": "该 stash 已不存在(已在别处弹出或删除)。列表已刷新。",
+  "ops.stash.conflict": "已应用储藏，但出现冲突。请解决冲突；储藏已保留。",
+  "ops.stash.unresolved": "存在未解决的冲突，无法应用储藏。请先解决或放弃这些冲突。",
   "ops.branch.delWorktree": "同时移除使用它的 worktree ({path})",
   "ops.branch.unmergedMsg": "'{name}' 有未合并的提交。仍要删除吗?",
   "ops.deleteBtn": "删除",

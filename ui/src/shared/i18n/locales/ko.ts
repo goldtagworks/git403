@@ -105,6 +105,8 @@ export const ko: Record<Key, string> = {
   "ops.branch.deleting": "{name} 브랜치를 삭제합니다.",
   "ops.branch.forceDel": "머지되지 않았어도 삭제",
   "ops.stash.gone": "스태시가 이미 없습니다 (다른 곳에서 꺼냈거나 지웠습니다). 목록을 새로 읽었습니다.",
+  "ops.stash.conflict": "스태시를 적용했지만 충돌이 생겼습니다. 충돌을 해결하세요. 스태시는 지우지 않고 남겨 두었습니다.",
+  "ops.stash.unresolved": "해결하지 않은 충돌이 있어 스태시를 적용할 수 없습니다. 충돌을 먼저 해결하거나 되돌리세요.",
   "ops.branch.delWorktree": "이 브랜치를 쓰는 worktree도 제거 ({path})",
   "ops.branch.unmergedMsg": "'{name}'은(는) 머지되지 않은 커밋이 있습니다. 그래도 삭제할까요?",
   "ops.deleteBtn": "삭제",

@@ -104,6 +104,8 @@ export const en = {
   "ops.branch.deleting": "Delete branch {name}.",
   "ops.branch.forceDel": "Delete even if not merged",
   "ops.stash.gone": "That stash no longer exists (popped or dropped elsewhere). The list was refreshed.",
+  "ops.stash.conflict": "The stash was applied with conflicts. Resolve them; the stash was kept.",
+  "ops.stash.unresolved": "Can't apply the stash while there are unresolved conflicts. Resolve or discard them first.",
   "ops.branch.delWorktree": "Also remove the worktree using it ({path})",
   "ops.branch.unmergedMsg": "'{name}' has unmerged commits. Delete it anyway?",
   "ops.deleteBtn": "Delete",

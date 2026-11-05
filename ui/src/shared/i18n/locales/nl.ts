@@ -105,6 +105,8 @@ export const nl: Record<Key, string> = {
   "ops.branch.deleting": "Branch {name} verwijderen.",
   "ops.branch.forceDel": "Ook verwijderen als niet gemerged",
   "ops.stash.gone": "Die stash bestaat niet meer (elders toegepast of verwijderd). Lijst vernieuwd.",
+  "ops.stash.conflict": "De stash is toegepast met conflicten. Los ze op; de stash is bewaard.",
+  "ops.stash.unresolved": "De stash kan niet worden toegepast met onopgeloste conflicten. Los ze eerst op of verwerp ze.",
   "ops.branch.delWorktree": "Ook de worktree verwijderen die hem gebruikt ({path})",
   "ops.branch.unmergedMsg": "'{name}' heeft niet-gemergde commits. Toch verwijderen?",
   "ops.deleteBtn": "Verwijderen",

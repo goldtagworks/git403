@@ -105,6 +105,8 @@ export const zhTW: Record<Key, string> = {
   "ops.branch.deleting": "刪除分支 {name}。",
   "ops.branch.forceDel": "即使未合併也刪除",
   "ops.stash.gone": "該 stash 已不存在(已在別處彈出或刪除)。清單已重新整理。",
+  "ops.stash.conflict": "已套用儲藏，但出現衝突。請解決衝突；儲藏已保留。",
+  "ops.stash.unresolved": "有未解決的衝突，無法套用儲藏。請先解決或捨棄這些衝突。",
   "ops.branch.delWorktree": "同時移除使用它的 worktree ({path})",
   "ops.branch.unmergedMsg": "'{name}' 有未合併的提交。仍要刪除嗎?",
   "ops.deleteBtn": "刪除",

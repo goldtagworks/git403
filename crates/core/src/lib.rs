@@ -153,7 +153,8 @@ impl From<gc_i18n::Coded> for Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::Exit { code, stderr } => write!(f, "git exited with code {code:?}: {stderr}"),
+            Error::Exit { code: Some(c), stderr } => write!(f, "git exited with code {c}: {stderr}"),
+            Error::Exit { code: None, stderr } => write!(f, "git was terminated by a signal: {stderr}"),
             _ => f.write_str(&self.coded().map(|c| c.message).unwrap_or_default()),
         }
     }

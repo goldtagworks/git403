@@ -105,6 +105,8 @@ export const tr: Record<Key, string> = {
   "ops.branch.deleting": "{name} dalı silinecek.",
   "ops.branch.forceDel": "Birleştirilmemiş olsa da sil",
   "ops.stash.gone": "Bu stash artık yok (başka yerde uygulandı ya da silindi). Liste yenilendi.",
+  "ops.stash.conflict": "Stash çakışmalarla uygulandı. Çakışmaları çözün; stash korundu.",
+  "ops.stash.unresolved": "Çözülmemiş çakışmalar varken stash uygulanamaz. Önce çözün veya atın.",
   "ops.branch.delWorktree": "Onu kullanan worktree’yi de kaldır ({path})",
   "ops.branch.unmergedMsg": "'{name}' birleştirilmemiş commit’ler içeriyor. Yine de silinsin mi?",
   "ops.deleteBtn": "Sil",

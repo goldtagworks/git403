@@ -105,6 +105,8 @@ export const th: Record<Key, string> = {
   "ops.branch.deleting": "ลบ branch {name}",
   "ops.branch.forceDel": "ลบแม้ยังไม่ได้ merge",
   "ops.stash.gone": "stash นั้นไม่มีแล้ว (ถูก pop หรือลบจากที่อื่น) รีเฟรชรายการแล้ว",
+  "ops.stash.conflict": "นำ stash ไปใช้แล้วแต่มีข้อขัดแย้ง โปรดแก้ไข; ยังเก็บ stash ไว้",
+  "ops.stash.unresolved": "ไม่สามารถนำ stash ไปใช้ได้ขณะที่มีข้อขัดแย้งที่ยังไม่ได้แก้ไข โปรดแก้ไขหรือยกเลิกก่อน",
   "ops.branch.delWorktree": "ลบ worktree ที่ใช้สาขานี้ด้วย ({path})",
   "ops.branch.unmergedMsg": "'{name}' มีคอมมิตที่ยังไม่ merge ลบต่อหรือไม่?",
   "ops.deleteBtn": "ลบ",
