@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.5
+
+- Sidebar highlights a single representative ref for the selected commit, even inside collapsed sections or folders.
+- Clearer errors when applying a stash fails because of conflicts.
+- Fixed the amend checkbox stretching out of line with its label.
+
 ## 1.0.4
 
 - Webview UI state (collapsed sidebar sections and so on) is kept when the view is reopened.
