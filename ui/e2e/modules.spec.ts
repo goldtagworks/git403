@@ -33,6 +33,8 @@ test("서브모듈이 없으면 섹션이 없다", async ({ page }) => {
 
 test("서브모듈: 열기·업데이트·동기화·추가·제거", async ({ page }) => {
   const item = (n: RegExp) => section(page, "서브모듈").getByRole("button", { name: n });
+  // 같은 저장소의 작업은 한 번에 하나라 앞 작업이 끝나야 다음이 시작된다 — 작업을 짧게 해 이어서 누를 수 있게
+  await page.evaluate(() => ((window as any).__job = { ms: 30 }));
   // 더블클릭 = 하위 저장소를 새 탭으로
   await item(/vendor\/libgit/).dblclick();
   await expect(page.getByRole("tab")).toHaveCount(2);

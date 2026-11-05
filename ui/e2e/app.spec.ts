@@ -626,3 +626,19 @@ test("그래프에서 브랜치 배지를 누르면 그 계보만 진하고 나�
   await page.locator(".commits").getByText("README 정리").click();
   await expect(page.locator(".commits .row.dim")).toHaveCount(0);
 });
+
+test("같은 저장소의 작업은 한 번에 하나: Pull을 빠르게 두 번 눌러도 한 번만 실행하고, 끝나면 다시 된다", async ({ page }) => {
+  await openRepo(page);
+  await page.evaluate(() => ((window as any).__job = { ms: 1500 }));
+  const pulls = async () => ((await page.evaluate(() => (window as any).__git ?? [])) as string[][]).filter(([c, a]) => c === "start_job" && JSON.parse(a).args[0] === "pull").length;
+  const before = await pulls();
+  const pull = page.locator(".toolbar").getByRole("button", { name: "Pull", exact: true });
+  // 빠른 Pull은 설정을 먼저 읽느라 잠깐 기다린다 — 그 사이 두 번째 클릭이 와도 하나만 돈다
+  await pull.evaluate((b: HTMLButtonElement) => (b.click(), b.click()));
+  await expect(page.locator(".toast", { hasText: "Pull 중…" })).toBeVisible();
+  expect(await pulls()).toBe(before + 1);
+  await expect.poll(pulls, { timeout: 5000 }).toBe(before + 1);
+  await page.waitForTimeout(1700);
+  await pull.click();
+  await expect.poll(pulls).toBe(before + 2);
+});
