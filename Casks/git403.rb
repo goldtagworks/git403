@@ -1,12 +1,12 @@
 cask "git403" do
-  version "1.0.5"
+  version "1.0.6"
 
   on_arm do
-    sha256 "2fa576a0e5309e673b7015ca49a07b844c84f646d3e1373f9c94735c1c0984b9"
+    sha256 "68441a08b18d08d40a3ead0a249f963e8c8a186459cbd36541cb56a1d198d199"
     url "https://github.com/goldtagworks/git403/releases/download/v#{version}/git403_#{version}_aarch64.dmg"
   end
   on_intel do
-    sha256 "73feb43f1be3e6afcbe5fc4d8d01b3fa3009d37bc6c7060354bb5484729e3184"
+    sha256 "fda12ff8b00f043170d19f36240fc8b59bb0e03f21b057f2dc1d84f40c724d5d"
     url "https://github.com/goldtagworks/git403/releases/download/v#{version}/git403_#{version}_x64.dmg"
   end
 
