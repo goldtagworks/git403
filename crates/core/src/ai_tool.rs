@@ -259,12 +259,37 @@ pub fn resolve(repo: &Path, p: &str) -> Res<PathBuf> {
 /// `package.json`·`Makefile`·`build.rs` 같은 **프로젝트 본문**은 막지 않는다 — 막으면 AI 작업의 대부분이 불가능하고, 실행은 사용자가 빌드·실행할 때 일어나며 diff에 보인다(문서에 명시한 수용 위험).
 /// 읽기는 막지 않는다. 같은 규칙을 `mv` 인자와, 작업 트리를 바꾸는 git 작업이 들여오는 변경(`mcp::preflight`)에도 적용한다.
 pub fn write_protected(rel: &Path) -> bool {
+    write_protected_static(rel) || extra_protected(rel)
+}
+
+// 이 저장소 설정이 가리키는 훅 폴더(`core.hooksPath`)들: 정적 목록 말고 **설정에서 읽은 실제 값**도 쓰기 금지다(MCP 서버가 도구 호출마다 `ai_config::check`의 `hooks_dirs`로 갱신)
+// (MCP 서버는 요청을 한 스레드에서 차례로 처리하므로 스레드 한정 — 시험이 서로 간섭하지 않는다)
+thread_local! {
+    static EXTRA: std::cell::RefCell<Vec<Vec<String>>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+pub fn set_extra_protected(dirs: &[String]) {
+    let v = dirs.iter().map(|d| Path::new(d).components().filter_map(|c| matches!(c, Component::Normal(_)).then(|| fold(&c.as_os_str().to_string_lossy()))).collect::<Vec<_>>()).filter(|v: &Vec<String>| !v.is_empty()).collect();
+    EXTRA.with(|g| *g.borrow_mut() = v);
+}
+
+/// 대소문자·끝의 점·공백을 무시한 이름(대소문자 무시 파일 시스템·Windows가 같은 파일로 보는 철자)
+fn fold(n: &str) -> String {
+    n.trim_end_matches(['.', ' ']).to_lowercase()
+}
+
+fn extra_protected(rel: &Path) -> bool {
+    let names: Vec<String> = rel.components().filter_map(|c| matches!(c, Component::Normal(_)).then(|| fold(&c.as_os_str().to_string_lossy()))).collect();
+    EXTRA.with(|g| g.borrow().iter().any(|d| names.len() >= d.len() && names[..d.len()] == d[..]))
+}
+
+fn write_protected_static(rel: &Path) -> bool {
     const DIRS: [&str; 13] = [".vscode", ".idea", ".cursor", ".windsurf", ".zed", ".devcontainer", ".githooks", ".husky", ".lefthook", ".continue", ".github", ".gitlab", ".circleci"];
     const FILES: [&str; 34] = [
         "claude.md", "claude.local.md", "agents.md", "gemini.md", ".mcp.json", ".envrc", ".cursorrules", ".windsurfrules", ".aider.conf.yml", ".aiderignore", ".pre-commit-config.yaml", "lefthook.yml", "lefthook.yaml", ".lefthook.yml", ".lefthook.yaml", "copilot-instructions.md", ".clinerules", ".roomodes",
         ".gitlab-ci.yml", ".travis.yml", "azure-pipelines.yml", "bitbucket-pipelines.yml", "jenkinsfile", ".npmrc", ".yarnrc", ".yarnrc.yml", ".pnpmfile.cjs", ".tool-versions", ".gitmodules", ".gitattributes", ".gitpod.yml", ".mise.toml", "mise.toml", ".lfsconfig",
     ];
-    let names: Vec<String> = rel.components().filter_map(|c| matches!(c, Component::Normal(_)).then(|| c.as_os_str().to_string_lossy().to_lowercase())).collect();
+    let names: Vec<String> = rel.components().filter_map(|c| matches!(c, Component::Normal(_)).then(|| fold(&c.as_os_str().to_string_lossy()))).collect();
     let n = names.len();
     let dir_hit = |c: &str| DIRS.contains(&c) || c.starts_with(".aider");
     names.iter().enumerate().any(|(i, c)| {
@@ -568,6 +593,17 @@ const NULL_DEV: &str = if cfg!(windows) { "NUL" } else { "/dev/null" };
 /// - 서브모듈 안으로 들어가지 않는다: `submodule.recurse=false`·`diff.ignoreSubmodules=all`·`status.submoduleSummary=false`(서브모듈 설정의 filter가 status 한 번에 실행되던 길)
 /// - 자동 정리(`gc.auto=0`·`maintenance.auto=false`: auto gc가 `gc.recentObjectsHook`을 실행하던 길)·`protocol.file.allow=never`(같은 컴퓨터의 저장소로의 fetch·push 불가)
 /// - 원격 조작은 안전하게: `fetch.prune=false`·`fetch.pruneTags=false`·`push.default=nothing`(refspec 없는 push 불가), 원격별 설정은 `validate`가 더한다
+/// 신뢰하지 않는 저장소 설정이 **프로그램을 실행하지 못하게** 하는 전역 `-c` 묶음: 훅 끔(`core.hooksPath` = null 장치; `reference-transaction`·`post-checkout` 포함)·fsmonitor 끔·
+/// 외부 프로토콜 끔·pager 없음·서브모듈 안으로 안 들어감·자동 gc/maintenance 끔. 샌드박스 밖에서 git을 돌리는 앱 쪽(백업 생성·복원)도 쓴다.
+pub fn hardened_args() -> Vec<String> {
+    let mut v: Vec<String> = Vec::new();
+    for c in ["protocol.ext.allow=never", "core.fsmonitor=false", "core.pager=cat", "submodule.recurse=false", "gc.auto=0", "maintenance.auto=false"] {
+        v.extend(["-c".into(), c.into()]);
+    }
+    v.extend(["-c".into(), format!("core.hooksPath={NULL_DEV}")]);
+    v
+}
+
 pub fn prefix(repo: &Path) -> Vec<String> {
     let mut v: Vec<String> = vec!["--no-pager".into(), format!("--work-tree={}", repo.display())];
     for c in ["protocol.ext.allow=never", "core.fsmonitor=false", "core.pager=cat", "core.quotepath=false", "submodule.recurse=false", "diff.ignoreSubmodules=all", "status.submoduleSummary=false", "fetch.prune=false", "fetch.pruneTags=false", "push.default=nothing", "push.recurseSubmodules=no", "gc.auto=0", "maintenance.auto=false", "protocol.file.allow=never"] {
@@ -608,31 +644,52 @@ pub fn read_file(repo: &Path, path: &str) -> Res<String> {
     std::fs::read(&full).map(|b| String::from_utf8_lossy(&b).into_owned()).map_err(|e| e.to_string())
 }
 
+/// **서버(샌드박스 밖)가 하는 파일 쓰기는 전부 이 함수를 거친다**: 모든 경로 성분이 심볼릭 링크가 아니고 정규화한 위치가 저장소 안일 때만 하고(아니면 쓰지 않고 실패),
+/// 마지막 성분도 `O_NOFOLLOW`로 연다. `create_new`면 이미 있는 파일은 거절, 아니면 있는 **일반 파일**만(하드링크 `nlink>1`은 거절 — 링크 반대편이 저장소 밖일 수 있다) 덮어쓴다.
+pub fn write_confined(repo: &Path, rel: &str, bytes: &[u8], create_new: bool) -> Res<()> {
+    use std::io::Write;
+    let norm = resolve(repo, rel)?;
+    let root = repo.canonicalize().map_err(|e| e.to_string())?;
+    let full = root.join(&norm);
+    if let Some(dir) = full.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        // 방금 만든 폴더 때문에 경로가 저장소 밖·링크로 풀리지 않는지 다시 본다
+        resolve(repo, &norm.to_string_lossy())?;
+    }
+    if let Ok(m) = full.symlink_metadata() {
+        if create_new {
+            return bad(format!("file already exists: {rel:?} (give old_string to edit it)"));
+        }
+        if !m.is_file() {
+            return bad(format!("not an editable file: {rel:?}"));
+        }
+        #[cfg(unix)]
+        if std::os::unix::fs::MetadataExt::nlink(&m) > 1 {
+            return bad(format!("refusing to write a file with several hard links: {rel:?} (the other link may be outside the repository)"));
+        }
+    }
+    let mut o = std::fs::OpenOptions::new();
+    if create_new {
+        o.write(true).create_new(true);
+    } else {
+        o.write(true).create(true).truncate(true);
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::custom_flags(&mut o, libc::O_NOFOLLOW);
+    o.open(&full).and_then(|mut f| f.write_all(bytes)).map_err(|e| format!("cannot write {rel:?}: {e}"))
+}
+
 /// 저장소 안 파일 수정: `old`가 비면 새 파일 만들기(이미 있으면 거절), 아니면 `old`가 정확히 한 번 나올 때(또는 `all`) 바꾼다.
-/// 읽기와 같은 경로 규칙 + 심볼릭 링크 파일은 수정하지 않는다. 몇 곳을 바꿨는지 돌려준다.
+/// 읽기와 같은 경로 규칙 + 쓰기는 `write_confined`(심볼릭 링크 성분·하드링크 거절, `O_NOFOLLOW`). 몇 곳을 바꿨는지 돌려준다.
 pub fn edit_file(repo: &Path, path: &str, old: &str, new: &str, all: bool) -> Res<usize> {
     let rel = resolve(repo, path)?;
     if write_protected(&rel) {
         return bad(format!("writing {path:?} is not allowed (editor/agent/hook configuration is read by other tools automatically)"));
     }
-    let full = repo.canonicalize().map_err(|e| e.to_string())?.join(rel);
-    if let Ok(m) = full.symlink_metadata() {
-        if m.file_type().is_symlink() {
-            return bad(format!("refusing to edit a symlink: {path:?}"));
-        }
-    }
+    let full = repo.canonicalize().map_err(|e| e.to_string())?.join(&rel);
+    let rel_s = rel.to_string_lossy().into_owned();
     if old.is_empty() {
-        if full.exists() {
-            return bad(format!("file already exists: {path:?} (give old_string to edit it)"));
-        }
-        if let Some(dir) = full.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-            // 방금 만든 폴더가 저장소 밖으로 풀리지 않는지 다시 본다
-            if !dir.canonicalize().map_err(|e| e.to_string())?.starts_with(repo.canonicalize().map_err(|e| e.to_string())?) {
-                return bad(format!("path outside the repository: {path:?}"));
-            }
-        }
-        std::fs::write(&full, new).map_err(|e| e.to_string())?;
+        write_confined(repo, &rel_s, new.as_bytes(), true)?;
         return Ok(1);
     }
     let meta = std::fs::metadata(&full).map_err(|e| format!("cannot edit {path:?}: {e}"))?;
@@ -647,7 +704,7 @@ pub fn edit_file(repo: &Path, path: &str, old: &str, new: &str, all: bool) -> Re
     if n > 1 && !all {
         return bad(format!("old_string appears {n} times; make it unique or set replace_all"));
     }
-    std::fs::write(&full, text.replace(old, new)).map_err(|e| e.to_string())?;
+    write_confined(repo, &rel_s, text.replace(old, new).as_bytes(), false)?;
     Ok(n)
 }
 
@@ -985,6 +1042,61 @@ mod tests {
         assert!(ok(&r, &["mv", "src/a.rs", "src/b.rs"]) && !ok(&r, &["mv", "src/a.rs", ".githooks/x"]) && !ok(&r, &["mv", "--", "src/a.rs", "CLAUDE.md"]));
         // 8.3 이름: `.claude` → `CLAUDE~1`
         assert!(resolve(&r, "CLAUDE~1/x").is_err() && resolve(&r, "claude~2").is_err() && resolve(&r, "GIT~1").is_err());
+    }
+
+    /// 8차: 설정이 가리키는 훅 폴더(`core.hooksPath=scripts/hooks`)는 정적 목록에 없어도 쓰기 금지고(대소문자·끝의 점 무시), 정적 목록도 대소문자 변형에 안 뚫린다
+    #[test]
+    fn configured_hooks_dir_and_case_variants_are_write_protected() {
+        let (_d, r) = repo();
+        std::fs::create_dir_all(r.join("scripts/hooks")).unwrap();
+        std::fs::write(r.join("scripts/hooks/pre-commit"), "#!/bin/sh\n").unwrap();
+        assert!(edit_file(&r, "scripts/hooks/pre-commit", "sh", "bash", false).is_ok(), "설정이 없으면 일반 폴더");
+        std::fs::write(r.join("scripts/hooks/pre-commit"), "#!/bin/sh\n").unwrap();
+        set_extra_protected(&["scripts/hooks".to_string()]);
+        for p in ["scripts/hooks/pre-commit", "scripts/hooks/new", "Scripts/HOOKS/pre-commit", "scripts/hooks./x", "scripts/hooks /x", "scripts/hooks"] {
+            assert!(write_protected(Path::new(p)), "{p}");
+            assert!(edit_file(&r, p, "", "x", false).is_err(), "{p}");
+        }
+        assert!(edit_file(&r, "scripts/hooks/pre-commit", "sh", "bash", false).is_err());
+        assert_eq!(std::fs::read_to_string(r.join("scripts/hooks/pre-commit")).unwrap(), "#!/bin/sh\n");
+        assert!(!write_protected(Path::new("scripts/other")) && !write_protected(Path::new("scripts")));
+        set_extra_protected(&[]);
+        assert!(!write_protected(Path::new("scripts/hooks/pre-commit")));
+        // 정적 목록의 대소문자·끝 점·공백 변형(대소문자 무시 파일 시스템에서 같은 폴더)
+        for p in [".GitHub/workflows/ci.yml", ".GITHUB/x", ".HUSKY/pre-commit", ".Husky/_/x", ".GitHooks/pre-commit", "sub/.VSCODE/settings.json", ".github./workflows/x", ".github /workflows/x", ".husky./pre-commit", "CLAUDE.MD.", ".ENVRC", ".Cargo/Config.TOML", ".NPMRC"] {
+            assert!(write_protected(Path::new(p)), "{p}");
+            assert!(edit_file(&r, p, "", "x", false).is_err(), "edit {p}");
+        }
+        // 이 파일 시스템이 대소문자를 구분하지 않으면 실제로 같은 폴더의 다른 철자로도 못 쓴다
+        std::fs::create_dir_all(r.join(".husky")).unwrap();
+        std::fs::write(r.join(".husky/pre-commit"), "#!/bin/sh\n").unwrap();
+        for p in [".HUSKY/pre-commit", ".Husky/pre-commit"] {
+            assert!(edit_file(&r, p, "sh", "bash", false).is_err(), "{p}");
+        }
+        assert_eq!(std::fs::read_to_string(r.join(".husky/pre-commit")).unwrap(), "#!/bin/sh\n");
+    }
+
+    /// 8차: edit_file은 하드링크(nlink>1)·링크 성분 파일을 쓰지 않는다(링크 반대편이 저장소 밖일 수 있다). 새 파일은 O_NOFOLLOW 생성
+    #[test]
+    fn edit_file_refuses_hard_links_and_symlink_components() {
+        let (_d, r) = repo();
+        let out = tempfile::tempdir().unwrap();
+        let outside = out.path().canonicalize().unwrap().join("secret.txt");
+        std::fs::write(&outside, "orig").unwrap();
+        std::fs::hard_link(&outside, r.join("hl.txt")).unwrap();
+        assert!(edit_file(&r, "hl.txt", "orig", "PWNED", false).is_err());
+        assert_eq!(std::fs::read_to_string(&outside).unwrap(), "orig");
+        // 같은 저장소 안의 하드링크도 거절(한쪽이 보호 경로일 수 있다)
+        std::fs::write(r.join("one.txt"), "a").unwrap();
+        std::fs::hard_link(r.join("one.txt"), r.join("two.txt")).unwrap();
+        assert!(edit_file(&r, "two.txt", "a", "b", false).is_err() && std::fs::read_to_string(r.join("one.txt")).unwrap() == "a");
+        std::os::unix::fs::symlink(out.path(), r.join("dir")).unwrap();
+        assert!(edit_file(&r, "dir/new.txt", "", "x", false).is_err() && !out.path().join("new.txt").exists());
+        // 마지막 성분이 막 생긴 링크(검사와 쓰기 사이)여도 O_NOFOLLOW가 따라가지 않는다
+        std::os::unix::fs::symlink(&outside, r.join("late.txt")).unwrap();
+        assert!(write_confined(&r, "late.txt", b"PWNED", false).is_err() && write_confined(&r, "late.txt", b"PWNED", true).is_err());
+        assert_eq!(std::fs::read_to_string(&outside).unwrap(), "orig");
+        assert!(write_confined(&r, "ok/new.txt", b"hi", true).is_ok() && write_confined(&r, "ok/new.txt", b"hi2", false).is_ok());
     }
 
     /// 3·4차 리뷰의 실행형 설정(textconv·ext-diff·훅·서브모듈)이 앱이 붙인 옵션으로 실제 git에서 실행되지 않는다

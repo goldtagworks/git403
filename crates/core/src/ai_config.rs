@@ -16,6 +16,8 @@ pub struct Verdict {
     pub review: Vec<String>,
     /// 판정에 쓴 설정 전체(원본 키·값, 출처 포함)의 지문. 앱이 확인한 값과 서버가 호출 때마다 다시 계산한 값이 같아야 한다
     pub fingerprint: String,
+    /// 설정(상위·서브모듈·worktree·include 전부)이 가리키는 훅 폴더(`core.hooksPath`)의 저장소 상대 경로. AI는 여기를 쓰지 못한다(`ai_tool::set_extra_protected`)
+    pub hooks_dirs: Vec<String>,
 }
 
 /// 설정 항목 하나의 출처: 상위 저장소 설정, 또는 서브모듈·다른 worktree 설정 파일(그 파일이 있는 폴더)
@@ -46,8 +48,6 @@ enum Vk {
     Enum(&'static [&'static str]),
     /// 이름꼴(`[A-Za-z0-9._/@{}-]`, 200자까지, `.`·`/`·`-`로 시작 불가, `..` 불가) — 브랜치·원격 이름 등
     Word,
-    /// 상대 경로(`..`·절대 경로 불가)
-    RelPath,
 }
 
 fn val_ok(vk: Vk, v: &str) -> bool {
@@ -59,7 +59,6 @@ fn val_ok(vk: Vk, v: &str) -> bool {
         Vk::BoolOr(x) => boolean(&l) || x.contains(&l.as_str()),
         Vk::Enum(x) => x.contains(&l.as_str()),
         Vk::Word => !v.is_empty() && v.len() <= 200 && !v.starts_with(['.', '/', '-']) && !v.contains("..") && v.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '/' | '@' | '{' | '}' | '-')),
-        Vk::RelPath => !v.is_empty() && !v.starts_with(['/', '\\', '~']) && !v.split(['/', '\\']).any(|c| c == "..") && v.len() <= 200 && !v.contains(':'),
     }
 }
 
@@ -121,8 +120,8 @@ fn judge_entry(key: &str, value: &str, src: &Source, repo: &Path) -> J {
             "safecrlf" => v(Vk::BoolOr(&["warn"])),
             "untrackedcache" => v(Vk::BoolOr(&["keep"])),
             "abbrev" => if val_ok(Vk::Int, value) || matches!(value, "auto" | "no") { J::Safe } else { J::Review },
-            // 앱이 `-c core.hooksPath=<null 장치>`로 덮어쓰지만, 경로형 키라 상대 경로(`..` 없음)만 안전으로 본다(husky 등)
-            "hookspath" => v(Vk::RelPath),
+            // 훅 폴더는 사용자의 다음 commit이 실행한다(AI 차례에는 앱이 `-c core.hooksPath=<null 장치>`로 덮어쓰지만 그 뒤에는 아니다) — 비어 있지 않으면 검토 대상
+            "hookspath" => if value.is_empty() { J::Safe } else { J::Review },
             _ => J::Review,
         },
         ("extensions", true) => match var {
@@ -287,7 +286,7 @@ pub fn judge(entries: &[(Source, String, String)], repo: &Path) -> Verdict {
     refuse.dedup();
     review.sort();
     review.dedup();
-    Verdict { refuse, review, fingerprint: String::new() }
+    Verdict { refuse, review, ..Default::default() }
 }
 
 /// `git config --list [--show-scope] -z` 출력 파싱. `scoped`면 `범위\0키\n값\0` 쌍, 아니면 `키\n값\0`. 범위가 있으면 local·worktree만 남긴다.
@@ -309,7 +308,8 @@ pub fn parse_listing(text: &str, scoped: bool) -> Vec<(String, String)> {
 
 fn run(git: &str, cwd: &Path, args: &[&str]) -> Option<String> {
     let mut c = Command::new(git);
-    c.args(args).current_dir(cwd).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
+    // 판정은 신뢰하지 않는 설정을 읽는 일이라 fsmonitor·훅 등이 프로그램을 실행하지 못하게 한다(`-c`는 command 범위라 `--show-scope`에서 걸러져 판정·지문에 안 들어간다)
+    c.args(crate::ai_tool::hardened_args()).args(args).current_dir(cwd).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
     // 저장소 밖을 가리키는 git 환경 변수는 지운다 (실행 환경은 MCP 서버와 같다)
     for k in ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_NAMESPACE"] {
         c.env_remove(k);
@@ -336,6 +336,26 @@ fn include_targets(entries: &[(String, String)], base: &Path) -> Vec<PathBuf> {
         };
         Some(p)
     }).collect()
+}
+
+/// 설정 항목 중 `core.hookspath` 값을 저장소 상대 경로(어휘적으로 정규화, 소문자 아님)로. 저장소 안을 가리키지 않는 값(밖의 절대 경로·`..`)은 쓸 수 없는 곳이라 뺀다
+fn hooks_dirs(entries: &[(Source, String, String)], root: &Path) -> Vec<String> {
+    let mut out: Vec<String> = entries.iter().filter(|(_, k, v)| k == "core.hookspath" && !v.is_empty()).filter_map(|(_, _, v)| {
+        let p = Path::new(v);
+        let rel = if p.is_absolute() { p.strip_prefix(root).ok().map(Path::to_path_buf).or_else(|| p.strip_prefix(canon(root)).ok().map(Path::to_path_buf))? } else { p.to_path_buf() };
+        let mut parts: Vec<String> = Vec::new();
+        for c in rel.components() {
+            match c {
+                std::path::Component::Normal(n) => parts.push(n.to_string_lossy().into_owned()),
+                std::path::Component::ParentDir => { parts.pop()?; }
+                _ => {}
+            }
+        }
+        (!parts.is_empty()).then(|| parts.join("/"))
+    }).collect();
+    out.sort();
+    out.dedup();
+    out
 }
 
 /// 저장소의 git 설정을 모아 판정한다. `git`은 실행 파일. git을 못 돌리거나 저장소가 아니면 `refuse`.
@@ -484,6 +504,7 @@ pub fn check(repo: &Path, git: &str) -> Verdict {
     v.refuse.dedup();
     let mut raw: Vec<String> = entries.iter().map(|(s, k, val)| format!("{}|{k}={val}", match s { Source::Top => "top".to_string(), Source::Other(d) => d.to_string_lossy().into_owned() })).collect();
     raw.sort();
+    v.hooks_dirs = hooks_dirs(&entries, &root);
     v.fingerprint = fnv(&format!("{}\n{}\n{}\n{}", top.trim(), gitdir.display(), common.display(), raw.join("\n")));
     v
 }
@@ -646,9 +667,27 @@ mod tests {
         // 안전한 하위 키라도 값 형식이 틀리면 review(셸 조각이 숨지 못한다)
         let v = judge(&e(&[("gc.auto", "$(id)"), ("core.filemode", "sh -c id"), ("core.eol", "x"), ("branch.main.remote", "../evil"), ("branch.main.merge", "a b"), ("push.default", "all"), ("core.hookspath", "../../x"), ("core.hookspath", "/etc/hooks"), ("diff.context", "x"), ("remote.o.tagopt", "--evil")]), &r);
         assert_eq!(v.review.len(), 9, "{v:?}"); // core.hookspath는 두 값이 같은 키라 하나로 센다
-        let ok = judge(&e(&[("gc.auto", "0"), ("gc.autodetach", "false"), ("core.hookspath", ".husky"), ("maintenance.auto", "false"), ("branch.main.remote", "origin"), ("diff.context", "5"), ("core.autocrlf", "input"), ("advice.detachedhead", "false"), ("alias.st", "status -sb")]), &r);
+        let ok = judge(&e(&[("gc.auto", "0"), ("gc.autodetach", "false"), ("maintenance.auto", "false"), ("branch.main.remote", "origin"), ("diff.context", "5"), ("core.autocrlf", "input"), ("advice.detachedhead", "false"), ("alias.st", "status -sb")]), &r);
         assert!(ok.review.is_empty() && ok.refuse.is_empty(), "{ok:?}");
         assert_eq!(judge(&e(&[("alias.x", "!sh -c id")]), &r).review, vec!["alias.x".to_string()]);
+        // 훅 폴더(상대 경로여도)는 검토 대상 — 사용자의 다음 commit이 실행한다. 빈 값(훅 끔)은 안전
+        assert_eq!(judge(&e(&[("core.hookspath", "scripts/hooks")]), &r).review, vec!["core.hookspath".to_string()]);
+        assert!(judge(&e(&[("core.hookspath", "")]), &r).review.is_empty());
+    }
+
+    /// 7→8차: 설정이 가리키는 훅 폴더는 저장소 상대 경로로 `hooks_dirs`에 모인다(include·상대·절대·`./`·`..` 정규화, 저장소 밖은 제외)
+    #[test]
+    fn hooks_dirs_come_from_every_config_source() {
+        let (_d, r) = repo();
+        sh(&r, &["config", "core.hooksPath", "./scripts/hooks/"]);
+        std::fs::write(r.join(".git/inc.cfg"), format!("[core]\n\thooksPath = {}/abs/h\n", r.display())).unwrap();
+        sh(&r, &["config", "include.path", "inc.cfg"]);
+        sh(&r, &["config", "extensions.worktreeConfig", "true"]);
+        sh(&r, &["config", "--worktree", "core.hooksPath", "a/../wt/hooks"]);
+        let v = check(&r, "git");
+        assert!(v.review.contains(&"core.hookspath".to_string()), "{v:?}");
+        assert_eq!(v.hooks_dirs, vec!["abs/h".to_string(), "scripts/hooks".to_string(), "wt/hooks".to_string()], "{v:?}");
+        sh(&r, &["config", "--unset-all", "core.hooksPath"]);
     }
 
     /// 6차 리뷰: 지금 조건이 안 맞는 includeIf 대상 파일의 내용도 판정한다
@@ -752,5 +791,24 @@ mod tests {
         std::fs::remove_file(r.join(".lfsconfig")).unwrap();
         std::os::unix::fs::symlink("/etc/hosts", r.join(".lfsconfig")).unwrap();
         assert!(check(&r, "git").refuse.iter().any(|x| x.contains(".lfsconfig")));
+    }
+
+    /// 8차: 판정(`check`)은 샌드박스 밖에서 git(`rev-parse`·`config`·`ls-files`·`remote`)을 돌린다 — 저장소 설정이 fsmonitor·훅·필터로 프로그램을 실행하면 안 된다
+    #[test]
+    fn checking_a_malicious_repository_runs_nothing() {
+        let (_d, r) = repo();
+        let mark = tempfile::tempdir().unwrap();
+        let m = mark.path().canonicalize().unwrap();
+        let fsm = m.join("fsm.sh");
+        std::fs::write(&fsm, format!("#!/bin/sh\ntouch {}/fsmonitor\nprintf '\\0'\n", m.display())).unwrap();
+        Command::new("chmod").args(["+x", &fsm.display().to_string()]).status().unwrap();
+        sh(&r, &["config", "core.fsmonitor", &fsm.display().to_string()]);
+        sh(&r, &["config", "core.hooksPath", ".hooks"]);
+        sh(&r, &["config", "diff.evil.textconv", &format!("touch {}/textconv", m.display())]);
+        sh(&r, &["config", "remote.origin.url", "https://example.invalid/x.git"]);
+        let v = check(&r, "git");
+        assert!(v.review.contains(&"core.fsmonitor".to_string()), "{v:?}");
+        let ran: Vec<String> = std::fs::read_dir(&m).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n != "fsm.sh").collect();
+        assert!(ran.is_empty(), "판정이 프로그램을 실행했다: {ran:?}");
     }
 }

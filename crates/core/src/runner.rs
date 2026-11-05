@@ -17,17 +17,24 @@ pub struct GitRunner {
     envs: Vec<(String, String)>,
     /// 로그인 셸에서 얻은 PATH (앱 시작 뒤 백그라운드에서 한 번 채워진다). 복제본끼리 공유한다.
     path: Arc<OnceLock<String>>,
+    /// 모든 git 명령 앞에 붙는 전역 인자(`-c key=value`…, `hardened`). 비어 있으면 아무것도 붙이지 않는다
+    prefix: Vec<String>,
 }
 
 impl Default for GitRunner {
     fn default() -> Self {
-        Self { git: PathBuf::from("git"), envs: Vec::new(), path: Arc::default() }
+        Self { git: PathBuf::from("git"), envs: Vec::new(), path: Arc::default(), prefix: Vec::new() }
     }
 }
 
 impl GitRunner {
     pub fn new(git: impl Into<PathBuf>) -> Self {
-        Self { git: git.into(), envs: Vec::new(), path: Arc::default() }
+        Self { git: git.into(), envs: Vec::new(), path: Arc::default(), prefix: Vec::new() }
+    }
+
+    /// 같은 실행기에 모든 명령 앞 전역 인자를 더한 복제본(신뢰하지 않는 저장소 설정이 훅·필터·fsmonitor로 프로그램을 실행하지 못하게 하는 `-c` 묶음에 쓴다)
+    pub fn hardened(&self, args: Vec<String>) -> Self {
+        Self { prefix: args, ..self.clone() }
     }
 
     pub fn with_env(mut self, key: &str, value: impl Into<String>) -> Self {
@@ -61,7 +68,7 @@ impl GitRunner {
         let is_git = Path::new(&self.git).file_stem().is_some_and(|s| s == "git");
         // 한글 같은 비ASCII 경로를 `"\355\225..."`로 인용하지 않고 그대로 출력하게 한다 (파서가 경로를 깨뜨리지 않게).
         if is_git {
-            cmd.args(["-c", "core.quotepath=false"]);
+            cmd.args(["-c", "core.quotepath=false"]).args(&self.prefix);
         }
         // macOS 파일 시스템은 한글 이름을 자모 분리형(NFD)으로 돌려준다. 저장소 설정과 무관하게
         // 완성형(NFC)으로 기록해 Windows에서 자모가 갈라져 보이지 않게 한다.

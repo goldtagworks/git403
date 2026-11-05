@@ -31,6 +31,27 @@ pub struct Backup {
     pub digest: String,
 }
 
+/// 백업은 **샌드박스 밖**(앱)에서 돈다. 저장소 설정이 악의적이어도 프로그램이 실행되지 않게 모든 git 명령에 안전 옵션을 붙인다:
+/// 훅 끔·fsmonitor 끔·외부 프로토콜 끔(`ai_tool::hardened_args`)과, 저장소 설정에 정의된 **모든 `filter.<이름>`의 clean·smudge·process를 비운다**
+/// (`add -A`의 clean 필터, `switch`·`reset`·`restore`의 smudge 필터가 `sh -c`로 실행되던 길. 비운 필터는 실행되지 않고, `required=false`라 실패도 아니다).
+async fn hardened(git: &GitRunner, repo: &Path) -> GitRunner {
+    let mut args = crate::ai_tool::hardened_args();
+    let keys = git.output_allow(repo, &["config", "--name-only", "--get-regexp", r"^filter\..+\.(clean|smudge|process|required)$"], &[1]).await.unwrap_or_default();
+    let mut names = std::collections::BTreeSet::new();
+    for k in String::from_utf8_lossy(&keys).lines() {
+        if let Some((name, _)) = k.trim().rsplit_once('.') {
+            names.insert(name.to_owned());
+        }
+    }
+    for n in names {
+        for v in ["clean", "smudge", "process"] {
+            args.extend(["-c".into(), format!("{n}.{v}=")]);
+        }
+        args.extend(["-c".into(), format!("{n}.required=false")]);
+    }
+    git.hardened(args)
+}
+
 fn check_id(id: &str) -> Result<()> {
     let ok = !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
     ok.then_some(()).ok_or_else(|| gc_i18n::coded!("aiBackup.badId", "invalid backup id").into())
@@ -38,6 +59,7 @@ fn check_id(id: &str) -> Result<()> {
 
 /// HEAD를 `refs/git403/ai-backup/<id>`에 저장한다. 커밋이 아직 없는 저장소(unborn HEAD)는 `None`.
 pub async fn create(git: &GitRunner, repo: &Path, id: &str) -> Result<Option<Backup>> {
+    let git = &hardened(git, repo).await;
     check_id(id)?;
     let out = git.output_allow(repo, &["rev-parse", "--verify", "-q", "HEAD"], &[1]).await?;
     let sha = String::from_utf8_lossy(&out).trim().to_owned();
@@ -71,6 +93,7 @@ async fn digest_of(git: &GitRunner, repo: &Path, id: &str) -> Result<String> {
 
 /// 백업 ref가 만들 때와 같은가(차례 끝·되돌리기 전에 부른다). 다르면 `aiBackup.tampered`
 pub async fn verify(git: &GitRunner, repo: &Path, b: &Backup) -> Result<()> {
+    let git = &hardened(git, repo).await;
     if b.digest.is_empty() || digest_of(git, repo, &b.id).await? == b.digest {
         Ok(())
     } else {
@@ -148,6 +171,7 @@ async fn snapshot_wip(git: &GitRunner, repo: &Path, id: &str) -> Result<Option<S
 
 /// 백업 ref 전부(HEAD·브랜치들·스냅숏)를 지운다 (없으면 무시).
 pub async fn delete(git: &GitRunner, repo: &Path, id: &str) -> Result<()> {
+    let git = &hardened(git, repo).await;
     check_id(id)?;
     let mut cmds = format!("delete {PREFIX}{id}\ndelete {WIP}{id}\n");
     let listed = git.output(repo, &["for-each-ref", "--format=%(refname)", &format!("{HEADS}{id}/")]).await.unwrap_or_default();
@@ -164,6 +188,7 @@ pub async fn delete(git: &GitRunner, repo: &Path, id: &str) -> Result<()> {
 /// - 그다음 `reset --keep <sha>`: 커밋하지 않은 변경은 유지하고, 되돌릴 파일과 겹치면 git이 거절한다(작업 내용을 잃지 않는다).
 ///   untracked 파일은 건드리지 않는다.
 pub async fn restore(git: &GitRunner, repo: &Path, id: &str, branch: Option<&str>, abort_ongoing: bool, branches: bool, wip: bool, digest: Option<&str>) -> Result<()> {
+    let git = &hardened(git, repo).await;
     check_id(id)?;
     // 호출 측이 백업을 만들 때의 지문을 주면(이력의 `backup.digest`) 백업 ref가 그대로인지 먼저 확인한다
     if let Some(d) = digest.filter(|d| !d.is_empty()) {
@@ -497,5 +522,83 @@ mod tests {
         restore(&git, &p, "i1", b.branch.as_deref(), false, false, true, None).await.unwrap();
         assert_eq!(std::fs::read_to_string(p.join(".env")).unwrap(), "SECRET=1\n");
         assert!(p.join("big.bin").exists());
+    }
+
+    /// 8차: 백업 생성·되돌리기·삭제는 **샌드박스 밖**에서 돈다 — 악성 저장소 설정(훅 폴더·clean/smudge 필터·fsmonitor)이 프로그램을 실행하면 안 된다.
+    /// 대조군(보통 git)에서는 전부 표식을 만들고, 백업 쪽에서는 하나도 만들지 못한다.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn backup_create_restore_delete_do_not_run_repository_configured_programs() {
+        let git = GitRunner::default();
+        let (_d, p) = repo();
+        let mark = tempfile::tempdir().unwrap();
+        let m = mark.path().canonicalize().unwrap();
+        let (m_s, p_s) = (m.display().to_string(), p.display().to_string());
+        // 훅 폴더(저장소 안 상대 경로 — 이 폴더는 AI가 고칠 수 있었던 곳): 여러 훅이 표식을 만든다
+        std::fs::create_dir_all(p.join("scripts/hooks")).unwrap();
+        for h in ["post-checkout", "reference-transaction", "post-commit", "pre-commit", "post-merge", "post-rewrite"] {
+            let f = p.join("scripts/hooks").join(h);
+            std::fs::write(&f, format!("#!/bin/sh\ntouch {m_s}/hook-{h} {p_s}/inside-hook-{h}\n")).unwrap();
+            std::process::Command::new("chmod").args(["+x", &f.display().to_string()]).status().unwrap();
+        }
+        let fsm = m.join("fsm.sh");
+        std::fs::write(&fsm, format!("#!/bin/sh\ntouch {m_s}/fsmonitor\nprintf '\\0'\n")).unwrap();
+        std::process::Command::new("chmod").args(["+x", &fsm.display().to_string()]).status().unwrap();
+        std::fs::write(p.join(".gitattributes"), "*.txt filter=evil\n").unwrap();
+        sh(&p, &["config", "core.hooksPath", "scripts/hooks"]);
+        sh(&p, &["config", "core.fsmonitor", &fsm.display().to_string()]);
+        sh(&p, &["config", "filter.evil.clean", &format!("sh -c 'touch {m_s}/clean {p_s}/inside-clean; cat'")]);
+        sh(&p, &["config", "filter.evil.smudge", &format!("sh -c 'touch {m_s}/smudge {p_s}/inside-smudge; cat'")]);
+        sh(&p, &["config", "filter.evil.required", "true"]);
+        let marks = || {
+            let mut v: Vec<String> = std::fs::read_dir(&m).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n != "fsm.sh").collect();
+            v.extend(std::fs::read_dir(&p).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.starts_with("inside-")));
+            v.sort();
+            v
+        };
+        let clear = || {
+            for e in std::fs::read_dir(&m).unwrap().flatten().filter(|e| e.file_name() != "fsm.sh") {
+                std::fs::remove_file(e.path()).unwrap();
+            }
+            for e in std::fs::read_dir(&p).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().starts_with("inside-")) {
+                std::fs::remove_file(e.path()).unwrap();
+            }
+        };
+        // 대조군: 보통 git은 전부 실행한다
+        std::fs::write(p.join("a.txt"), "ctl\n").unwrap();
+        sh(&p, &["add", "a.txt"]);
+        sh(&p, &["status", "--porcelain"]);
+        sh(&p, &["switch", "-q", "-c", "ctl"]);
+        sh(&p, &["switch", "-q", "main"]);
+        sh(&p, &["update-ref", "refs/ctl", "HEAD"]);
+        let ctl = marks();
+        for n in ["clean", "fsmonitor", "hook-post-checkout", "hook-reference-transaction", "inside-clean", "inside-hook-post-checkout"] {
+            assert!(ctl.iter().any(|x| x == n), "대조군에서 {n}이 실행돼야 한다: {ctl:?}");
+        }
+        sh(&p, &["reset", "-q"]);
+        sh(&p, &["checkout", "-q", "--", "a.txt"]);
+        sh(&p, &["branch", "-q", "-D", "ctl"]);
+        sh(&p, &["update-ref", "-d", "refs/ctl"]);
+        clear();
+        // 백업: 작업 트리를 더럽히고(추적 수정·untracked·ignored) 백업 → AI가 브랜치를 옮기고 지움 → 모두 되돌리기 → 삭제
+        std::fs::write(p.join("a.txt"), "dirty\n").unwrap();
+        std::fs::write(p.join("new.txt"), "untracked\n").unwrap();
+        std::fs::write(p.join(".gitignore"), "ignored.log\n").unwrap();
+        std::fs::write(p.join("ignored.log"), "x\n").unwrap();
+        clear();
+        let b = create(&git, &p, "evil").await.unwrap().unwrap();
+        assert!(b.wip.is_some(), "더러우면 스냅숏");
+        assert_eq!(marks(), Vec::<String>::new(), "백업 생성이 프로그램을 실행했다");
+        sh(&p, &["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "filter.evil.clean=", "-c", "filter.evil.smudge=", "-c", "filter.evil.required=false", "switch", "-q", "-c", "other"]);
+        std::fs::write(p.join("a.txt"), "ai\n").unwrap();
+        sh(&p, &["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "filter.evil.clean=", "-c", "filter.evil.required=false", "commit", "-qam", "ai"]);
+        clear();
+        restore(&git, &p, "evil", b.branch.as_deref(), false, true, true, Some(&b.digest)).await.unwrap();
+        assert_eq!(marks(), Vec::<String>::new(), "되돌리기가 프로그램을 실행했다");
+        assert_eq!(sh(&p, &["rev-parse", "--abbrev-ref", "HEAD"]), "main");
+        assert_eq!(std::fs::read_to_string(p.join("new.txt")).unwrap(), "untracked\n", "wip 복원은 실제로 됐다");
+        delete(&git, &p, "evil").await.unwrap();
+        assert_eq!(marks(), Vec::<String>::new(), "삭제가 프로그램을 실행했다");
+        assert!(sh(&p, &["for-each-ref", "refs/git403"]).is_empty());
     }
 }

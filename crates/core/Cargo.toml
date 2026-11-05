@@ -6,7 +6,7 @@ edition.workspace = true
 [features]
 default = ["cli"]
 # git 실행 파일을 띄우는 백엔드(`CliBackend`)
-cli = ["dep:ssh-key", "dep:libc"]
+cli = ["dep:ssh-key"]
 # 순수 Rust(gitoxide) 백엔드 `GixBackend`. 켜면 gix 의존성이 컴파일된다(기본 빌드는 아님)
 gix = ["dep:gix", "dep:regex", "dep:reqwest", "dep:rustls"]
 
@@ -68,7 +68,7 @@ rustls = { version = "0.23", optional = true, default-features = false, features
 trash = "5"
 
 [target.'cfg(unix)'.dependencies]
-libc = { version = "0.2", optional = true }
+libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"

@@ -291,6 +291,7 @@ fn git_call(repo: &Path, args: &[String], ok: &Confirmed) -> Result<String, Stri
     if !v.refuse.is_empty() {
         return Err(format!("this repository's git configuration is not allowed: {}", v.refuse.join("; ")));
     }
+    ai_tool::set_extra_protected(&v.hooks_dirs);
     match ok.config.as_deref().filter(|f| !f.is_empty()) {
         None => return Err("repository configuration verification is unavailable (no confirmed fingerprint); git is disabled".into()),
         Some(f) if f != v.fingerprint => return Err("the repository's git configuration changed after you confirmed it; stop and ask the user to start a new turn".into()),
@@ -381,19 +382,7 @@ fn meta_is_symlink(p: &Path) -> bool {
 /// **서버(샌드박스 밖)가 하는 파일 쓰기·삭제는 전부 이 함수들을 거친다**: 모든 경로 성분이 심볼릭 링크가 아니고 정규화한 위치가 저장소 안일 때만 하고,
 /// 아니면 쓰지 않는다(링크 너머 `$HOME` 등에 쓰는 일을 막는다). 마지막 성분도 `O_NOFOLLOW`로 연다.
 fn safe_write(repo: &Path, rel: &str, bytes: &[u8]) -> bool {
-    let Ok(norm) = ai_tool::resolve(repo, rel) else { return false };
-    let Ok(root) = repo.canonicalize() else { return false };
-    let full = root.join(&norm);
-    if let Some(dir) = full.parent() {
-        if std::fs::create_dir_all(dir).is_err() || ai_tool::resolve(repo, &norm.to_string_lossy()).is_err() {
-            return false;
-        }
-    }
-    let mut o = std::fs::OpenOptions::new();
-    o.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::custom_flags(&mut o, libc::O_NOFOLLOW);
-    o.open(&full).and_then(|mut f| f.write_all(bytes)).is_ok()
+    ai_tool::write_confined(repo, rel, bytes, false).is_ok()
 }
 
 /// 일반 파일 삭제(경로에 심볼릭 링크 성분이 있으면 안 함)
@@ -640,6 +629,8 @@ fn call(repo: &Path, name: &str, a: &Value, ok: &Confirmed) -> (String, bool) {
         }
         "read_file" => sget("path").ok_or_else(|| "`path` is required".to_string()).and_then(|p| ai_tool::read_file(repo, p)),
         "edit_file" => match (sget("path"), sget("old_string"), sget("new_string")) {
+            // 설정이 가리키는 훅 폴더(`core.hooksPath`)도 쓰기 금지에 넣는다(사용자의 다음 commit이 실행). 설정을 판정하지 못하면 쓰지 않는다
+            (Some(_), Some(_), Some(_)) if { let v = gc_core::ai_config::check(repo, &std::env::var(GIT_BIN).unwrap_or_else(|_| "git".into())); ai_tool::set_extra_protected(&v.hooks_dirs); !v.refuse.is_empty() } => Err("this repository's git configuration is not allowed; editing is disabled".into()),
             (Some(p), Some(o), Some(n)) => ai_tool::edit_file(repo, p, o, n, a.get("replace_all").and_then(Value::as_bool).unwrap_or(false)).map(|n| format!("edited {n} place(s)")),
             _ => Err("`path`, `old_string` and `new_string` are required".into()),
         },
@@ -1113,5 +1104,37 @@ mod tests {
         assert!(lfs_shell_needed_uncached(&p));
         git_ok(&p, &["config", "filter.lfs.process", "sh -c evil"]);
         assert!(!lfs_shell_needed_uncached(&p), "비표준 정의는 셸을 열지 않는다");
+    }
+
+    /// 8차 높음1 재현: `core.hooksPath=scripts/hooks`(저장소 안 폴더)면 edit_file·git 작업으로 그 훅을 고칠 수 없다(사용자의 다음 commit이 샌드박스 밖에서 실행하므로)
+    #[test]
+    fn configured_hooks_folder_cannot_be_edited_or_brought_in_by_git() {
+        let (_d, p) = repo();
+        std::fs::create_dir_all(p.join("scripts/hooks")).unwrap();
+        std::fs::write(p.join("scripts/hooks/pre-commit"), "#!/bin/sh\nexit 0\n").unwrap();
+        git_ok(&p, &["add", "."]);
+        git_ok(&p, &["commit", "-qm", "hooks"]);
+        git_ok(&p, &["config", "core.hooksPath", "scripts/hooks"]);
+        // 다른 브랜치가 훅을 바꾼다
+        git_ok(&p, &["switch", "-qc", "evil"]);
+        std::fs::write(p.join("scripts/hooks/pre-commit"), "#!/bin/sh\ntouch /tmp/PWNED-hook\n").unwrap();
+        git_ok(&p, &["commit", "-qam", "evil hook"]);
+        git_ok(&p, &["switch", "-q", "main"]);
+        let orig = std::fs::read_to_string(p.join("scripts/hooks/pre-commit")).unwrap();
+        for path in ["scripts/hooks/pre-commit", "Scripts/Hooks/pre-commit", "scripts/hooks/new-hook"] {
+            let (t, e) = tool(&p, "edit_file", json!({"path": path, "old_string": if path.ends_with("new-hook") { "" } else { "exit 0" }, "new_string": "touch /tmp/PWNED-hook"}));
+            assert!(e && t.contains("not allowed"), "{path}: {t}");
+        }
+        assert_eq!(std::fs::read_to_string(p.join("scripts/hooks/pre-commit")).unwrap(), orig);
+        assert!(!p.join("scripts/hooks/new-hook").exists());
+        for a in [json!(["switch", "evil"]), json!(["merge", "evil"]), json!(["cherry-pick", "evil"])] {
+            let (t, e) = tool(&p, "git", json!({"args": a.clone()}));
+            assert!(e && t.contains("protected"), "{a}: {t}");
+        }
+        assert_eq!(std::fs::read_to_string(p.join("scripts/hooks/pre-commit")).unwrap(), orig);
+        // 훅 폴더 설정이 없으면 같은 폴더도 일반 폴더(과차단 없음)
+        git_ok(&p, &["config", "--unset", "core.hooksPath"]);
+        let (t, e) = tool(&p, "edit_file", json!({"path": "scripts/hooks/pre-commit", "old_string": "exit 0", "new_string": "exit 1"}));
+        assert!(!e, "{t}");
     }
 }

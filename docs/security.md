@@ -77,6 +77,7 @@
 변경 이력
 - 2026-11-05: AI 채팅 보안 리뷰(금지 목록 `-c` 우회·도구 경로 무제한·저장소 설정 신뢰) 뒤 작성
 - 2026-11-05: OS 샌드박스 방어층(macOS Seatbelt·Linux bubblewrap·Windows는 확인+경고)과 "다층 방어" 절
+- 2026-11-05: 8차 리뷰 — 설정이 가리키는 훅 폴더 쓰기 금지·hooksPath review·샌드박스 밖 git(백업·판정)에 훅·필터·fsmonitor 끔 옵션·edit_file 하드링크·O_NOFOLLOW
 - 2026-11-05: 7차 리뷰 — 서버 쪽 쓰기 심볼릭 링크 안전화·링크 변화 전후 비교·LFS는 저장소가 실제 쓸 때만 네트워크 없는 단계에서 셸(LFS push 거절)·`.lfsconfig`·`lfs.url`·Linux bwrap 정리
 - 2026-11-05: 6차 리뷰 — 하위 키 단위 설정 허용 목록·include 대상 판정·로컬 경로 원격 거절·git 폴더 구조 검사·gc/maintenance/file 프로토콜 끔·실행 전후 비교로 보호 경로 변경 되돌림
 - 2026-11-05: 5차 리뷰 — 저장소 설정 허용 목록 판정(서브모듈 포함)·`--work-tree` 고정·지문 매 호출 대조·백업 무결성·ignored 스냅숏·보호 경로 확대와 git 작업이 들여오는 변경 검사·CSP
@@ -89,3 +90,9 @@
 - **서버 쪽 파일 쓰기·삭제는 심볼릭 링크를 따라가지 않는다.** MCP 서버(샌드박스 밖)가 직접 하는 되돌림·`edit_file`은 `safe_write`·`safe_remove`·`safe_remove_link`·`safe_make_link`만 쓴다: 경로의 모든 성분을 `symlink_metadata`로 검사해 링크가 있거나 저장소 밖·`.git` 아래면 쓰지 않고 실패, 최종 파일은 `O_NOFOLLOW`. 재현(무시된 `x/.cargo/config.toml` + `stash apply`/`switch`로 `x -> $HOME` 링크가 들어옴) → 홈 파일은 그대로, `x`는 실제 디렉터리로 복구(시험 `revert_does_not_write_through_a_directory_replaced_by_a_symlink`).
 - **링크 변화도 되돌림 대상**: 실행 전후 비교(`Snap`)가 작업 트리의 **모든 심볼릭 링크**(추적·untracked·ignored)와 보호 경로 내용·HEAD·브랜치를 본다(링크 성분을 따라 읽지 않는다). 사전 검사는 들어오는 변경(`diff --raw -z`의 모드 120000, 스태시 untracked `^3`, merge·cherry-pick·rebase·switch)에서 보호 경로나 심볼릭 링크를 보면 실행 전에 거절한다. `stash apply`처럼 HEAD가 안 바뀌는 명령도 같은 전후 비교를 거친다. 되돌림 순서: 진행 중 작업 `--abort` → 브랜치 → `reset --keep` → 링크 복원(새 링크는 `safe_remove_link` + 샌드박스 git `restore`, 사라진·바뀐 링크는 `safe_make_link`) → 보호 파일 → 최종 동일성 확인(안 맞으면 경고).
 - **`.lfsconfig`**는 쓰기 금지 목록에 있고 `ai_config`가 설정 파일처럼 판정한다(`lfs.url`: 로컬 경로 거절·http(s) 안전·그 밖 검토). `lfs.url`(저장소 설정·`.lfsconfig`)은 원격과 같이 `ai_risk` 호스팅 판정에 들어간다(전역 설정의 `lfs.url`은 사용자 환경이라 제외).
+
+## 8차 리뷰 반영
+
+- **설정이 가리키는 훅 폴더는 쓰기 금지**: `core.hooksPath`(상위·서브모듈·worktree·include 어디서든)는 값이 비어 있지 않으면 `review`(사용자 확인에 키 이름이 보임)이고, `ai_config::Verdict.hooks_dirs`가 그 실제 값을 저장소 상대 경로로 모은다. MCP 서버가 `git` 호출과 `edit_file`마다 판정을 다시 해 `ai_tool::set_extra_protected`로 넣으면 정적 목록(`.githooks`·`.husky`…)과 똑같이 `edit_file`·`mv`·`mcp::preflight`(들어오는 변경)·`run_guarded`(전후 비교·되돌림)에 적용된다. 이름 비교는 대소문자·끝의 점·공백을 무시한다(대소문자 무시 파일 시스템·Windows에서 `.HUSKY`·`.GitHub.` 우회 불가 — 시험은 정적 목록 전체의 변형과 이 파일 시스템의 실제 다른 철자 쓰기 거절을 확인).
+- **샌드박스 밖에서 도는 모든 git에 안전 옵션**: 앱의 백업 생성·되돌리기·삭제(`ai_backup`)는 샌드박스 밖이라 `GitRunner::hardened`로 `ai_tool::hardened_args()`(훅 끔=`core.hooksPath` null 장치·fsmonitor 끔·외부 프로토콜 끔·pager 없음·서브모듈 안 들어감·gc/maintenance 끔)와 **저장소 설정의 모든 `filter.<이름>`의 clean·smudge·process를 비우고 `required=false`**를 붙인다(`add -A`의 clean, `switch`·`reset`·`restore`의 smudge, `update-ref`의 `reference-transaction`·`post-checkout` 훅이 막힘). 같은 옵션을 설정 판정(`ai_config::check`)의 읽기 git에도 붙였다 — 시험으로 `ls-files`가 `core.fsmonitor` 프로그램을 실행하던 것을 찾아 막았다(`-c`는 command 범위라 판정·지문에 안 들어감). 시험: 대조군(보통 git)은 훅·clean·smudge·fsmonitor가 전부 표식을 만들고, 백업 생성·복원(브랜치·wip 포함)·삭제는 하나도 못 만든다(안전 옵션을 빼면 시험이 실패함을 확인). 이 경로는 사용자가 review 키를 승낙한 뒤에도 같다.
+- **`edit_file`은 `ai_tool::write_confined`로**: 경로 성분 심볼릭 링크 거절·`O_NOFOLLOW`·새 파일은 `create_new`, 기존 파일은 하드링크(`nlink>1`)면 거절(링크 반대편이 저장소 밖·보호 경로일 수 있음). 서버의 되돌림 쓰기(`mcp::safe_write`)도 같은 함수.
