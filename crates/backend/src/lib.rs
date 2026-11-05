@@ -67,8 +67,6 @@ pub struct Inner {
     hosting: hosting::Hosting,
     /// gh 계정 임시 전환 구간의 직렬화 (docs/reuse.md gh 절)
     gh_gate: gh::Gate,
-    /// 읽기 조회(작성자 사진)용: "host/owner/name" → 그 저장소에 접근되는 gh 계정 (`gh_read_token`)
-    gh_access: parking_lot::Mutex<std::collections::HashMap<String, String>>,
     /// 로그인 셸 PATH 확인이 끝났는지(성공·실패 무관). `new`가 false로 두고 `start`가 true로 바꾼다 (`with_parts`만 쓰는 테스트는 기다리지 않는다)
     path_done: tokio::sync::watch::Sender<bool>,
 }
@@ -147,7 +145,6 @@ impl Backend {
             config_dir: config_dir.clone(),
             hosting: hosting::Hosting::new(&config_dir),
             gh_gate: Default::default(),
-            gh_access: Default::default(),
             path_done: tokio::sync::watch::channel(true).0,
         }))
     }

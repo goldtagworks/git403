@@ -127,7 +127,7 @@ impl Hosting {
     }
 
     /// 커밋 작성자 프로필 사진 URL (GitHub 원격만). origin 우선, 없으면 첫 원격. 이메일별 한 건.
-    /// 키체인 토큰이 없으면 `gh_read(원격)`(연결 계정 → 이 저장소에 접근되는 gh 계정), 그것도 없으면 `gh auth token`.
+    /// 키체인 토큰이 없으면 `gh_read(원격)`(프로젝트에 설정한 gh 계정), 그것도 없으면 `gh auth token`.
     pub async fn author_avatars<F, Fut>(&self, git: &dyn GitBackend, path: Option<&str>, repo: &Path, items: Vec<AvatarQuery>, gh_read: F) -> Res<Vec<AvatarResult>>
     where
         F: FnOnce(RemoteRepo) -> Fut,
