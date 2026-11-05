@@ -1594,7 +1594,7 @@ export const lo: Record<Key, string> = {
   "aiChat.confirmPublic": "{repo} ເປັນບ່ອນເກັບສາທາລະນະ. AI ຈະອ່ານໄຟລ໌ຢູ່ນີ້ ແລະ ແລ່ນຄຳສັ່ງ git; ສິ່ງທີ່ອ່ານຈະຖືກສົ່ງໄປ Anthropic.",
   "aiChat.confirmShared": "{repo} ແບ່ງປັນກັບຜູ້ຮ່ວມງານອີກ {n} ຄົນ. AI ຈະອ່ານໄຟລ໌ ແລະ ແລ່ນຄຳສັ່ງ git ທີ່ອາດກະທົບວຽກຂອງເຂົາເຈົ້າ; ສິ່ງທີ່ອ່ານຈະຖືກສົ່ງໄປ Anthropic.",
   "aiChat.confirmUnknown": "ບໍ່ສາມາດກວດໄດ້ວ່າ {repo} ເປັນສາທາລະນະ ຫຼື ແບ່ງປັນກັບຄົນອື່ນບໍ (ບໍ່ມີບັນຊີທີ່ເຊື່ອມຕໍ່ ຫຼື ການຄົ້ນຫາລົ້ມເຫຼວ). AI ຈະອ່ານໄຟລ໌ ແລະ ແລ່ນຄຳສັ່ງ git; ສິ່ງທີ່ອ່ານຈະຖືກສົ່ງໄປ Anthropic.",
-  "aiChat.confirmScope": "AI ແລ່ນໄດ້ສະເພາະຄຳສັ່ງ git ທີ່ອະນຸຍາດ (status, log, diff, add, commit, merge, rebase, fetch, pull, push ທີ່ບໍ່ມີ force, switch, stash ແລະ ທີ່ຄ້າຍກັນ). ບໍ່ສາມາດ force push, hard reset, ລຶບສາຂາ ຫຼື ອ່ານ/ແກ້ໄຂໄຟລ໌ນອກບ່ອນເກັບນີ້. ສືບຕໍ່ບໍ?",
+  "aiChat.confirmScope": "AI ແລ່ນໄດ້ສະເພາະຄຳສັ່ງ git ທີ່ອະນຸຍາດ (status, log, diff, add, commit, merge, rebase, fetch, pull, push ທີ່ບໍ່ມີ force, switch, stash ແລະ ທີ່ຄ້າຍກັນ). ຂະນະ AI ເຮັດວຽກ git hook ຈະບໍ່ຖືກແລ່ນ. ມັນໃຊ້ remote ທີ່ເປັນເສັ້ນທາງໃນເຄື່ອງ, force push, hard reset, ລຶບສາຂາ, ແກ້ໄຂໄຟລ໌ຕັ້ງຄ່າ CI, ຕົວແກ້ໄຂ, ເອເຈນ ຫຼື hook ຫຼື ອ່ານ/ແກ້ໄຂໄຟລ໌ນອກບ່ອນເກັບນີ້ບໍ່ໄດ້. ສືບຕໍ່ບໍ?",
   "aiChat.confirmExec": "ການຕັ້ງຄ່າ git ຂອງບ່ອນເກັບນີ້ (ລວມ submodule) ມີຄ່າທີ່ແອັບບໍ່ຖືວ່າປອດໄພ ({keys}); ບາງຄ່າອາດເຮັດໃຫ້ git ແລ່ນໂປຣແກຣມ. ຂະນະ AI ເຮັດວຽກ hook, external diff ແລະ textconv ຈະຖືກປິດ ແຕ່ຕົວກອງ, ໄດເວີລວມ, ຕົວຊ່ວຍຂໍ້ມູນຢືນຢັນ ແລະ ການຕັ້ງຄ່າທີ່ຄ້າຍກັນຍັງແລ່ນຢູ່.",
   "aiChat.undoBranchesAsk": "ຍ້າຍສາຂາໃນເຄື່ອງອື່ນກັບໄປຕຳແໜ່ງກ່ອນວຽກນີ້ນຳບໍ? (ສາຂາທີ່ AI ສ້າງຈະຍັງຢູ່)",
   "aiChat.undoWipAsk": "ກູ້ໄຟລ໌ທີ່ແກ້ໄຂແຕ່ຍັງບໍ່ commit ກັບສະພາບກ່ອນວຽກນີ້ນຳບໍ? ໄຟລ໌ທີ່ປ່ຽນຕັ້ງແຕ່ນັ້ນຈະຖືກຂຽນທັບດ້ວຍສະແນັບຊັອດນັ້ນ.",

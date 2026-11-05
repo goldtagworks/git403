@@ -309,7 +309,8 @@ for (const [name, flags, why] of riskCases) {
     const asks = await confirmAsks(page);
     expect(asks).toHaveLength(1);
     expect(asks[0]).toMatch(why);
-    expect(asks[0]).toContain("이 저장소 밖의 파일은 읽거나 수정할 수 없습니다");
+    expect(asks[0]).toContain("이 저장소 밖 파일 읽기·수정은 할 수 없습니다");
+    expect(asks[0]).toContain("git 훅은 실행되지 않습니다");
     const [start] = await callsOf(page, "ai_chat_start");
     expect(JSON.parse(start[1]).confirmed).toBe(true);
     await send(page, "이어서");
@@ -406,7 +407,7 @@ test("되돌리기는 백업의 지문을 함께 보낸다(백업 ref 변조 확
 });
 
 test("AI 답의 링크는 실제 주소를 숨기지 않는다(호스트를 덧붙이고 title에 전체 주소)", async ({ page }) => {
-  await open(page, { __chatScript: [{ kind: "text", text: "[여기 누르세요](https://evil.example/login?x=1) 그리고 https://github.com/o/r 와 [github.com 문서](https://github.com/docs)" }, { kind: "done", sessionId: "s", result: "", isError: false }] });
+  await open(page, { __chatScript: [{ kind: "text", text: "[여기 누르세요](https://evil.example/login?x=1) 그리고 https://github.com/o/r 와 [github.com 문서](https://github.com/docs) 그림 ![스크린샷](https://cdn.evil.example/a.png)" }, { kind: "done", sessionId: "s", result: "", isError: false }] });
   await toggle(page);
   await send(page, "링크 줘");
   await done(page);
@@ -415,4 +416,6 @@ test("AI 답의 링크는 실제 주소를 숨기지 않는다(호스트를 덧�
   await expect(a.nth(0)).toHaveAttribute("title", "https://evil.example/login?x=1");
   await expect(a.nth(1)).toHaveText("https://github.com/o/r");
   await expect(a.nth(2)).toHaveText("github.com 문서");
+  await expect(a.nth(3)).toHaveText("🖼 스크린샷 (cdn.evil.example)");
+  await expect(a.nth(3)).toHaveAttribute("title", "https://cdn.evil.example/a.png");
 });

@@ -8,8 +8,16 @@ const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
 // 이미지는 인증이 필요한 첨부가 많아 불러오지 않고 링크로만 보인다
 md.renderer.rules.image = (tokens, i) => {
   const tk = tokens[i];
-  const src = md.utils.escapeHtml(tk.attrGet("src") ?? "");
-  return `<a href="${src}">🖼 ${md.utils.escapeHtml(tk.content || src)}</a>`;
+  const raw = tk.attrGet("src") ?? "";
+  const src = md.utils.escapeHtml(raw);
+  // 이미지 링크도 실제 주소를 숨기지 않는다(링크와 같은 규칙): title에 전체 주소, 보이는 글자에 호스트가 없으면 ` (호스트)`
+  let host = "";
+  try {
+    host = /^https?:\/\//i.test(raw) ? new URL(raw).host : "";
+  } catch {}
+  const label = tk.content || raw;
+  const hostNote = host && !label.toLowerCase().includes(host.toLowerCase()) ? ` (${md.utils.escapeHtml(host)})` : "";
+  return `<a href="${src}"${host ? ` title="${src}"` : ""}>🖼 ${md.utils.escapeHtml(label)}${hostNote}</a>`;
 };
 
 // 커밋 sha 링크(26 후속): GitHub가 만든 `/commit/<sha>`(·`/pull/N/commits/<sha>`) 링크와 맨 sha 글자(7~40자 hex, 숫자·a-f가 모두 있는 것)에 data-sha를 단다.

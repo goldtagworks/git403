@@ -404,8 +404,12 @@ try {
       await new Promise((r) => setTimeout(r, 1000));
       await js(`await waitFor(() => $(".status-branch .ab"), "상태(추적 브랜치)", 20000);`); // 상태가 읽혀야 Pull이 추적 브랜치를 명시한다
       await js(`press(await waitFor(() => $$('.toolbar button[aria-label="Pull"]').find((b) => !b.disabled), "Pull 버튼", 20000));`);
+      await js(`await waitFor(() => $$(".toast").find((t) => t.textContent.includes("Pull 실패")), "Pull 실패 토스트: " + $$(".toast").map((t) => t.textContent).join("|"), 9000);`);
+      // 같은 컴퓨터의 경로 원격은 AI 차례에서 거절되므로(대상 저장소 설정 실행 위험) 원격 설정을 지우고, 가짜 claude가 그 경로로 직접 pull하게 한다
+      git("remote", "remove", "origin");
+      writeFileSync(fakeLog + ".pull", bare);
       await js(`
-        const toast = await waitFor(() => $$(".toast").find((t) => t.textContent.includes("Pull 실패")), "Pull 실패 토스트: " + $$(".toast").map((t) => t.textContent).join("|"), 9000);
+        const toast = $$(".toast").find((t) => t.textContent.includes("Pull 실패"));
         const b = $$("button", toast).find((b) => b.textContent === "AI에게 맡기기");
         if (!b) throw new Error("AI에게 맡기기 버튼 없음: " + toast.textContent);
         press(b);
@@ -440,13 +444,16 @@ try {
     }
   });
 
-  if (process.platform !== "win32") await step("AI 채팅 위험 확인(진짜 IPC): 로컬 전용은 확인 없음, 호스팅 원격은 백엔드가 확인 없는 시작을 거절한다(확인 후 진행은 위 AI 채팅 단계와 같은 경로)", async () => {
+  if (process.platform !== "win32") await step("AI 채팅 위험 확인(진짜 IPC): 원격 없음은 확인 없음, 로컬 경로 원격은 거절, 호스팅 원격은 백엔드가 확인 없는 시작을 거절한다(확인 후 진행은 위 AI 채팅 단계와 같은 경로)", async () => {
     const inv = (cmd, args) => js(`return await window.__TAURI_INTERNALS__.invoke(${JSON.stringify(cmd)}, ${JSON.stringify(args)});`);
     const start = (conversation, extra = {}) => js(`try { await window.__TAURI_INTERNALS__.invoke("ai_chat_start", ${JSON.stringify({ repo, conversation, input: "상태", ...extra })}); return "ok"; } catch (e) { return String(e); }`);
     eq((await inv("ai_chat_risk", { repo })).level, "none", "원격 없음 = 로컬 전용");
-    git("remote", "add", "origin", join(repo, "..", "no-such-bare.git")); // 같은 컴퓨터의 경로 원격도 로컬 전용
+    git("remote", "add", "origin", join(repo, "..", "no-such-bare.git")); // 같은 컴퓨터의 경로 원격: 로컬 전용이 아니라 거절(대상 저장소 설정이 push·fetch 때 실행될 수 있다)
     try {
-      eq((await inv("ai_chat_risk", { repo })).level, "none", "로컬 경로 원격 = 로컬 전용");
+      const local = await inv("ai_chat_risk", { repo });
+      if (!(local.refuse ?? []).some((r) => r.includes("local path"))) throw new Error("로컬 경로 원격이 거절되지 않음: " + JSON.stringify(local));
+      const refusedLocal = await start("risk-0", { confirmed: true });
+      if (!refusedLocal.includes("aiChat.configRefused")) throw new Error("확인(confirmed)으로도 거절돼야 함: " + refusedLocal);
       git("remote", "set-url", "origin", "https://gitlab.com/o/r.git"); // GitHub가 아니라 판정 불가 = 위험
       eq((await inv("ai_chat_risk", { repo })).level, "unknown", "판정 불가");
       const refs = () => git("for-each-ref", "refs/git403/ai-backup").split("\n").filter(Boolean).length;

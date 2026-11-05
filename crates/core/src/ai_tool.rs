@@ -560,10 +560,11 @@ const NULL_DEV: &str = if cfg!(windows) { "NUL" } else { "/dev/null" };
 /// - pager 없음, 외부 프로토콜·fsmonitor 끔, **훅 끔**(`core.hooksPath` = null 장치) — 저장소 안 훅 폴더(`.githooks`·husky)를 AI가 고친 뒤 commit이 실행하는 길과
 ///   pull로 받은 원격 훅 실행을 AI 차례 동안 막는다(AI 차례의 commit·merge·rebase·push는 훅을 실행하지 않는다)
 /// - 서브모듈 안으로 들어가지 않는다: `submodule.recurse=false`·`diff.ignoreSubmodules=all`·`status.submoduleSummary=false`(서브모듈 설정의 filter가 status 한 번에 실행되던 길)
+/// - 자동 정리(`gc.auto=0`·`maintenance.auto=false`: auto gc가 `gc.recentObjectsHook`을 실행하던 길)·`protocol.file.allow=never`(같은 컴퓨터의 저장소로의 fetch·push 불가)
 /// - 원격 조작은 안전하게: `fetch.prune=false`·`fetch.pruneTags=false`·`push.default=nothing`(refspec 없는 push 불가), 원격별 설정은 `validate`가 더한다
 pub fn prefix(repo: &Path) -> Vec<String> {
     let mut v: Vec<String> = vec!["--no-pager".into(), format!("--work-tree={}", repo.display())];
-    for c in ["protocol.ext.allow=never", "core.fsmonitor=false", "core.pager=cat", "core.quotepath=false", "submodule.recurse=false", "diff.ignoreSubmodules=all", "status.submoduleSummary=false", "fetch.prune=false", "fetch.pruneTags=false", "push.default=nothing", "push.recurseSubmodules=no"] {
+    for c in ["protocol.ext.allow=never", "core.fsmonitor=false", "core.pager=cat", "core.quotepath=false", "submodule.recurse=false", "diff.ignoreSubmodules=all", "status.submoduleSummary=false", "fetch.prune=false", "fetch.pruneTags=false", "push.default=nothing", "push.recurseSubmodules=no", "gc.auto=0", "maintenance.auto=false", "protocol.file.allow=never"] {
         v.extend(["-c".into(), c.into()]);
     }
     v.extend(["-c".into(), format!("core.hooksPath={NULL_DEV}")]);
@@ -683,7 +684,7 @@ mod tests {
         assert_eq!(&full[..prefix(&r).len()], &prefix(&r)[..]);
         let pre = prefix(&r).join(" ");
         assert!(pre.starts_with(&format!("--no-pager --work-tree={} -c protocol.ext.allow=never -c core.fsmonitor=false", r.display())), "작업 트리 고정: {pre}");
-        for c in ["-c core.hooksPath=/dev/null", "-c submodule.recurse=false", "-c diff.ignoreSubmodules=all", "-c status.submoduleSummary=false", "-c fetch.prune=false", "-c fetch.pruneTags=false", "-c push.default=nothing"] {
+        for c in ["-c core.hooksPath=/dev/null", "-c submodule.recurse=false", "-c diff.ignoreSubmodules=all", "-c status.submoduleSummary=false", "-c fetch.prune=false", "-c fetch.pruneTags=false", "-c push.default=nothing", "-c gc.auto=0", "-c maintenance.auto=false", "-c protocol.file.allow=never"] {
             assert!(pre.contains(c), "{c}: {pre}");
         }
         assert_eq!(&full[prefix(&r).len()..], ["log", "--no-ext-diff", "--no-textconv", "--oneline", "-n", "5", "main", "--", "src/a.rs"], "외부 diff·textconv를 끈다");

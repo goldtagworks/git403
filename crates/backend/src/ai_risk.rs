@@ -1,6 +1,6 @@
 //! AI 채팅 시작 전 확인이 필요한 저장소인가 (docs/security.md "AI 채팅"). 판정 불가는 위험으로 본다.
 //!
-//! 규칙: 원격이 없거나 전부 같은 컴퓨터의 경로(`/x`·`../x`·`file://`)면 `none`(로컬 전용). GitHub 원격은 `GET /repos/{o}/{r}`의 `private`로 공개(`public`)를 가리고,
+//! 규칙: 원격이 없으면 `none`(로컬 전용). 같은 컴퓨터의 경로·`file://` 원격은 `none`이 아니라 **거절**(`gc_core::ai_config::check`의 `refuse` — 대상 저장소 설정이 push·fetch 때 실행될 수 있다). GitHub 원격은 `GET /repos/{o}/{r}`의 `private`로 공개(`public`)를 가리고,
 //! private이면 `GET /user`(본인) + `GET /repos/{o}/{r}/collaborators`에서 본인을 뺀 수가 1명 이상이면 `shared`, 0명이면 `none`.
 //! 그 밖의 서비스·계정/토큰 없음·조회 실패·협업자 조회 권한 없음·해석 못 하는 원격은 `unknown`. 원격이 여럿이면 가장 위험한 쪽
 //! (public > shared > unknown > none).
@@ -69,12 +69,6 @@ pub fn combine(rs: impl IntoIterator<Item = Risk>) -> Risk {
     rs.into_iter().max_by_key(|r| (rank(r), r.collaborators)).unwrap_or(risk(Level::None, None))
 }
 
-/// 같은 컴퓨터의 경로를 가리키는 원격 URL인가 (절대·상대 경로, `~`, `file://`, Windows 드라이브)
-fn is_local_url(u: &str) -> bool {
-    let b = u.as_bytes();
-    u.starts_with(['/', '.', '~', '\\']) || u.starts_with("file://") || (b.len() > 2 && b[1] == b':' && b[0].is_ascii_alphabetic() && (b[2] == b'\\' || b[2] == b'/'))
-}
-
 impl Backend {
     /// 저장소의 위험 판정. 원격이 없으면 네트워크를 쓰지 않는다. 원격 URL은 `git remote get-url --all`(가져오기)과 `--push --all`(`pushurl` 포함)이
     /// 돌려주는 값 — git이 `url.<base>.insteadOf`를 적용한 뒤의 실제 주소다.
@@ -97,8 +91,8 @@ impl Backend {
             }
         }
         let fp = gc_core::ai_tool::remotes_fingerprint(&mut urls);
-        // 같은 컴퓨터의 경로(`/x`, `../x`, `file://`)는 호스팅 서비스가 아니므로 로컬 전용으로 본다
-        let hosted: Vec<&(String, String)> = urls.iter().filter(|(_, u)| u.is_empty() || !is_local_url(u)).collect();
+        // 같은 컴퓨터의 경로·file://은 여기서 판정하지 않는다(`check`가 거절한다)
+        let hosted: Vec<&(String, String)> = urls.iter().filter(|(_, u)| u.is_empty() || !gc_core::ai_config::is_local_url(u)).collect();
         let mut all = Vec::new();
         if !hosted.is_empty() {
             let accts = self.hosting.accounts();
@@ -144,16 +138,6 @@ mod tests {
         assert_eq!(classify(ex(true, None)), risk(Level::Unknown, None), "협업자 수를 모르면 불명");
         for e in [gc_hosting::Error::NotFound, gc_hosting::Error::Forbidden, gc_hosting::Error::Unauthorized, gc_hosting::Error::Timeout, gc_hosting::Error::Unsupported] {
             assert_eq!(classify(Err(e)), risk(Level::Unknown, None));
-        }
-    }
-
-    #[test]
-    fn local_paths_are_not_hosted_remotes() {
-        for u in ["/srv/git/x.git", "../x", "./x", "~/x", "file:///x.git", "C:\\repos\\x", "D:/x"] {
-            assert!(is_local_url(u), "{u}");
-        }
-        for u in ["https://github.com/o/r.git", "git@github.com:o/r.git", "ssh://git@host/x", "host:path"] {
-            assert!(!is_local_url(u), "{u}");
         }
     }
 

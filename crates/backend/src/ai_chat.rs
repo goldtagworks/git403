@@ -464,11 +464,17 @@ EOF"#;
         b.ai_chat_start(&prog(&bin), repo.clone(), "local".into(), "a".into(), None, false).await.unwrap();
         rec.last("local").await;
         // 판정 불가(GitHub가 아닌 원격·해석 못 하는 원격) = 위험: confirmed 없이는 거절, 프로세스도 안 뜬다
-        // 같은 컴퓨터의 경로·file:// 원격은 호스팅이 아니라 로컬 전용
+        // 같은 컴퓨터의 경로·file:// 원격은 로컬 전용이 아니라 **거절**(대상 저장소 설정이 push·fetch 때 실행될 수 있다): 확인(`confirmed`)으로도 시작할 수 없다
         for url in ["/some/local/path.git", "file:///x.git", "../rel.git"] {
             git(&repo, &["remote", "remove", "origin"]);
             git(&repo, &["remote", "add", "origin", url]);
-            assert_eq!(b.ai_chat_risk(&repo).await.unwrap().level, crate::ai_risk::Level::None, "{url}");
+            let r = b.ai_chat_risk(&repo).await.unwrap();
+            assert!(r.refuse.iter().any(|x| x.contains("local path")), "{url}: {r:?}");
+            for confirmed in [false, true] {
+                let e = b.ai_chat_start(&prog(&bin), repo.clone(), "loc".into(), "a".into(), None, confirmed).await.unwrap_err();
+                assert!(e.contains("aiChat.configRefused") && e.contains("local path"), "{url}: {e}");
+            }
+            assert!(rec.kinds("loc").is_empty());
         }
         for url in ["https://gitlab.com/o/r.git", "https://example.com/x/y.git"] {
             git(&repo, &["remote", "remove", "origin"]);
@@ -499,17 +505,21 @@ EOF"#;
     async fn risk_looks_at_pushurl_and_insteadof_and_asks_again_when_remotes_change() {
         let (b, rec, repo, bin, _keep) = setup(OK).await;
         use crate::ai_risk::Level;
-        git(&repo, &["remote", "add", "origin", "/srv/git/local.git"]);
-        assert_eq!(b.ai_chat_risk(&repo).await.unwrap().level, Level::None);
-        // pushurl이 호스팅 주소면 거기로 보내므로 불명(로컬로 오판하지 않는다)
-        git(&repo, &["remote", "set-url", "--push", "origin", "https://gitlab.com/o/r.git"]);
+        git(&repo, &["remote", "add", "origin", "https://gitlab.com/o/r.git"]);
         assert_eq!(b.ai_chat_risk(&repo).await.unwrap().level, Level::Unknown);
+        // pushurl이 로컬 경로면 거기로 보내므로 거절
+        git(&repo, &["remote", "set-url", "--push", "origin", "/srv/git/local.git"]);
+        assert!(!b.ai_chat_risk(&repo).await.unwrap().refuse.is_empty());
         git(&repo, &["config", "--unset", "remote.origin.pushurl"]);
-        assert_eq!(b.ai_chat_risk(&repo).await.unwrap().level, Level::None);
-        // insteadOf: 로컬처럼 보이는 URL이 호스팅 주소로 치환되면 치환 뒤 값으로 판정
-        git(&repo, &["config", "url.https://gitlab.com/.insteadOf", "/srv/git/"]);
+        assert!(b.ai_chat_risk(&repo).await.unwrap().refuse.is_empty());
+        // insteadOf: 호스팅처럼 보이는 URL이 로컬 경로로 치환되면 치환 뒤 값으로 판정해 거절
+        git(&repo, &["config", "url./srv/git/.insteadOf", "https://gitlab.com/"]);
+        assert!(!b.ai_chat_risk(&repo).await.unwrap().refuse.is_empty());
+        git(&repo, &["config", "--unset", "url./srv/git/.insteadOf"]);
+        // 다른 호스팅 주소로 치환되면 그 주소로 판정
+        git(&repo, &["config", "url.https://example.com/.insteadOf", "https://gitlab.com/"]);
         assert_eq!(b.ai_chat_risk(&repo).await.unwrap().level, Level::Unknown);
-        git(&repo, &["config", "--unset", "url.https://gitlab.com/.insteadOf"]);
+        git(&repo, &["config", "--unset", "url.https://example.com/.insteadOf"]);
         // 확인한 뒤 원격이 바뀌면 같은 대화도 다시 확인을 요구한다
         git(&repo, &["remote", "set-url", "origin", "https://gitlab.com/o/r.git"]);
         b.ai_chat_start(&prog(&bin), repo.clone(), "fp".into(), "a".into(), None, true).await.unwrap();
@@ -541,10 +551,10 @@ EOF"#;
         std::fs::write(repo.join(".git/extra.cfg"), "[core]\n\tsshCommand = ssh -v\n").unwrap();
         git(&repo, &["config", "include.path", "extra.cfg"]);
         let r = b.ai_chat_risk(&repo).await.unwrap();
-        assert_eq!((r.level, r.config.clone()), (crate::ai_risk::Level::None, vec!["core.sshcommand".to_string(), "diff.evil.textconv".to_string()]));
-        assert_eq!(b.ai_chat_risk_ipc(repo.clone()).await.unwrap(), json!({"level": "none", "config": ["core.sshcommand", "diff.evil.textconv"]}));
+        assert_eq!((r.level, r.config.clone()), (crate::ai_risk::Level::None, vec!["core.sshcommand".to_string(), "diff.evil.textconv".to_string(), "include.path".to_string()]));
+        assert_eq!(b.ai_chat_risk_ipc(repo.clone()).await.unwrap(), json!({"level": "none", "config": ["core.sshcommand", "diff.evil.textconv", "include.path"]}));
         let e = b.ai_chat_start(&prog(&bin), repo.clone(), "ex".into(), "a".into(), None, false).await.unwrap_err();
-        assert!(e.contains("aiChat.confirmRequired") && e.contains("\"config\":\"2\""), "{e}");
+        assert!(e.contains("aiChat.confirmRequired") && e.contains("\"config\":\"3\""), "{e}");
         b.ai_chat_start(&prog(&bin), repo.clone(), "ex".into(), "a".into(), None, true).await.unwrap();
         rec.last("ex").await;
         // 확인 뒤 실행형 설정이 늘면 같은 대화도 다시 묻는다

@@ -1,7 +1,7 @@
 // 실제 앱 E2E용 가짜 `claude`: stream-json을 내보내며 **진짜 git 명령**을 저장소(cwd)에서 실행한다 (충돌 있는 pull → 해결 → 커밋).
 // 받은 인자·cwd는 FAKE_CLAUDE_LOG 파일에 JSON으로 남긴다.
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const out = (o) => console.log(JSON.stringify(o));
@@ -24,7 +24,10 @@ const tool = (name, command, run) => {
 
 out({ type: "system", subtype: "init", session_id: "fake-sess" });
 text("원격 변경을 병합합니다.");
-tool("Bash", "git pull --no-rebase --no-edit", () => git("pull", "--no-rebase", "--no-edit"));
+// 시험이 `<로그>.pull`에 원격 경로를 두면 그 경로로 직접 pull한다(AI 차례는 로컬 경로 원격을 거절하므로 원격 설정 없이 실행한다)
+const pullFile = process.env.FAKE_CLAUDE_LOG ? `${process.env.FAKE_CLAUDE_LOG}.pull` : "";
+const pullUrl = pullFile && existsSync(pullFile) ? readFileSync(pullFile, "utf8").trim() : null;
+tool("Bash", `git pull --no-rebase --no-edit${pullUrl ? " " + pullUrl + " main" : ""}`, () => git("pull", "--no-rebase", "--no-edit", ...(pullUrl ? [pullUrl, "main"] : [])));
 const f = join(process.cwd(), "a.txt");
 tool("Read", f, () => [0, readFileSync(f, "utf8")]);
 writeFileSync(f, "합친 결과\n");

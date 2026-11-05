@@ -221,20 +221,127 @@ fn git_call(repo: &Path, args: &[String], ok: &Confirmed) -> Result<String, Stri
         }
     }
     let argv = ai_tool::validate(args, repo, &names)?;
-    // 3) 작업 트리를 바꾸는 git 작업이 들여오는 변경에 보호 경로(CI·에디터·훅·에이전트 설정…)가 있으면 거절
+    // 3) 작업 트리를 바꾸는 git 작업이 들여오는 변경에 보호 경로(CI·에디터·훅·에이전트 설정…)가 있으면 실행 전에 빠르게 거절한다(사전 검사)
     preflight(repo, args)?;
-    let before = (args.first().map(String::as_str) == Some("pull")).then(|| run_git(repo, &[ai_tool::prefix(repo), vec!["rev-parse".into(), "HEAD".into()]].concat()).0.trim().to_owned());
-    let (t, err) = run_git(repo, &argv);
-    let mut out = if err { format!("[git failed]\n{t}") } else { t };
-    // pull은 가져온 뒤 병합이라 미리 알 수 없다: 끝난 뒤 보호 경로가 바뀌었으면 결과에 경고를 담는다(사용자·모델이 본다)
-    if let Some(b) = before.filter(|b| !b.is_empty()) {
-        let changed = changed_between(repo, &b, "HEAD");
-        let hits: Vec<&String> = changed.iter().filter(|p| ai_tool::write_protected(Path::new(p))).collect();
-        if !hits.is_empty() {
-            out.push_str(&format!("\n[warning] this pull changed protected configuration files (CI, editor, hook, agent settings): {}. Review them before running anything.", hits.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")));
+    // 4) 사전 검사가 놓친 경로(시작점·병합 결과·pull 등)는 **실행 전후 비교**로 막는다: 보호 경로가 달라지면 명령의 효과를 되돌리고 오류로 알린다
+    let tree_changing = matches!(args.first().map(String::as_str), Some("switch" | "merge" | "cherry-pick" | "revert" | "rebase" | "pull" | "rm")) || (args.first().map(String::as_str) == Some("stash") && args.get(1).map(String::as_str).is_none_or(|s| s != "list" && s != "show"));
+    let (t, err) = run_guarded(repo, &argv, args.first().map_or("git", String::as_str), tree_changing)?;
+    Ok(if err { format!("[git failed]\n{t}") } else { t })
+}
+
+/// 보호 경로(추적·untracked·ignored 모두)의 내용 스냅숏. `None` = 파일 없음
+type Protected = std::collections::BTreeMap<String, Option<Vec<u8>>>;
+
+struct Snap {
+    head: String,
+    /// `symbolic-ref`의 브랜치 이름(분리 HEAD면 None)
+    branch: Option<String>,
+    protected: Protected,
+}
+
+const SNAP_FILE_LIMIT: u64 = 4 << 20;
+
+fn snapshot(repo: &Path) -> Snap {
+    let git = |a: &[&str]| {
+        let mut argv = ai_tool::prefix(repo);
+        argv.extend(a.iter().map(|s| s.to_string()));
+        run_git(repo, &argv)
+    };
+    let head = git(&["rev-parse", "HEAD"]).0.trim().to_owned();
+    let branch = Some(git(&["symbolic-ref", "-q", "--short", "HEAD"]).0.trim().to_owned()).filter(|b| !b.is_empty() && !b.starts_with("git exited"));
+    let mut paths: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for a in [&["ls-files", "-z", "--cached", "--others", "--exclude-standard"][..], &["ls-files", "-z", "--others", "--ignored", "--exclude-standard"]] {
+        let (t, err) = git(a);
+        if !err {
+            paths.extend(t.split('\0').filter(|p| !p.is_empty()).map(str::to_owned));
         }
     }
-    Ok(out)
+    let mut protected = Protected::new();
+    for p in paths.into_iter().filter(|p| ai_tool::write_protected(Path::new(p))) {
+        let full = repo.join(&p);
+        let content = match full.symlink_metadata() {
+            Ok(m) if m.file_type().is_symlink() => std::fs::read_link(&full).ok().map(|t| [b"symlink:".to_vec(), t.to_string_lossy().into_owned().into_bytes()].concat()),
+            Ok(m) if m.is_file() && m.len() <= SNAP_FILE_LIMIT => std::fs::read(&full).ok(),
+            Ok(m) if m.is_file() => Some(format!("big:{}", m.len()).into_bytes()),
+            _ => None,
+        };
+        protected.insert(p, content);
+    }
+    Snap { head, branch, protected }
+}
+
+/// 진행 중인 merge·rebase·cherry-pick·revert를 `--abort`한다
+fn abort_in_progress(repo: &Path) {
+    let git_dir = repo.join(".git");
+    for (marker, op) in [("rebase-merge", "rebase"), ("rebase-apply", "rebase"), ("MERGE_HEAD", "merge"), ("CHERRY_PICK_HEAD", "cherry-pick"), ("REVERT_HEAD", "revert")] {
+        if git_dir.join(marker).exists() {
+            let mut argv = ai_tool::prefix(repo);
+            argv.extend([op.to_string(), "--abort".to_string()]);
+            let _ = run_git(repo, &argv);
+            return;
+        }
+    }
+}
+
+/// 작업 트리를 바꿀 수 있는 명령을 실행하고, 보호 경로가 달라졌으면 그 명령의 효과를 되돌린다(HEAD·브랜치 원위치 + 보호 경로 파일 원복). 되돌림까지 확인하지 못하면 그 사실을 오류에 담는다.
+fn run_guarded(repo: &Path, argv: &[String], cmd: &str, tree_changing: bool) -> Result<(String, bool), String> {
+    if !tree_changing {
+        return Ok(run_git(repo, argv));
+    }
+    let before = snapshot(repo);
+    let out = run_git(repo, argv);
+    let after = snapshot(repo);
+    let changed: Vec<String> = before.protected.keys().chain(after.protected.keys()).filter(|p| before.protected.get(*p) != after.protected.get(*p)).cloned().collect::<std::collections::BTreeSet<_>>().into_iter().collect();
+    if changed.is_empty() {
+        return Ok(out);
+    }
+    // 되돌리기: (1) 진행 중 작업 중단 (2) 브랜치·HEAD 원위치(`reset --keep`: 작업 중이던 변경은 보존) (3) 보호 경로 파일 원복
+    abort_in_progress(repo);
+    let git = |a: &[&str]| {
+        let mut v = ai_tool::prefix(repo);
+        v.extend(a.iter().map(|s| s.to_string()));
+        run_git(repo, &v)
+    };
+    let now = snapshot(repo);
+    if now.branch != before.branch {
+        let _ = match &before.branch {
+            Some(b) => git(&["switch", "--no-overwrite-ignore", b]),
+            None => git(&["switch", "--detach", &before.head]),
+        };
+    }
+    if snapshot_head(repo) != before.head && !before.head.is_empty() {
+        let _ = git(&["reset", "--keep", &before.head]);
+    }
+    for p in &changed {
+        let full = repo.join(p);
+        match before.protected.get(p).cloned().flatten() {
+            Some(bytes) if !bytes.starts_with(b"symlink:") && !bytes.starts_with(b"big:") => {
+                if let Some(dir) = full.parent() {
+                    let _ = std::fs::create_dir_all(dir);
+                }
+                let _ = std::fs::remove_file(&full);
+                let _ = std::fs::write(&full, bytes);
+            }
+            Some(_) => {} // 심볼릭 링크·큰 파일은 원복하지 못한다(아래 검증이 알린다)
+            None => {
+                let _ = std::fs::remove_file(&full);
+            }
+        }
+    }
+    let fin = snapshot(repo);
+    let restored = fin.head == before.head && fin.branch == before.branch && fin.protected == before.protected;
+    let list = changed.join(", ");
+    Err(if restored {
+        format!("refusing: this {cmd} changed protected configuration files (CI workflows, editor/agent settings, hooks, package-manager and build configuration): {list}. Its effects were reverted (HEAD, branch and those files are back as before). Ask the user to run it themselves.")
+    } else {
+        format!("WARNING: this {cmd} changed protected configuration files ({list}) and the automatic revert could not fully restore the previous state. Tell the user to inspect `git status` and those files before running anything.")
+    })
+}
+
+fn snapshot_head(repo: &Path) -> String {
+    let mut argv = ai_tool::prefix(repo);
+    argv.extend(["rev-parse".to_string(), "HEAD".to_string()]);
+    run_git(repo, &argv).0.trim().to_owned()
 }
 
 /// `a`와 `b` 사이에 바뀐 경로들(이름 변경은 양쪽)
@@ -272,8 +379,9 @@ fn preflight(repo: &Path, args: &[String]) -> Result<(), String> {
     let has = |f: &str| args.iter().any(|a| a == f);
     let mut incoming: Vec<String> = Vec::new();
     match sub {
-        "switch" if !has("-c") && !has("--create") => {
-            for t in positionals(args, &[]).into_iter().take(1) {
+        // `switch <브랜치>`의 대상, `switch -c <새 이름> <시작점>`의 시작점(첫 위치 인자)
+        "switch" => {
+            for t in positionals(args, &["-c", "--create"]).into_iter().take(1) {
                 incoming.extend(changed_between(repo, "HEAD", if t == "-" { "@{-1}" } else { t }));
             }
         }
@@ -300,15 +408,23 @@ fn preflight(repo: &Path, args: &[String]) -> Result<(), String> {
         }
         "rebase" if !(has("--abort") || has("--continue") || has("--quit") || has("--skip")) => {
             // 다시 쌓는 대상(--onto 또는 upstream)의 내용이 작업 트리가 된다
+            // `rebase <upstream> [<branch>]`·`--onto <X> <upstream> <branch>`: 새 바탕(X 또는 upstream)과 다시 쌓을 브랜치 모두
             let onto = args.iter().position(|a| a == "--onto").and_then(|i| args.get(i + 1)).map(String::as_str);
             let pos = positionals(args, &["--onto", "--empty", "-X"]);
-            if let Some(t) = onto.or(pos.first().copied()) {
+            for t in onto.into_iter().chain(pos) {
                 incoming.extend(changed_between(repo, "HEAD", t));
             }
         }
         "stash" if args.get(1).map(String::as_str) == Some("apply") => {
             let r = positionals(&args[1..], &[]).first().map_or("stash@{0}".to_string(), |s| s.to_string());
             incoming.extend(changed_between(repo, &format!("{r}^"), &r));
+            // untracked 파일을 담은 세 번째 부모(`stash push -u`)
+            let mut argv = ai_tool::prefix(repo);
+            argv.extend(["ls-tree", "-r", "--name-only", "-z", &format!("{r}^3")].map(String::from));
+            let (o, err) = run_git(repo, &argv);
+            if !err {
+                incoming.extend(o.split('\0').map(str::to_owned).filter(|p| !p.is_empty()));
+            }
         }
         _ => {}
     }
@@ -432,8 +548,8 @@ mod tests {
         assert!(tool(&p, "git", json!({"args": "log"})).1 && tool(&p, "git", json!({"args": [1]})).1 && tool(&p, "git", json!({})).1);
         // 원격은 설정된 이름만: URL·경로는 거절, 설정된 이름은 통과(여기선 실패해도 검증은 통과해 git이 실행된다)
         assert!(tool(&p, "git", json!({"args": ["push", "/tmp/x"]})).0.starts_with("rejected:"));
-        std::process::Command::new("git").current_dir(&p).args(["remote", "add", "origin", "/nonexistent/x.git"]).output().unwrap();
-        assert!(tool(&p, "git", json!({"args": ["push", "/nonexistent/x.git"]})).0.starts_with("rejected:"));
+        std::process::Command::new("git").current_dir(&p).args(["remote", "add", "origin", "https://example.invalid/x.git"]).output().unwrap();
+        assert!(tool(&p, "git", json!({"args": ["push", "https://example.invalid/x.git"]})).0.starts_with("rejected:"));
         let (t, e) = tool(&p, "git", json!({"args": ["push", "origin", "main"]}));
         assert!(e && t.starts_with("[git failed]"), "검증은 통과하고 git이 실패: {t}");
     }
@@ -460,7 +576,7 @@ mod tests {
     #[test]
     fn network_commands_fail_closed_without_a_confirmed_fingerprint() {
         let (_d, p) = repo();
-        git_ok(&p, &["remote", "add", "origin", "/nonexistent/x.git"]);
+        git_ok(&p, &["remote", "add", "origin", "https://example.invalid/x.git"]);
         let line = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "git", "arguments": {"args": ["push", "origin", "main"]}}}).to_string();
         for fp in [None, Some("".to_string())] {
             let r = handle_with(&p, &line, &Confirmed { remote: fp, config: confirmed_now(&p).config }).unwrap();
@@ -543,7 +659,7 @@ mod tests {
         }
         git_ok(&p, &["config", "--unset", "core.worktree"]);
         // 백업 이름공간을 덮어쓰는 fetch 설정·mirror·push 설정도 거절
-        git_ok(&p, &["remote", "add", "origin", "/nonexistent/x.git"]);
+        git_ok(&p, &["remote", "add", "origin", "https://example.invalid/x.git"]);
         for (k, v) in [("remote.origin.fetch", "+refs/heads/main:refs/git403/ai-backup/1"), ("remote.origin.mirror", "true"), ("remote.origin.push", "refs/heads/*:refs/heads/*")] {
             git_ok(&p, &["config", "--add", k, v]);
             let c = confirmed_now(&p);
@@ -601,8 +717,74 @@ mod tests {
         assert!(!tool(&p, "git", json!({"args": ["switch", "ok"]})).1);
     }
 
+    fn head_of(p: &Path) -> String {
+        String::from_utf8_lossy(&Command::new("git").current_dir(p).args(["rev-parse", "HEAD"]).output().unwrap().stdout).trim().to_string()
+    }
+    fn status_of(p: &Path) -> String {
+        String::from_utf8_lossy(&Command::new("git").current_dir(p).args(["status", "--porcelain=v1", "--untracked-files=all", "--ignored"]).output().unwrap().stdout).into_owned()
+    }
+
+    /// 6차 리뷰 높음4: 사전 검사가 놓치는 경로(pull·시작점·rebase branch 인자·stash의 untracked 부모)는 **실행 전후 비교**가 막고 효과를 되돌린다.
+    /// 사전 검사를 거치지 않고 `run_guarded`에 직접 넣어 되돌림 자체의 안전성을 실제 git으로 확인한다.
     #[test]
-    fn pull_that_changes_protected_paths_warns_in_the_result() {
+    fn guarded_run_reverts_commands_that_change_protected_paths() {
+        let (_d, p) = repo();
+        git_ok(&p, &["switch", "-qc", "evil"]);
+        std::fs::create_dir_all(p.join(".github/workflows")).unwrap();
+        std::fs::write(p.join(".github/workflows/x.yml"), "on: push\n").unwrap();
+        std::fs::write(p.join("CLAUDE.md"), "do bad\n").unwrap();
+        std::fs::write(p.join("ok.txt"), "fine\n").unwrap();
+        git_ok(&p, &["add", "."]);
+        git_ok(&p, &["commit", "-qm", "evil"]);
+        git_ok(&p, &["switch", "-q", "main"]);
+        let evil = String::from_utf8_lossy(&Command::new("git").current_dir(&p).args(["rev-parse", "evil"]).output().unwrap().stdout).trim().to_string();
+        // 사용자의 기존 변경(보호 경로 포함)은 보존돼야 한다
+        std::fs::write(p.join("mine.txt"), "untracked\n").unwrap();
+        std::fs::write(p.join("AGENTS.md"), "my notes\n").unwrap();
+        let remotes: Vec<String> = vec![];
+        let run = |args: &[&str]| {
+            let a: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+            let argv = ai_tool::validate(&a, &p, &remotes).unwrap_or_else(|e| panic!("{args:?}: {e}"));
+            run_guarded(&p, &argv, args[0], true)
+        };
+        let (h0, s0) = (head_of(&p), status_of(&p));
+        for args in [vec!["switch", "evil"], vec!["switch", "-c", "x", "evil"], vec!["merge", "evil"], vec!["merge", "--no-ff", "-m", "m", "evil"], vec!["cherry-pick", &evil], vec!["rebase", "evil"], vec!["rebase", "main", "evil"]] {
+            let r = run(&args);
+            let e = r.expect_err(&format!("{args:?}가 통과함"));
+            assert!(e.contains("protected configuration files") && e.contains("reverted"), "{args:?}: {e}");
+            assert_eq!(head_of(&p), h0, "{args:?}: HEAD");
+            assert_eq!(String::from_utf8_lossy(&Command::new("git").current_dir(&p).args(["symbolic-ref", "--short", "HEAD"]).output().unwrap().stdout).trim(), "main", "{args:?}: 브랜치");
+            assert!(!p.join(".github").exists() && !p.join("CLAUDE.md").exists() && !p.join("ok.txt").exists(), "{args:?}: 파일이 남음");
+            assert_eq!(std::fs::read_to_string(p.join("AGENTS.md")).unwrap(), "my notes\n", "{args:?}: 기존 보호 파일");
+            assert_eq!(std::fs::read_to_string(p.join("mine.txt")).unwrap(), "untracked\n");
+            // 새로 만든 브랜치 x는 남을 수 있으니 상태 비교에서 제외하려 지운다
+            let _ = Command::new("git").current_dir(&p).args(["branch", "-D", "x"]).output();
+            assert_eq!(status_of(&p), s0, "{args:?}: 작업 트리 상태");
+        }
+        // 보호 경로가 없는 것은 그대로 통과
+        git_ok(&p, &["branch", "fine"]);
+        assert!(run(&["switch", "fine"]).is_ok());
+        git_ok(&p, &["switch", "-q", "main"]);
+        // stash apply: untracked(^3)에 담긴 보호 경로
+        git_ok(&p, &["stash", "push", "-q", "-u", "--", "mine.txt"]);
+        std::fs::write(p.join(".envrc"), "export X=1\n").unwrap();
+        git_ok(&p, &["stash", "push", "-q", "-u", "--", ".envrc"]);
+        let (h1, s1) = (head_of(&p), status_of(&p));
+        let e = run(&["stash", "apply"]).expect_err("stash apply가 통과함");
+        assert!(e.contains("protected") && !p.join(".envrc").exists(), "{e}");
+        assert_eq!((head_of(&p), status_of(&p)), (h1, s1));
+        // rm: 보호 경로 삭제도 되돌린다
+        std::fs::write(p.join(".gitattributes"), "* text=auto\n").unwrap();
+        git_ok(&p, &["add", ".gitattributes"]);
+        git_ok(&p, &["commit", "-qm", "attrs"]);
+        let e = run(&["rm", ".gitattributes"]).expect_err("rm이 통과함");
+        assert!(e.contains("reverted") && p.join(".gitattributes").exists());
+        assert_eq!(std::fs::read_to_string(p.join(".gitattributes")).unwrap(), "* text=auto\n");
+    }
+
+    /// pull(local 원격은 시험에서만 `run_guarded`로 직접): 가져온 변경에 보호 경로가 있으면 병합 효과를 되돌린다
+    #[test]
+    fn pull_that_brings_protected_paths_is_reverted() {
         let (_d, p) = repo();
         let bare = tempfile::tempdir().unwrap();
         git_ok(bare.path(), &["init", "-q", "--bare", "-b", "main"]);
@@ -614,10 +796,17 @@ mod tests {
         let o = other.path().join("o");
         std::fs::create_dir_all(o.join(".github")).unwrap();
         std::fs::write(o.join(".github/ci.yml"), "x\n").unwrap();
+        std::fs::write(o.join("fine.txt"), "f\n").unwrap();
         git_ok(&o, &["add", "."]);
         git_ok(&o, &["commit", "-qm", "ci"]);
         git_ok(&o, &["push", "-q", "origin", "main"]);
-        let (t, e) = tool(&p, "git", json!({"args": ["pull", "origin", "main"]}));
-        assert!(!e && t.contains("[warning]") && t.contains(".github/ci.yml"), "{t}");
+        let (h0, s0) = (head_of(&p), status_of(&p));
+        let mut argv = ai_tool::validate(&["pull".to_string(), "origin".into(), "main".into()], &p, &["origin".to_string()]).unwrap();
+        // 시험은 로컬 bare 원격을 쓰므로 앱이 막는 file 전송만 이 호출에서 연다(실제 AI 호출은 로컬 원격 자체를 거절한다)
+        argv.splice(ai_tool::prefix(&p).len()..ai_tool::prefix(&p).len(), ["-c".to_string(), "protocol.file.allow=always".into()]);
+        let e = run_guarded(&p, &argv, "pull", true).expect_err("pull이 통과함");
+        assert!(e.contains(".github/ci.yml") && e.contains("reverted"), "{e}");
+        assert_eq!((head_of(&p), status_of(&p)), (h0, s0));
+        assert!(!p.join(".github").exists());
     }
 }
