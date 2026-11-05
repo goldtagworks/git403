@@ -280,6 +280,12 @@ const aiStatus = (): AiStatus => {
   return { ...providers.find((x) => x.provider === aiSelected())!, providers, conventions: (window as any).__aiConv ?? true };
 };
 const AI_SOURCES: AiSource[] = [{ kind: "skill", path: ".claude/skills/commit-message/SKILL.md", truncated: false }, { kind: "agents", path: "AGENTS.md", truncated: false }, { kind: "history", path: "git log -n 20", truncated: false }];
+// plugin-notification의 sendNotification은 window.Notification을 쓴다(실제 앱에서는 Tauri가 주입하는 대체 구현) → 기록만 남기는 가짜
+(window as any).Notification = class { static permission = "granted"; static requestPermission = async () => "granted"; constructor(title: string, o?: { body?: string }) { gitCalls.push(["notify", title, o?.body ?? ""]); } };
+const chatCfg = { save: true, retentionDays: 90 };
+const chatHist = new Map<string, any[]>();
+const chatRun = new Map<string, (cancel: boolean) => void>();
+let chatSeq = 0;
 const aiPending = new Map<string, (e: string) => void>();
 const AI_RESULTS: AiResults = {
   commit: { subject: "feat: AI 커밋 메시지 추가", body: "스테이지된 변경을 요약합니다." },
@@ -603,6 +609,66 @@ function handle(cmd: string, args: any): any {
     if (cmd === "plugin:process|restart") return void gitCalls.push(["relaunch"]);
     if (cmd === "plugin:window|hide") return void gitCalls.push(["window_hide"]);
     if (cmd === "plugin:resources|close") return null;
+    // AI 채팅: window.__chatScript(이벤트 배열, 기본 pull 충돌 해결 시나리오), __chatSlow(이벤트 간격 ms, 기본 30), __chatNoBackup, __chatFail(시작 오류 문구).
+    //   기록은 __git에 ai_chat_start·ai_chat_cancel·ai_backup_restore·ai_history_clear·notify로 남는다. window.__restoreFail(코드 오류 {code, vars}) = 되돌리기 실패.
+    if (cmd === "plugin:notification|is_permission_granted") return true;
+    if (cmd === "ai_chat_settings") return chatCfg;
+    if (cmd === "ai_chat_settings_set") {
+      const a = args as { save?: boolean; retentionDays?: number };
+      if (a.retentionDays === 0) throw JSON.stringify({ code: "aiChat.badRetention", vars: {}, message: "Retention must be at least 1 day" });
+      Object.assign(chatCfg, a);
+      return gitCalls.push(["ai_chat_settings_set", JSON.stringify(a)]), null;
+    }
+    if (cmd === "ai_history_list") return [...chatHist].map(([conversation, e]) => ({ conversation, title: e[0].input.split("\n")[0].slice(0, 80), time: e[e.length - 1].time, turns: e.length })).sort((a, b) => b.time - a.time);
+    if (cmd === "ai_history_read") return chatHist.get((args as any).conversation) ?? [];
+    if (cmd === "ai_history_clear") return chatHist.clear(), gitCalls.push(["ai_history_clear", (args as any).repo]), null;
+    if (cmd === "ai_backup_restore") {
+      const w = window as any;
+      gitCalls.push(["ai_backup_restore", JSON.stringify({ id: (args as any).id, branch: (args as any).branch ?? null, abortOngoing: !!(args as any).abortOngoing })]);
+      if (w.__restoreFail && !(args as any).abortOngoing) throw JSON.stringify({ ...w.__restoreFail, message: "in progress" });
+      return null;
+    }
+    if (cmd === "ai_chat_cancel") {
+      const c = (args as any).conversation as string;
+      gitCalls.push(["ai_chat_cancel", c]);
+      chatRun.get(c)?.(true);
+      return null;
+    }
+    if (cmd === "ai_chat_start") {
+      const w = window as any;
+      const { repo, conversation, input, sessionId } = args as { repo: string; conversation: string; input: string; sessionId?: string };
+      gitCalls.push(["ai_chat_start", JSON.stringify({ repo, conversation, input, ...(sessionId ? { sessionId } : {}) })]);
+      if (!aiState().consent) throw JSON.stringify({ code: "ai.consentRequired", vars: {}, message: "Consent to use AI is required" });
+      if (w.__chatFail) throw w.__chatFail;
+      if (chatRun.has(conversation)) throw JSON.stringify({ code: "aiChat.busy", vars: {}, message: "busy" });
+      const backup = w.__chatNoBackup ? null : { id: `b${++chatSeq}`, ref: `refs/git403/ai-backup/b${chatSeq}`, sha: "abc1234abc1234abc1234abc1234abc1234abc12", branch: "main" };
+      const script: any[] = w.__chatScript ?? [
+        { kind: "text", text: "원격 변경을 가져옵니다." },
+        { kind: "tool", id: "t1", name: "Bash", command: "git pull --no-rebase origin main" },
+        { kind: "toolResult", id: "t1", output: "CONFLICT (content): Merge conflict in a.txt", isError: true },
+        { kind: "tool", id: "t2", name: "Read", command: `${repo}/ui/src/Toolbar.tsx` },
+        { kind: "toolResult", id: "t2", output: "export function Toolbar() {}", isError: false },
+        { kind: "tool", id: "t3", name: "Edit", command: `${repo}/crates/core/src/status.rs` },
+        { kind: "toolResult", id: "t3", output: "edited", isError: false },
+        { kind: "text", text: "충돌을 해결하고 병합을 마쳤습니다." },
+        { kind: "done", sessionId: `sess-${chatSeq}`, result: "충돌을 해결하고 병합을 마쳤습니다.", isError: false },
+      ];
+      const timers: number[] = [];
+      const end = (last: any) => {
+        timers.forEach(clearTimeout);
+        chatRun.delete(conversation);
+        const status = last.kind === "done" ? (last.isError ? "error" : "done") : last.kind === "cancelled" ? "cancelled" : "error";
+        const answer = script.filter((e) => e.kind === "text").map((e) => e.text).join("");
+        if (chatCfg.save) {
+          const list = chatHist.get(conversation) ?? [];
+          chatHist.set(conversation, [...list, { time: Date.now(), repo, input, answer, commands: script.filter((e) => e.kind === "tool").map((e) => `${e.name}: ${e.command}`), backup, sessionId: last.sessionId ?? sessionId ?? null, status }]);
+        }
+        emit("ai-chat", { conversation, event: last });
+      };
+      chatRun.set(conversation, () => end({ kind: "cancelled" }));
+      script.forEach((event, i) => timers.push(window.setTimeout(() => (i === script.length - 1 ? end(event) : emit("ai-chat", { conversation, event })), (i + 1) * (w.__chatSlow ?? 30))));
+      return backup;
+    }
     if (cmd === "ai_status") {
       return aiStatus();
     }

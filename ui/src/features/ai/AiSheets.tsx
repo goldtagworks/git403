@@ -1,3 +1,4 @@
+import { AiChatSettings } from "./AiChat";
 import { SettingsGroup, SettingsNote, SettingsRow } from "../../shared/ui/SettingsLayout";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../shared/api/api";
@@ -199,6 +200,7 @@ export function AiPanel() {
           <button type="button" disabled={!st.consent} onClick={() => run(() => api.aiSettingsSet({ consent: false }))}>{t("ai.consentReset")}</button>
         </SettingsRow>
       </SettingsGroup>
+      <AiChatSettings />
       {err && <p className="warn selectable" role="alert">{err}</p>}
     </form>
   );

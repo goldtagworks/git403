@@ -33,6 +33,7 @@ export function App({ port, home, env = {} }) {
     },
     exited: () => new Promise((r) => (app.proc.exitCode !== null ? r() : app.proc.once("exit", r))),
     async js(body, raw = false) {
+      if (process.env.E2E_TRACE) console.error("js>", body.trim().slice(0, 90).replace(/\s+/g, " "));
       for (let i = 0; ; i++) {
         try {
           const res = await fetch(`http://127.0.0.1:${port}`, { method: "POST", body: raw ? body : PRELUDE + body });
@@ -59,11 +60,12 @@ export function Steps() {
   const results = [];
   return {
     async step(name, fn) {
+      if (process.env.E2E_ONLY && !name.includes(process.env.E2E_ONLY)) return; // 개발용: E2E_ONLY="이미지 diff" node e2e/app/run.mjs
       try {
         await fn();
         results.push(["✓", name]);
       } catch (e) {
-        try { execFileSync("screencapture", ["-x", SHOT]); } catch {}
+        try { execFileSync("screencapture", ["-x", SHOT.replace(".png", `-${results.length}.png`)]); } catch {}
         results.push(["✗", name, `${e.message ?? e} (화면: ${SHOT})`]);
       }
     },

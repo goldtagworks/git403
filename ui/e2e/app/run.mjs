@@ -2,9 +2,9 @@
 // 진짜 IPC·진짜 git으로 화면을 조작한 뒤 결과를 git CLI로 확인한다. (src-tauri/src/e2e.rs 다리 사용)
 // 실행: pnpm --dir ui e2e:app  (프런트엔드를 넣은 디버그 빌드 후 실행. cargo build만 하면 dev 서버를 찾는다)
 import { execFileSync } from "node:child_process";
-import { writeFileSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { writeFileSync, rmSync, existsSync, readFileSync, mkdirSync, chmodSync } from "node:fs";
 import { join, basename } from "node:path";
-import { App, Steps, eq, temp } from "./lib.mjs";
+import { App, Steps, eq, temp, until } from "./lib.mjs";
 
 const PORT = 47403;
 const repo = temp("e2e");
@@ -27,7 +27,16 @@ git("commit", "-q", "--allow-empty", "-m", "숨길 브랜치만의 커밋");
 git("checkout", "-q", "main");
 writeFileSync(join(repo, "new.txt"), "새 파일\n");
 
-const A = App({ port: PORT, home });
+// AI 채팅 시나리오용 가짜 claude(fake-claude.mjs): 앱이 로그인 셸 PATH를 앞에 붙이므로(shellenv) 임시 HOME의 셸 rc에도 PATH를 넣어 진짜 claude보다 먼저 잡히게 한다
+const fakeBin = join(home, "fakebin");
+const fakeLog = join(home, "fake-claude.json");
+if (process.platform !== "win32") {
+  mkdirSync(fakeBin);
+  writeFileSync(join(fakeBin, "claude"), `#!/bin/sh\nexec "${process.execPath}" "${join(import.meta.dirname, "fake-claude.mjs")}" "$@"\n`);
+  chmodSync(join(fakeBin, "claude"), 0o755);
+  for (const rc of [".zshenv", ".zprofile", ".zshrc", ".bash_profile", ".profile"]) writeFileSync(join(home, rc), `export PATH="${fakeBin}:$PATH"\n`);
+}
+const A = App({ port: PORT, home, env: process.platform === "win32" ? {} : { PATH: `${fakeBin}:${process.env.PATH}`, FAKE_CLAUDE_LOG: fakeLog } });
 const { js, nat } = A;
 const launch = (args) => (A.launch(args), A.proc);
 const exited = (p) => new Promise((r) => (p.exitCode !== null ? r() : p.once("exit", r)));
@@ -133,15 +142,15 @@ try {
     git("commit", "-qm", "그림 추가");
     writeFileSync(join(repo, "pic.png"), Buffer.from(BLUE, "base64"));
     git("commit", "-qam", "그림 수정");
-    await js(`
-      press(await waitFor(() => byText(".commits .subject", "그림 수정"), "그림 수정 커밋"));
-      press(await waitFor(() => $$("[role=option]").find((o) => o.textContent.includes("pic.png")), "pic.png"));
-      const info = await waitFor(() => $(".img-info"), "이미지 diff 정보");
-      await waitFor(() => $(".img-info").textContent.includes("바뀐 픽셀 4.7%"), "바뀐 픽셀 %");
-      const st = $(".img-stage").getBoundingClientRect();
-      await waitFor(() => $$(".img-layer").length === 2, "나란히 모드 이미지 두 장 (stage " + st.width + "×" + st.height + ", mode " + localStorage.getItem("imgDiffMode") + ")");
-      if (!$(".img-info").textContent.includes("변경 영역 (5, 6) 4×3")) throw new Error("변경 영역: " + $(".img-info").textContent);
-    `);
+    // 웹뷰 안의 waitFor는 창이 가려지면 타이머가 느려져 멈춘 듯 보이므로, 파일 감시가 새 커밋을 그리는 걸 웹뷰 밖에서 먼저 기다린다
+    await until(() => js(`return !!byText(".commits .subject", "그림 수정")`), "그래프에 그림 수정 커밋", 30000);
+    await js(`press(byText(".commits .subject", "그림 수정")); return 1`);
+    await until(() => js(`return !!$$("[role=option]").find((o) => o.textContent.includes("pic.png"))`), "pic.png 파일 줄", 30000);
+    await js(`press($$("[role=option]").find((o) => o.textContent.includes("pic.png"))); return 1`);
+    const info = () => js(`return $(".img-info")?.textContent ?? ""`);
+    await until(async () => (await info()).includes("바뀐 픽셀 4.7%"), "바뀐 픽셀 %", 30000).catch(async (e) => { throw new Error(`${e.message}: ${await info()}`); });
+    await until(() => js(`return $$(".img-layer").length === 2`), "나란히 모드 이미지 두 장", 30000);
+    if (!(await info()).includes("변경 영역 (5, 6) 4×3")) throw new Error("변경 영역: " + (await info()));
     git("reset", "-q", "--hard", "HEAD~2"); // 뒤 단계가 HEAD를 "바깥에서 만든 커밋"으로 가정한다
   });
 
@@ -365,6 +374,69 @@ try {
     } finally {
       git("reset", "-q", "--hard", orig);
       git("stash", "clear");
+    }
+  });
+
+  if (process.platform !== "win32") await step("AI 채팅: 충돌 난 pull 실패 → 'AI에게 맡기기' → (가짜 claude가 진짜 git으로 병합·해결) → 이력 → 되돌리기 (진짜 IPC)", async () => {
+    const orig = git("rev-parse", "HEAD");
+    const bare = temp("e2e-ai-bare");
+    const other = temp("e2e-ai-other");
+    const gitAt = (cwd) => (...a) => execFileSync("git", a, { cwd, encoding: "utf8" }).trim();
+    try {
+      execFileSync("git", ["clone", "-q", "--bare", repo, bare]);
+      execFileSync("git", ["clone", "-q", bare, other]);
+      const o = gitAt(other);
+      o("config", "user.name", "Other");
+      o("config", "user.email", "o@example.com");
+      o("config", "core.autocrlf", "false");
+      writeFileSync(join(other, "a.txt"), "원격 쪽\n");
+      o("commit", "-qam", "원격에서 a.txt 수정");
+      o("push", "-q", "origin", "HEAD:main");
+      git("remote", "add", "origin", bare);
+      git("fetch", "-q", "origin");
+      git("branch", "--set-upstream-to=origin/main", "main");
+      writeFileSync(join(repo, "a.txt"), "내 쪽\n");
+      git("commit", "-qam", "내 쪽에서 a.txt 수정");
+      const mine = git("rev-parse", "HEAD");
+      // 동의는 미리 저장해 둔다 (OS 확인창은 E2E에서 누를 수 없다)
+      await js(`await window.__TAURI_INTERNALS__.invoke("ai_settings_set", { provider: "anthropic", consent: true });`);
+      await js(`localStorage.setItem("aiChatOpen", "{}"); setTimeout(() => location.reload(), 0);`);
+      await new Promise((r) => setTimeout(r, 1000));
+      await js(`await waitFor(() => $(".status-branch .ab"), "상태(추적 브랜치)", 20000);`); // 상태가 읽혀야 Pull이 추적 브랜치를 명시한다
+      await js(`press(await waitFor(() => $$('.toolbar button[aria-label="Pull"]').find((b) => !b.disabled), "Pull 버튼", 20000));`);
+      await js(`
+        const toast = await waitFor(() => $$(".toast").find((t) => t.textContent.includes("Pull 실패")), "Pull 실패 토스트: " + $$(".toast").map((t) => t.textContent).join("|"), 9000);
+        const b = $$("button", toast).find((b) => b.textContent === "AI에게 맡기기");
+        if (!b) throw new Error("AI에게 맡기기 버튼 없음: " + toast.textContent);
+        press(b);
+      `);
+      await js(`await waitFor(() => $('aside[aria-label="AI 채팅"]'), "AI 열");`);
+      // 웹뷰 밖에서 폴링한다 (창이 가려지면 웹뷰 타이머가 느려져 안쪽 waitFor가 길어진다)
+      const aside = () => js(`return $('aside[aria-label="AI 채팅"]')?.innerText ?? ""`);
+      await until(async () => (await aside()).includes("충돌을 해결했습니다."), "AI 답: " + (await aside()), 30000).catch(async (e) => { throw new Error(`${e.message} — fake 실행됨: ${existsSync(fakeLog)} — ${await aside()}`); });
+      await js(`
+        await waitFor(() => byText('aside[aria-label="AI 채팅"] button', "이 작업 되돌리기"), "되돌리기 줄");
+        if (!$$('aside[aria-label="AI 채팅"] .ai-tool-cmd').some((e) => e.textContent === "git commit --no-edit")) throw new Error("도구 줄 없음");
+      `);
+      const log = JSON.parse(readFileSync(fakeLog, "utf8"));
+      eq(log.cwd.includes(basename(repo)), true, "저장소 폴더에서 실행");
+      const prompt = log.argv.join(" ");
+      if (!prompt.includes("git pull") || !prompt.includes("fast-forward")) throw new Error("오류 내용을 담은 입력이 아님: " + prompt.slice(0, 300));
+      await until(() => git("log", "-1", "--format=%P").split(" ").length === 2, "병합 커밋(부모 둘)");
+      eq(readFileSync(join(repo, "a.txt"), "utf8"), "합친 결과\n", "충돌이 해결된 내용");
+      eq(git("status", "--porcelain").includes("a.txt"), false, "a.txt 정리됨");
+      // 이력에 남고, 그 백업으로 되돌리면 병합 전(내 커밋)으로 돌아간다
+      const hist = await js(`const l = await window.__TAURI_INTERNALS__.invoke("ai_history_list", { repo: ${JSON.stringify(repo)} }); const e = await window.__TAURI_INTERNALS__.invoke("ai_history_read", { repo: ${JSON.stringify(repo)}, conversation: l[0].conversation }); return { n: l.length, turns: l[0].turns, status: e[0].status, backup: e[0].backup, sid: e[0].sessionId };`);
+      eq([hist.n, hist.turns, hist.status, hist.sid], [1, 1, "done", "fake-sess"], "이력");
+      await js(`await window.__TAURI_INTERNALS__.invoke("ai_backup_restore", { repo: ${JSON.stringify(repo)}, id: ${JSON.stringify(hist.backup.id)}, branch: ${JSON.stringify(hist.backup.branch)} });`);
+      eq(git("rev-parse", "HEAD"), mine, "되돌린 뒤 HEAD");
+      eq(git("rev-parse", "main"), mine, "되돌린 뒤 main");
+    } finally {
+      git("reset", "-q", "--hard", orig);
+      try { git("remote", "remove", "origin"); } catch {}
+      await js(`localStorage.setItem("aiChatOpen", "{}"); setTimeout(() => location.reload(), 0);`).catch(() => {});
+      await new Promise((r) => setTimeout(r, 1000));
+      for (const d of [bare, other]) rmSync(d, { recursive: true, force: true });
     }
   });
 

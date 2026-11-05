@@ -13,8 +13,10 @@ import type { MenuEntry } from "../ui/menu";
 import { autoRule, jiraCfg, jiraEffective, jiraRule, jiraSuggest, parseRules, type IssueRule, type JiraSuggestion } from "../lib/issues";
 import { GIT_SETTINGS_RE, JIRA_RE, parseConfig, pref, setPref, validEmail, type Prefs } from "../lib/settings";
 import { aiProvider } from "./aiProviders";
-import type { AiEffort, AiPart, AiResults, AiStatus, AiTask, Commit, HostAccount, Ref, RemoteInfo, Status } from "../api/types";
+import { WORKTREE, type AiEffort, type AiPart, type AiResults, type AiStatus, type AiTask, type Commit, type HostAccount, type Ref, type RemoteInfo, type Status } from "../api/types";
 import { guide } from "./guide";
+import { aiChat } from "./aichat";
+import { fileWant } from "./selection";
 
 /** localStorage 읽기·쓰기 (막혀 있으면 기본값) */
 export const stored = <T,>(key: string, fallback: T): T => {
@@ -83,6 +85,8 @@ export const ctx = {
   setIssues: (_rules: IssueRule[]) => {},
   /** 저장소 열기(탭 추가·활성화) */
   open: (_path: string) => {},
+  /** 그래프에서 커밋(또는 WORKTREE) 선택 (App이 등록) */
+  select: (_id: string) => {},
   /** 탭 묶음 교체 (작업공간) */
   setTabs: (_paths: string[]) => {},
   /** 폴더 스캔으로 찾은 저장소를 목록에 추가 */
@@ -248,10 +252,19 @@ async function git(args: string[], done?: string, detail?: string) {
     if (done) ctx.notify(done, { detail });
     return true;
   } catch (e) {
-    ctx.error(String(e));
+    const text = String(e);
+    const action = aiHandoff(args[0], args, text);
+    action ? toast(text, { kind: "error", action }) : ctx.error(text);
     return false;
   }
 }
+
+/** 실패 토스트의 "AI에게 맡기기": 원격·히스토리 작업(pull·push·rebase·merge·cherry-pick·revert)이 실패했을 때만, 열을 열고 오류를 담은 새 대화를 시작한다 */
+const HANDOFF = ["pull", "push", "rebase", "merge", "cherry-pick", "revert"];
+export const aiHandoff = (cmd: string | undefined, args: string[], error: string, repo = ctx.repo) =>
+  aiChat.available && cmd && HANDOFF.includes(cmd) && repo
+    ? { label: t("aiChat.handoffBtn"), run: () => aiChat.ask(repo, t("aiChat.handoff", { cmd: "git " + args.filter((a) => a !== "--progress").join(" "), error: error.trim() })) }
+    : undefined;
 
 /** 스태시 명령. 다른 곳에서 이미 꺼냈거나 지운 스태시면 오류 대신 안내하고 목록을 새로 읽는다. */
 async function stashGit(args: string[], done: string) {
@@ -1660,6 +1673,17 @@ export const ops = {
   // ---- 설정 (설정 창: SettingsSheet.tsx, docs/reuse.md) ----
   openSettings: (tab?: string) => ctx.showSettings(tab),
   /** 커밋 상세 위치 전환 (오른쪽 ↔ 아래). 탭 줄 버튼·⌘⌥B·보기 메뉴·빠른 실행 */
+  /** AI 채팅 열(⌘J) 열기·닫기 / 이 입력으로 새 대화 시작 / 채팅이 건드린 파일을 diff 화면에서 열기 */
+  aiChatToggle: () => aiChat.toggle(ctx.repo),
+  aiChatAsk: (input: string) => aiChat.ask(ctx.repo, input),
+  aiChatOpenFile: (path: string) => {
+    const wt = ctx.status?.files.some((f) => f.path === path);
+    const head = ctx.refs.find((r) => r.head)?.target ?? ctx.commits[0]?.id;
+    const id = wt ? WORKTREE : head;
+    if (!id) return;
+    fileWant.request(path);
+    ctx.select(id);
+  },
   toggleLayout: () => setPref("detailLayout", pref("detailLayout") === "right" ? "bottom" : "right"),
   /** git config 값 읽기. scope = global | local | all(우선순위 적용). 저장소가 없으면 홈 폴더에서 실행하므로 global은 항상 된다. 키는 소문자 */
   cfgRead: async (scope: "global" | "local" | "all", re: string = GIT_SETTINGS_RE) => {

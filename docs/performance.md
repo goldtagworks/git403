@@ -40,6 +40,7 @@
   - 설정 가져오기에서 언어가 같은 파일은 렌더 횟수를 늘리지 않는다(`onPrefs`가 언어 불변이면 구독자를 깨우지 않음).
   - PR sha 호버 카드: 카드가 뜨는 순간과 같은 sha 위 재호버는 `PrReview`·`PrPopupHost`·`Popup`(팝업 본체)·그래프·사이드바·상세·툴바·상태바를 다시 그리지 않는다(`ShaCard`만 구독, 같은 sha 카드가 떠 있으면 `prSha.hover`가 무시).
   - 로컬 변경사항 넓게 보기를 끄면(← 그래프로) `CommitGraph`/`Sidebar`를 다시 그리지 않는다.
+  - AI 채팅 열(열기·닫기·스트림 이벤트·입력·끝난 뒤 새로고침)은 `CommitGraph`/`Sidebar`/`Details`/`Toolbar`/`StatusBar`를 다시 그리지 않는다(상태는 `aichat.ts` 외부 스토어, 입력 글자는 `ChatInput` 안, 상태바는 `useChatHidden` 불리언만 구독 — 열이 닫힌 채 진행 중일 때만 `AiChatStatusItem`이 다시 그려진다).
 - 리뷰할 때 확인할 것: 새 `useState`가 App 같은 상위 컴포넌트에 생기는지, 그 값이 얼마나 자주 바뀌는지.
 
 ## 4. 번들과 의존성

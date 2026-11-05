@@ -63,6 +63,7 @@ pub fn run() {
             .plugin(window_state.build())
             .plugin(tauri_plugin_updater::Builder::new().build())
             .plugin(tauri_plugin_process::init())
+            .plugin(tauri_plugin_notification::init()) // AI 채팅 작업이 끝났을 때 앱이 백그라운드면 OS 알림
     };
     builder
         .setup(move |app| {

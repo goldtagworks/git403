@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { fileWant, useFileWant } from "../../shared/model/selection";
 import { ask } from "../../shared/api/bridge";
 import { t, useLocale } from "../../shared/i18n/i18n";
 import { api } from "../../shared/api/api";
@@ -71,6 +72,17 @@ export const ChangesView = memo(function ChangesView({
   const startGuide = useCallback(() => ops.aiGuideStaged(repo), [repo]);
   const infoRef = useRef<HTMLDivElement>(null);
   useEffect(() => void revealSelected(infoRef.current), [sel]);
+  // AI 채팅이 알려 준 파일 열기 (ops.aiChatOpenFile): 변경 목록에 있으면 고른다
+  const fw = useFileWant();
+  const fwDone = useRef(0);
+  useEffect(() => {
+    const w = fileWant.fresh(fw, fwDone.current);
+    const f = w && status.files.find((x) => x.path === w.path);
+    if (!w || !f) return;
+    fwDone.current = w.n;
+    setSel({ side: isUnstaged(f) ? "unstaged" : "staged", path: f.path });
+    bigView.picked();
+  }, [fw, status]);
 
   // 목록이 바뀌어 선택한 파일이 사라지면 첫 파일을 고른다.
   useEffect(() => {

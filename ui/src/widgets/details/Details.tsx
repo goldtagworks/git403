@@ -1,4 +1,5 @@
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { fileWant, useFileWant } from "../../shared/model/selection";
 import { Sha } from "../../shared/ui/Sha";
 import { t, dateFmt, useLocale } from "../../shared/i18n/i18n";
 import { onPrefs, pref } from "../../shared/lib/settings";
@@ -63,8 +64,20 @@ export const Details = memo(function Details({ repo, commit, rules, right }: { r
     setFiles([]);
     setFile(null);
     setDiff("");
-    if (commit) api.changedFiles(repo, commit.id).then(setFiles, (e) => ctx.error(String(e))); // 실패를 "변경 파일 없음"으로 보이지 않게 알린다
+    loadedFor.current = null;
+    if (commit) api.changedFiles(repo, commit.id).then((f) => (loadedFor.current = commit.id, setFiles(f)), (e) => ctx.error(String(e))); // 실패를 "변경 파일 없음"으로 보이지 않게 알린다
   }, [repo, commit?.id]);
+  // AI 채팅이 알려 준 파일 열기 (ops.aiChatOpenFile): 이 커밋의 파일 목록에 있으면 고른다
+  const loadedFor = useRef<string | null>(null);
+  const fw = useFileWant();
+  const fwDone = useRef(0);
+  useEffect(() => {
+    const w = fileWant.fresh(fw, fwDone.current);
+    if (!w || !commit || loadedFor.current !== commit.id || !files.some((f) => f.path === w.path)) return;
+    fwDone.current = w.n;
+    setFile(w.path);
+    bigView.picked();
+  }, [fw, files, commit?.id]);
 
   useEffect(() => void (commit && requestAvatars(repo, [commit])), [repo, commit]);
 

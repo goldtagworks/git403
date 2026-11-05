@@ -984,3 +984,46 @@ test("PR 목록의 'n분 전 갱신' 타이머는 목록·그래프를 다시 �
   const after = await renders(page);
   for (const id of ["CommitGraph", "Sidebar", "Details", "Toolbar", "PrReview"]) expect(after[id], id).toBe(before[id]);
 });
+
+test("AI 채팅: 열고 닫기·스트림·입력은 그래프·사이드바·상세·툴바·상태바를 다시 그리지 않는다", async ({ page }) => {
+  await page.evaluate(() => Object.assign(window, { __ai: { consent: true }, __chatSlow: 120 }));
+  const quiet = ["CommitGraph", "Sidebar", "Details", "Toolbar", "StatusBar"];
+  const base = await renders(page);
+  await page.keyboard.press("ControlOrMeta+j");
+  const col = page.getByRole("complementary", { name: "AI 채팅" });
+  await expect(col).toBeVisible();
+  const input = col.getByRole("textbox", { name: "AI에게 보낼 메시지" });
+  const opened = await renders(page);
+  for (const id of quiet) expect(opened[id], `열기 ${id}`).toBe(base[id]);
+  // 입력은 입력란(ChatInput)만 다시 그린다 — 목록(AiChat)·그 밖은 그대로
+  await input.pressSequentially("pull 해 줘", { delay: 5 });
+  const typed = await renders(page);
+  for (const id of [...quiet, "AiChat"]) expect(typed[id], `입력 ${id}`).toBe(opened[id]);
+  expect(typed.AiChatInput).toBeGreaterThan(opened.AiChatInput);
+  // 스트림 동안(이벤트 8개)에도 그 밖은 0, 끝난 뒤 새로고침(그래프를 같은 내용으로 다시 읽음)에도 memo 화면은 그대로
+  await input.press("Enter");
+  await expect(col.getByRole("button", { name: "이 작업 되돌리기" })).toBeVisible();
+  const after = await renders(page);
+  for (const id of [...quiet, "AiChatStatusItem"]) expect(after[id], `스트림 ${id}`).toBe(typed[id]);
+  expect(after.AiChat).toBeGreaterThan(typed.AiChat);
+  // 닫으면 실행 중 표시가 없으니 상태바 항목도 그대로
+  await col.getByRole("button", { name: "AI 채팅 닫기" }).click();
+  const closed = await renders(page);
+  for (const id of quiet) expect(closed[id], `닫기 ${id}`).toBe(after[id]);
+});
+
+test("AI 채팅: 열이 닫힌 채 진행 중이면 상태바 항목만 다시 그린다", async ({ page }) => {
+  await page.evaluate(() => Object.assign(window, { __ai: { consent: true }, __chatSlow: 200 }));
+  await page.keyboard.press("ControlOrMeta+j");
+  const col = page.getByRole("complementary", { name: "AI 채팅" });
+  await col.getByRole("textbox", { name: "AI에게 보낼 메시지" }).fill("해 줘");
+  await col.getByRole("textbox", { name: "AI에게 보낼 메시지" }).press("Enter");
+  await col.getByRole("button", { name: "AI 채팅 닫기" }).click();
+  await expect(page.locator(".statusbar").getByRole("button", { name: "AI 작업 중…" })).toBeVisible();
+  const before = await renders(page);
+  await expect(page.locator(".statusbar").getByRole("button", { name: "AI 작업 중…" })).toHaveCount(0, { timeout: 10000 }); // 끝나면 사라짐
+  const after = await renders(page);
+  for (const id of ["CommitGraph", "Sidebar", "Details", "Toolbar", "StatusBar"]) expect(after[id], id).toBe(before[id]);
+  expect(after.AiChatStatusItem - before.AiChatStatusItem).toBeLessThanOrEqual(2); // 사라질 때만 (구독이 두 갈래라 한 번 더 확인할 수 있다)
+  expect(after.AiChatStatusItem).toBeGreaterThan(before.AiChatStatusItem);
+});

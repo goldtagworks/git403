@@ -7,9 +7,11 @@ import { ChangesView } from "../widgets/changes/ChangesView";
 import { CommitGraph } from "../widgets/commit-graph/CommitGraph";
 import { Details } from "../widgets/details/Details";
 import { DomMenuHost } from "../shared/ui/menu";
-import { ctx, jobNote, ops, prBus, store, stored, touch, type JobTrack } from "../shared/model/ops";
+import { aiHandoff, ctx, jobNote, ops, prBus, store, stored, touch, type JobTrack } from "../shared/model/ops";
 import { prompt, PromptHost } from "../shared/ui/prompt";
 import { AiHost } from "../features/ai/AiSheets";
+import { AiChatHost } from "../features/ai/AiChat";
+import { aiChat } from "../shared/model/aichat";
 import { HostingHost } from "../features/hosting/HostingSheets";
 import { PrReviewHost } from "../features/hosting/PrReview";
 import { InspectorHost } from "../features/inspect/Inspector";
@@ -331,7 +333,7 @@ function App() {
     const here = j.repo === repoRef.current;
     const prefix = here || j.onDone ? "" : `${j.repo.split(/[\\/]/).pop()}: `;
     if (err) {
-      toast(prefix + t("app.jobFailed", { name: j.name }), { kind: "error", detail: err.trim(), action: connectAction(code) });
+      toast(prefix + t("app.jobFailed", { name: j.name }), { kind: "error", detail: err.trim(), action: connectAction(code) ?? aiHandoff(j.args?.[0], j.args ?? [], err, j.repo) });
       // 다른 gh 계정이면 접근되는지 확인하고 연결·재시도를 제안한다
       if (/repository not found/i.test(err)) suggestOtherAccount(j.repo, () => ctx.job(j.name, j.args ?? [], { repo: j.repo, shell: j.shell, remote: j.remote, onDone: j.onDone }));
     }
@@ -376,6 +378,7 @@ function App() {
       }
     };
     ctx.open = (p) => loadAll(p);
+    ctx.select = pick;
     ctx.reload = () => loadAll();
     ctx.setIssues = setIssueRules;
     ctx.setTabs = (paths) => {
@@ -388,7 +391,10 @@ function App() {
         store("known", next);
         return next;
       });
-  }, [loadAll, finish, changeTabs]);
+  }, [loadAll, finish, changeTabs, pick]);
+
+  // AI 채팅: 이벤트 구독, 한 차례가 끝나면 그래프·상태 새로고침, 상태바에서 열 때 그 저장소로 이동
+  useEffect(() => aiChat.init({ reload: () => loadAll(), open: (p) => void (p !== repoRef.current && loadAll(p)) }), [loadAll]);
 
   // 시작: 실행 인자 → 마지막 활성 탭 → 최근 저장소 (설정에서 복원을 끄면 실행 인자만)
   useEffect(() => {
@@ -465,7 +471,7 @@ function App() {
       }
       const map: Record<string, () => void> = e.shiftKey
         ? { f: ops.fetch, l: ops.pullQuick, p: ops.pushQuick, s: ops.stash, b: () => ops.createBranch() }
-        : { o: () => open(), p: () => setPalette(true), r: () => loadAll(), ",": () => ops.openSettings() };
+        : { o: () => open(), p: () => setPalette(true), r: () => loadAll(), j: ops.aiChatToggle, ",": () => ops.openSettings() };
       if (map[k] && (repoRef.current || k === "o" || k === "p" || k === ",")) {
         e.preventDefault();
         map[k]();
@@ -522,7 +528,7 @@ function App() {
         </div>
       )}
       {view ? (
-        <div className="workspace">
+        <div className="workspace" data-right={(right && aiChat.available) || undefined}>
           {!COMPACT && !DETAIL && (
             <div className="pane side" style={{ width: sideW }}>
               <Sidebar repo={repo} refs={refs} submodules={submodules} worktrees={worktrees} onSelect={setSelected} />
@@ -559,6 +565,7 @@ function App() {
               <Details repo={repo} commit={commit} rules={issueRules} />
             )}
           </main>
+          <AiChatHost repo={repo} status={status} />
           <PrReviewHost repo={repo} onSelectCommit={reveal} />
         </div>
       ) : (

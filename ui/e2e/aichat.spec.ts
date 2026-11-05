@@ -1,0 +1,293 @@
+import { expect, test, type Page } from "@playwright/test";
+
+// AI 채팅 열(맨 오른쪽 독립 열). 백엔드는 mock(src/shared/api/mock.ts)이고 가짜 이벤트 스트림을 흘린다.
+// Rust 쪽(실행기·이력·백업)은 crates 테스트, 실제 앱 흐름은 e2e/app/run.mjs가 검증한다.
+const calls = (page: Page) => page.evaluate(() => (window as any).__git as string[][]);
+const callsOf = async (page: Page, name: string) => (await calls(page)).filter((c) => c[0] === name);
+const col = (page: Page) => page.getByRole("complementary", { name: "AI 채팅" });
+const input = (page: Page) => col(page).getByRole("textbox", { name: "AI에게 보낼 메시지" });
+const open = async (page: Page, flags: Record<string, unknown> = {}, extra = () => {}) => {
+  await page.addInitScript((f) => Object.assign(window, { __asked: [], __ai: { consent: true } }, f), flags);
+  await page.addInitScript(extra);
+  await page.goto("/");
+  await page.getByRole("button", { name: "저장소 열기" }).click();
+  await expect(page.locator(".commits").getByText("Initial commit")).toBeVisible();
+};
+const toggle = (page: Page) => page.keyboard.press("ControlOrMeta+j");
+const send = async (page: Page, text: string) => {
+  await input(page).fill(text);
+  await input(page).press("Enter");
+};
+const done = (page: Page) => expect(col(page).getByRole("button", { name: "이 작업 되돌리기" })).toBeVisible();
+
+test("⌘J로 열고 닫고, 저장소별로 열림을 기억한다", async ({ page }) => {
+  await open(page);
+  await expect(col(page)).toHaveCount(0);
+  await toggle(page);
+  await expect(col(page)).toBeVisible();
+  await page.reload(); // 탭 복원으로 같은 저장소가 다시 열린다
+  await expect(col(page)).toBeVisible(); // 열림을 기억한다
+  await col(page).getByRole("button", { name: "AI 채팅 닫기" }).click();
+  await expect(col(page)).toHaveCount(0);
+  await toggle(page);
+  await expect(col(page)).toBeVisible();
+  // 빠른 실행에도 있다
+  await toggle(page);
+  await page.keyboard.press("ControlOrMeta+p");
+  await page.getByRole("dialog", { name: "빠른 실행" }).getByRole("textbox").fill("AI 채팅");
+  await page.getByRole("dialog", { name: "빠른 실행" }).getByRole("option", { name: /AI 채팅 열기·닫기/ }).click();
+  await expect(col(page)).toBeVisible();
+});
+
+test("보내면 입력·AI 글·도구 줄이 스트림으로 나오고, 도구는 접힌 한 줄이며 펼치면 출력이 보인다", async ({ page }) => {
+  await open(page);
+  await toggle(page);
+  await input(page).fill("원격 변경 가져와 줘");
+  await input(page).press("Shift+Enter"); // 줄바꿈이지 전송이 아니다
+  expect(await callsOf(page, "ai_chat_start")).toHaveLength(0);
+  await input(page).fill("원격 변경 가져와 줘");
+  await input(page).press("Enter");
+  await expect(input(page)).toHaveValue("");
+  await expect(col(page).getByText("원격 변경 가져와 줘")).toBeVisible();
+  await expect(col(page).getByText("원격 변경을 가져옵니다.")).toBeVisible();
+  const row = col(page).getByRole("button", { name: "Bash git pull --no-rebase origin main" });
+  await expect(row).toBeVisible();
+  await expect(row).toHaveAttribute("aria-expanded", "false");
+  await expect(col(page).getByText("CONFLICT (content)")).toHaveCount(0);
+  await row.click();
+  await expect(col(page).getByText("CONFLICT (content): Merge conflict in a.txt")).toBeVisible();
+  await done(page);
+  const [start] = await callsOf(page, "ai_chat_start");
+  expect(JSON.parse(start[1])).toMatchObject({ repo: "/demo/git403", input: "원격 변경 가져와 줘" });
+  expect(JSON.parse(start[1]).sessionId).toBeUndefined();
+});
+
+test("동의가 없으면 OS 확인 후 이어서 보낸다", async ({ page }) => {
+  await open(page, { __ai: { consent: false } });
+  await toggle(page);
+  await send(page, "상태 알려 줘");
+  await expect(col(page).getByText("충돌을 해결하고 병합을 마쳤습니다.").first()).toBeVisible();
+  expect((await page.evaluate(() => (window as any).__asked as string[])).some((m) => m.includes("Anthropic"))).toBe(true);
+  expect((await callsOf(page, "ai_chat_start")).length).toBe(2); // 거부 → 동의 → 재시도
+  expect((await callsOf(page, "ai_settings_set")).some((c) => c[1].includes('"consent":true'))).toBe(true);
+});
+
+test("동의를 거절하면 보내지 않는다", async ({ page }) => {
+  await open(page, { __ai: { consent: false }, __askNo: true });
+  await toggle(page);
+  await send(page, "해 줘");
+  await expect(input(page)).toBeEnabled();
+  await expect(col(page).getByText("해 줘")).toHaveCount(0);
+});
+
+test("claude CLI가 없으면 설치 안내 오류를 보인다", async ({ page }) => {
+  await open(page, { __chatFail: JSON.stringify({ code: "aiChat.cliMissing", vars: {}, message: "x" }) });
+  await toggle(page);
+  await send(page, "pull");
+  await expect(col(page).getByRole("alert")).toContainText("https://claude.com/claude-code");
+});
+
+test("Read·Edit 파일 경로를 누르면 그 파일을 diff 화면에서 연다", async ({ page }) => {
+  await open(page);
+  await toggle(page);
+  await send(page, "파일 봐 줘");
+  await done(page);
+  await col(page).getByRole("button", { name: "ui/src/Toolbar.tsx", exact: true }).click();
+  await expect(page.getByRole("listbox", { name: "스테이지 안 됨" }).getByRole("option", { name: /Toolbar\.tsx/ })).toHaveAttribute("aria-selected", "true");
+  await col(page).getByRole("button", { name: "crates/core/src/status.rs", exact: true }).click();
+  await expect(page.getByRole("listbox", { name: "스테이지됨", exact: true }).getByRole("option", { name: /status\.rs/ })).toHaveAttribute("aria-selected", "true");
+});
+
+test("중지 버튼과 Esc가 진행 중인 대화를 취소한다", async ({ page }) => {
+  await open(page, { __chatSlow: 400 });
+  await toggle(page);
+  await send(page, "오래 걸리는 일");
+  await expect(col(page).getByRole("button", { name: "중지" })).toBeVisible();
+  await col(page).getByRole("button", { name: "중지" }).click();
+  await expect(col(page).getByText("중지했습니다.")).toBeVisible();
+  expect(await callsOf(page, "ai_chat_cancel")).toHaveLength(1);
+  await expect(col(page).getByRole("button", { name: "전송" })).toBeVisible();
+  await send(page, "또 오래 걸리는 일");
+  await expect(col(page).getByRole("button", { name: "중지" })).toBeVisible();
+  await input(page).press("Escape");
+  await expect(col(page).getByText("중지했습니다.")).toHaveCount(2);
+  expect(await callsOf(page, "ai_chat_cancel")).toHaveLength(2);
+});
+
+test("이력: 제목은 첫 입력, 고르면 복원하고 마지막 sessionId로 이어 간다", async ({ page }) => {
+  await open(page);
+  await toggle(page);
+  await send(page, "첫 번째 대화\n둘째 줄");
+  await done(page);
+  await col(page).getByRole("button", { name: "새 대화" }).click();
+  await expect(col(page).getByText("첫 번째 대화")).toHaveCount(0);
+  await send(page, "두 번째 대화");
+  await done(page);
+  await col(page).getByRole("button", { name: "새 대화" }).click();
+  await col(page).getByRole("button", { name: "이력" }).click();
+  const items = page.getByRole("menu").getByRole("menuitem");
+  await expect(items).toHaveCount(2);
+  await expect(items.first()).toContainText("두 번째 대화"); // 최신순
+  await items.nth(1).click();
+  await expect(col(page).getByText("첫 번째 대화")).toBeVisible();
+  await expect(col(page).getByRole("button", { name: "Bash git pull --no-rebase origin main" })).toBeVisible();
+  await send(page, "이어서");
+  await done(page);
+  const starts = (await callsOf(page, "ai_chat_start")).map((c) => JSON.parse(c[1]));
+  expect(starts[2]).toMatchObject({ input: "이어서", sessionId: "sess-1" });
+  expect(starts[2].conversation).toBe(starts[0].conversation);
+});
+
+test("빈 입력이면 상태 기반 추천 칩이 뜨고, 누르면 입력란을 채운다", async ({ page }) => {
+  await open(page);
+  await toggle(page);
+  const chip = col(page).getByRole("button", { name: "원격에서 pull" }); // mock 저장소는 원격보다 뒤처져 있다
+  await expect(chip).toBeVisible();
+  await chip.click();
+  await expect(input(page)).toHaveValue(/pull/);
+  await expect(chip).toHaveCount(0); // 입력이 있으면 칩은 숨는다
+});
+
+test("merge가 충돌로 멈추면 실패 토스트에 'AI에게 맡기기', 열면 '충돌 해결하고 계속' 칩", async ({ page }) => {
+  await open(page, { __gitFail: { prefix: "merge", conflict: true } });
+  await page.locator(".sidebar").getByRole("button", { name: "pull-lock", exact: true }).click({ button: "right" });
+  await page.getByRole("menu").getByRole("menuitem", { name: "현재 브랜치에 머지…" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "머지" }).click();
+  await expect(page.locator(".toast").getByRole("button", { name: "AI에게 맡기기" })).toBeVisible();
+  await page.evaluate(() => (window as any).__emit("repo-changed", { worktree: true, refs: true })); // 파일 감시가 하는 일
+  await expect(page.locator(".banner.op")).toBeVisible();
+  await toggle(page);
+  await expect(col(page).getByRole("button", { name: "충돌 해결하고 계속" })).toBeVisible();
+});
+
+test("pull 실패 토스트의 'AI에게 맡기기'가 열을 열고 오류를 담은 새 대화를 시작한다", async ({ page }) => {
+  await open(page, { __job: { err: "fatal: Not possible to fast-forward, aborting." } });
+  await page.locator(".toolbar").getByRole("button", { name: "Pull", exact: true }).click();
+  const toast = page.locator(".toast").filter({ hasText: "Pull 실패" });
+  await expect(toast).toBeVisible();
+  await toast.getByRole("button", { name: "AI에게 맡기기" }).click();
+  await expect(col(page)).toBeVisible();
+  await expect(col(page).getByText(/Not possible to fast-forward/).first()).toBeVisible();
+  const [start] = await callsOf(page, "ai_chat_start");
+  expect(JSON.parse(start[1]).input).toContain("git pull");
+  expect(JSON.parse(start[1]).input).toContain("Not possible to fast-forward");
+});
+
+test("끝나면 되돌리기 한 줄: OS 확인 후 백업으로 되돌리고, 진행 중인 작업이 있으면 중단 확인", async ({ page }) => {
+  await open(page, { __restoreFail: { code: "aiBackup.operationInProgress", vars: { op: "merge" } } });
+  await toggle(page);
+  await send(page, "해 줘");
+  await col(page).getByRole("button", { name: "이 작업 되돌리기" }).click();
+  await expect(col(page).getByText("되돌렸습니다")).toBeVisible();
+  const asked = await page.evaluate(() => (window as any).__asked as string[]);
+  expect(asked.some((m) => m.includes("merge"))).toBe(true);
+  const r = (await callsOf(page, "ai_backup_restore")).map((c) => JSON.parse(c[1]));
+  expect(r).toEqual([{ id: "b1", branch: "main", abortOngoing: false }, { id: "b1", branch: "main", abortOngoing: true }]);
+});
+
+test("백업이 없으면(커밋 없는 저장소) 되돌리기 줄이 없다", async ({ page }) => {
+  await open(page, { __chatNoBackup: true });
+  await toggle(page);
+  await send(page, "해 줘");
+  await expect(col(page).getByRole("button", { name: "전송" })).toBeVisible();
+  await expect(col(page).getByRole("button", { name: "이 작업 되돌리기" })).toHaveCount(0);
+});
+
+test("끝나면 그래프를 다시 읽고, 앱이 백그라운드면 OS 알림을 보낸다", async ({ page }) => {
+  await open(page);
+  await toggle(page);
+  await page.evaluate(() => (document.hasFocus = () => false));
+  const before = await page.evaluate(() => (window as any).__graphLoads ?? 0);
+  await send(page, "해 줘");
+  await done(page);
+  await expect.poll(async () => (await callsOf(page, "notify")).length).toBe(1);
+  expect((await callsOf(page, "notify"))[0][1]).toContain("AI 작업 완료");
+  expect(await page.evaluate(() => (window as any).__graphLoads ?? 0)).toBeGreaterThan(before);
+});
+
+test("열이 닫혀 있어도 진행 중이면 상태바에 'AI 작업 중…', 누르면 열린다", async ({ page }) => {
+  await open(page, { __chatSlow: 500 });
+  await toggle(page);
+  await send(page, "해 줘");
+  await expect(page.locator(".statusbar").getByText("AI 작업 중…")).toHaveCount(0); // 열려 있으면 안 보인다
+  await col(page).getByRole("button", { name: "AI 채팅 닫기" }).click();
+  const item = page.locator(".statusbar").getByRole("button", { name: "AI 작업 중…" });
+  await expect(item).toBeVisible();
+  await item.click();
+  await expect(col(page)).toBeVisible();
+  await expect(item).toHaveCount(0);
+});
+
+test("설정 > AI: 대화 이력 저장·보관 기간·이 저장소 이력 지우기", async ({ page }) => {
+  await open(page);
+  await toggle(page);
+  await send(page, "기록할 대화");
+  await done(page);
+  await page.keyboard.press("ControlOrMeta+,");
+  const sheet = page.getByRole("dialog", { name: "설정" });
+  await sheet.getByRole("tab", { name: "AI", exact: true }).click();
+  const save = sheet.getByLabel("대화 이력 저장");
+  await expect(save).toBeChecked();
+  await save.uncheck();
+  await expect.poll(async () => (await callsOf(page, "ai_chat_settings_set")).map((c) => c[1])).toContain('{"save":false}');
+  await save.check();
+  const days = sheet.getByLabel("보관 기간(일)");
+  await expect(days).toHaveValue("90");
+  await days.fill("0");
+  await days.blur();
+  await expect(sheet.getByRole("alert")).toContainText("1 이상");
+  await days.fill("30");
+  await days.blur();
+  await expect.poll(async () => (await callsOf(page, "ai_chat_settings_set")).map((c) => c[1])).toContain('{"retentionDays":30}');
+  await sheet.getByRole("button", { name: "이력 지우기" }).click();
+  await expect.poll(async () => (await callsOf(page, "ai_history_clear")).length).toBe(1);
+  expect((await page.evaluate(() => (window as any).__asked as string[])).some((m) => m.includes("이력을 모두 지울까요"))).toBe(true);
+});
+
+test.describe("좁은 창", () => {
+  test.use({ viewport: { width: 1100, height: 720 } });
+  test("상세가 오른쪽이면 상세 위에 겹쳐 열린다", async ({ page }) => {
+    await open(page, {}, () => localStorage.setItem("detailLayout", '"right"'));
+    await toggle(page);
+    await expect(col(page)).toBeVisible();
+    await expect(page.locator(".ai-wrap")).toHaveCSS("position", "absolute");
+    const a = (await col(page).boundingBox())!, d = (await page.locator(".detail-col").boundingBox())!;
+    expect(a.x + a.width).toBeCloseTo(d.x + d.width, 0); // 상세 열 오른쪽 끝과 맞닿아 위에 겹침
+  });
+  test("아래 배치면 겹치지 않고 옆에 붙는다", async ({ page }) => {
+    await open(page);
+    await toggle(page);
+    await expect(page.locator(".ai-wrap")).toHaveCSS("position", "static");
+  });
+});
+
+test.describe("넓은 창", () => {
+  test.use({ viewport: { width: 1500, height: 800 } });
+  test("상세가 오른쪽이어도 AI 열은 그 오른쪽에 독립으로 붙고, 너비를 끌어 조절한다", async ({ page }, info) => {
+    await open(page, {}, () => localStorage.setItem("detailLayout", '"right"'));
+    await toggle(page);
+    await expect(page.locator(".ai-wrap")).toHaveCSS("position", "static");
+    const a = (await col(page).boundingBox())!, d = (await page.locator(".detail-col").boundingBox())!;
+    expect(a.x).toBeGreaterThanOrEqual(d.x + d.width - 1);
+    const sp = (await page.locator(".ai-wrap > .splitter").boundingBox())!;
+    await page.mouse.move(sp.x + 2, sp.y + 200);
+    await page.mouse.down();
+    await page.mouse.move(sp.x - 98, sp.y + 200, { steps: 5 });
+    await page.mouse.up();
+    expect((await col(page).boundingBox())!.width).toBeGreaterThan(a.width + 80);
+    await send(page, "화면 확인용");
+    await done(page);
+    await col(page).getByRole("button", { name: "Edit /demo/git403/crates/core/src/status.rs" }).click().catch(() => {});
+    await col(page).getByRole("button", { name: "Bash git pull --no-rebase origin main" }).click();
+    await page.screenshot({ path: `e2e/results/screens/aichat-${info.project.name}.png` });
+  });
+});
+
+test("모바일(Android)에는 열이 없다", async ({ browser }) => {
+  const ctx = await browser.newContext({ userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel Tablet) AppleWebKit/537.36 Chrome/124.0 Safari/537.36", viewport: { width: 900, height: 1200 }, hasTouch: true });
+  const page = await ctx.newPage();
+  await page.goto("/");
+  await page.keyboard.press("ControlOrMeta+j");
+  await expect(page.getByRole("complementary", { name: "AI 채팅" })).toHaveCount(0);
+  await ctx.close();
+});

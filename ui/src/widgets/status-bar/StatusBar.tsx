@@ -1,6 +1,7 @@
 import { memo, useEffect, useState } from "react";
 import { EXT_VERSION, listen } from "../../shared/api/bridge";
 import { api } from "../../shared/api/api";
+import { AiChatStatusItem } from "./AiChatStatusItem";
 import { AiStatusItem } from "./AiStatusItem";
 import { GhStatusItem } from "./GhStatusItem";
 import { Icon } from "../../shared/ui/Icon";
@@ -56,6 +57,7 @@ export const StatusBar = memo(function StatusBar({
       <GhStatusItem />
       <span className="status-progress" aria-live="polite">{progress || message}</span>
       {job && <button onClick={() => api.cancelJob(job.id)}>{t("status.cancel", { name: job.name })}</button>}
+      <AiChatStatusItem />
       <AiStatusItem />
       <button className="status-version" title={t("status.releaseNotes")} onClick={() => api.openUrl(RELEASE_URL)}>{VERSION}</button>
     </footer>

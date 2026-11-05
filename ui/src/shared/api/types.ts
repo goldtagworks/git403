@@ -288,3 +288,19 @@ export interface SettingsApplied {
   reconnect: { provider: string; host: string; username: string }[];
   skipped: string[];
 }
+
+// ---- AI 채팅 (docs/reuse.md "AI 채팅 IPC") ----
+/** 실행 전 HEAD 백업 (`refs/git403/ai-backup/<id>`). 되돌리기는 `branch`를 그대로 넘긴다 */
+export interface AiBackup { id: string; ref: string; sha: string; branch: string | null }
+/** `ai-chat` 이벤트의 event. 마지막은 done·error·cancelled 중 하나 */
+export type AiChatEvent =
+  | { kind: "text"; text: string }
+  | { kind: "tool"; id: string; name: string; command: string }
+  | { kind: "toolResult"; id: string; output: string; isError: boolean }
+  | { kind: "done"; sessionId: string | null; result: string; isError: boolean }
+  | { kind: "error"; code: string | null; message: string }
+  | { kind: "cancelled" };
+/** 한 차례(입력·답)의 이력 한 줄 */
+export interface AiChatEntry { time: number; repo: string; input: string; answer: string; commands: string[]; backup: AiBackup | null; sessionId: string | null; status: "done" | "error" | "cancelled" }
+export interface AiChatSummary { conversation: string; title: string; time: number; turns: number }
+export interface AiChatSettings { save: boolean; retentionDays: number }

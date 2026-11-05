@@ -181,6 +181,15 @@ export const checkUpdate = () => (vscode ? Promise.resolve(null) : tauriCheck())
 export const hideWindow = () => (vscode ? Promise.resolve() : getCurrentWindow().hide());
 export const relaunch = () => (vscode ? Promise.resolve() : tauriRelaunch());
 
+/** OS 알림 (앱이 백그라운드일 때 AI 채팅 완료 등). 권한이 없으면 한 번 묻고, 거절·VS Code·오류는 조용히 무시 */
+export const notifyOs = async (title: string, body: string) => {
+  if (vscode) return;
+  try {
+    const n = await import("@tauri-apps/plugin-notification");
+    if ((await n.isPermissionGranted()) || (await n.requestPermission()) === "granted") n.sendNotification({ title, body });
+  } catch {}
+};
+
 /** VS Code 웹뷰에서 앱 창이 없다. 있을 때만(Tauri) 창 API를 쓴다 */
 export const setWindowTheme = async (theme: "light" | "dark" | null) => {
   if (vscode) return;

@@ -30,3 +30,19 @@ export function setPrimary(next: Map<string, string>) {
 export function useActive(key: string, target: string) {
   return useSyncExternalStore(subscribe, () => sel.sha === target && (sel.keySha === sel.sha ? sel.key === key : primary.get(target) === key));
 }
+
+// "이 파일을 diff 화면에서 열어 달라"는 요청 (AI 채팅의 Read·Edit 경로). 로컬 변경 화면(ChangesView)이나 커밋 상세(Details)가
+// 그 파일을 목록에서 찾으면 고른다. 화면이 새로 마운트되는 경우를 위해 잠깐(5초) 남겨 두고, 요청마다 n이 늘어 한 번만 처리한다.
+export interface FileWant { path: string; n: number; t: number }
+let want: FileWant | null = null;
+const wantSubs = new Set<() => void>();
+export const fileWant = {
+  request(path: string) {
+    want = { path, n: (want?.n ?? 0) + 1, t: Date.now() };
+    wantSubs.forEach((f) => f());
+  },
+  /** 아직 처리하지 않은 신선한 요청 (handled = 이 화면이 마지막으로 처리한 n) */
+  fresh: (w: FileWant | null, handled: number) => (w && w.n !== handled && Date.now() - w.t < 5000 ? w : null),
+};
+const onWant = (f: () => void) => (wantSubs.add(f), () => void wantSubs.delete(f));
+export const useFileWant = () => useSyncExternalStore(onWant, () => want);

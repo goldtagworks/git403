@@ -10,6 +10,7 @@
     "opener:default",
     "updater:default",
     "process:allow-restart",
+    "notification:default",
     "core:window:allow-set-theme",
     "core:window:allow-hide",
     "core:window:allow-show",

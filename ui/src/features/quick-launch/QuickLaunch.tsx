@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { t, useLocale } from "../../shared/i18n/i18n";
 import { bigView } from "../../shared/model/bigview";
 import { supports, useCaps } from "../../shared/lib/caps";
+import { aiChat } from "../../shared/model/aichat";
 import { ctx, ops } from "../../shared/model/ops";
 import { Sheet } from "../../shared/ui/Sheet";
 
@@ -56,6 +57,7 @@ export function QuickLaunch({ recent, onOpen, onClose }: { recent: string[]; onO
       { label: t("quick.c11"), run: ops.manageIssues },
       ...(ops.aiOn() && ops.head() ? [{ label: t("quick.c12"), run: () => ops.aiReviewBranch(ops.head()!) }] : []),
       ...(ops.aiOn() ? [{ label: t("quick.guide"), run: ops.guideStart }] : []),
+      ...(aiChat.available ? [{ label: t("quick.aiChat"), hint: isMac ? "⌘J" : "Ctrl+J", run: ops.aiChatToggle }] : []),
       { label: t("quick.c13"), hint: t("quick.h5"), run: () => ops.openSettings("ai") },
       { label: t("quick.c14"), op: "branch", run: () => ops.createBranch() },
       { label: t("quick.c15"), op: "stash", run: ops.stash },

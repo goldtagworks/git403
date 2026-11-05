@@ -1456,6 +1456,47 @@ html[data-mobile] .row:not(.selected):hover { background: none; }
 .m-notice span { flex: 1; min-width: 0; word-break: keep-all; }
 /* 모바일 대화상자(시트 포함): 키보드(ime inset)로 보이는 영역이 줄어도 그 영역(고정 배경 = 보이는 영역) 안에 들어간다.
    vh는 키보드를 빼지 않을 수 있어 퍼센트로 잡고, 넘치면 본문이 스크롤하고 버튼 줄(.sheet-actions)은 늘 보인다 */
+/* AI 채팅 열: 맨 오른쪽 독립 열(상세 배치와 무관). 말풍선·카드 없이 목록형. 좁은 창(<1280)에서 상세가 오른쪽이면 그 위에 겹쳐 연다 */
+.workspace { position: relative; }
+.ai-wrap { flex: none; display: flex; min-height: 0; }
+.ai-col { background: var(--surface); border-left: 1px solid var(--border); min-width: 280px; max-width: calc(100vw - 360px); }
+.ai-col > * { flex: none; }
+.ai-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.ai-head button { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 10px; font-size: 12px; }
+.ai-head .ai-close { padding: 0 6px; border-color: transparent; background: transparent; color: var(--muted); }
+.ai-head .ai-close:hover { background: var(--hover); color: var(--fg); }
+.ai-body { flex: 1; min-height: 0; overflow: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.ai-intro { margin: auto 0; color: var(--muted); word-break: keep-all; text-align: center; }
+.ai-user { padding-left: 8px; border-left: 2px solid var(--accent); font-weight: 500; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-text.md { font-size: 13px; }
+.ai-tool-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.ai-tool button { height: 22px; padding: 0 4px; border: 0; border-radius: 4px; background: transparent; font-size: 12px; font-weight: 400; color: var(--muted); }
+.ai-tool button:hover { background: var(--hover); }
+.ai-tool-toggle { display: inline-flex; align-items: center; gap: 4px; min-width: 0; flex: 0 1 auto; max-width: 100%; }
+.ai-tool-name { color: var(--fg); font-weight: 500; }
+.ai-tool-cmd, .ai-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ai-path { flex: 0 1 auto; color: var(--accent-fg) !important; text-align: left; }
+.ai-path:hover { text-decoration: underline; }
+.ai-out { margin: 2px 0 4px 16px; padding: 6px 8px; max-height: 240px; overflow: auto; border-radius: 6px; background: var(--hover); font-size: 11.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-out.err { color: var(--danger); }
+.ai-note { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.ai-note.err { color: var(--danger); }
+.ai-undo { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--accent-fg); font-size: 12px; font-weight: 500; }
+.ai-undo:hover { text-decoration: underline; }
+.ai-run { color: var(--muted); font-size: 12px; }
+.ai-input { padding: 8px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+.ai-input textarea { width: 100%; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; line-height: 1.45; resize: none; }
+.ai-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ai-chip { height: 24px; padding: 0 10px; border-radius: 12px; font-size: 12px; font-weight: 400; color: var(--muted); }
+.ai-chip:hover { background: var(--hover); color: var(--fg); }
+.ai-actions { display: flex; justify-content: flex-end; }
+.ai-actions button { height: 28px; padding: 0 14px; }
+@media (max-width: 1279px) {
+  .workspace[data-right] > .ai-wrap { position: absolute; top: 0; right: 0; bottom: 0; z-index: 6; box-shadow: var(--shadow-float); }
+  .workspace[data-right] > .ai-wrap > .splitter { display: none; }
+  .workspace[data-right] > .ai-wrap > .ai-col { max-width: calc(100vw - 60px); }
+}
+
 html[data-mobile] .sheet-backdrop { padding: 12px; }
 html[data-mobile] .sheet-backdrop.top { padding-top: 12px; }
 html[data-mobile] .sheet, html[data-mobile] .sheet.wide, html[data-mobile] .sheet.inspector { max-height: 100%; max-width: 100%; box-sizing: border-box; }
