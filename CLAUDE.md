@@ -9,6 +9,7 @@
 2. `docs/reuse.md` — 재사용 모듈·IPC 목록. 새 코드 쓰기 전에 확인, 바꾸면 갱신
 3. `docs/performance.md` — React 리렌더링 규칙
 4. `docs/design.md` — 디자인 규칙 (라이트/다크 필수, native-feel)
+5. `docs/security.md` — 보안 규칙 (허용 목록·저장소 불신·백엔드 강제·우회 테스트). **보안 문제는 최우선, 철저히 검증**
 
 ## 지켜야 할 것
 
