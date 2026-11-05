@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.6
+
+- Fixed Pull failing with "not something we can merge" / "Cannot rebase onto multiple branches" when pressed repeatedly: operations on the same repository now run one at a time.
+
 ## 1.0.5
 
 - Sidebar highlights a single representative ref for the selected commit, even inside collapsed sections or folders.
