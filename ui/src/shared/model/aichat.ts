@@ -122,7 +122,7 @@ async function consent() {
 
 /** 공개·다수 협업자·판정 불가 저장소는 대화 첫 실행 전에 OS 확인창으로 묻는다(거절하면 false). 로컬 전용·본인만 쓰는 private은 묻지 않는다 */
 async function confirmRisk(repo: string, risk: AiRisk) {
-  const exec = risk.exec ?? [];
+  const exec = risk.config ?? [];
   if (risk.level === "none" && !exec.length) return true;
   const key = risk.level === "public" ? "aiChat.confirmPublic" : risk.level === "shared" ? "aiChat.confirmShared" : "aiChat.confirmUnknown";
   const name = repo.split(/[\\/]/).filter(Boolean).pop() ?? repo;
@@ -170,6 +170,8 @@ export const aiChat = {
       // 대화 첫 실행: 위험 판정(조회 실패 = 판정 불가 = 확인). 거절하면 입력 줄만 거두고 실행하지 않는다
       if (!confirmed) {
         const risk = await api.aiChatRisk(repo).catch((): AiRisk => ({ level: "unknown" }));
+        // 확인으로도 허용할 수 없는 저장소 설정: 묻지 않고 막는다(사유를 보여 준다)
+        if (risk.refuse?.length) return drop([...cur.items, { k: "note", text: tErr("aiChat.configRefused", { reasons: risk.refuse.join("; ") }, risk.refuse.join("; ")), error: true }]);
         if (!(await confirmRisk(repo, risk))) return drop(cur.items);
         confirmed = true;
       }
@@ -225,7 +227,7 @@ export const aiChat = {
       branches: (backup.heads ?? 0) > 1 && (await ask(t("aiChat.undoBranchesAsk"), { title: t("aiChat.undoTitle"), kind: "warning" })),
       wip: !!backup.wip && (await ask(t("aiChat.undoWipAsk"), { title: t("aiChat.undoTitle"), kind: "warning" })),
     };
-    const run = (abort: boolean) => api.aiBackupRestore(repo, backup.id, backup.branch, abort, more);
+    const run = (abort: boolean) => api.aiBackupRestore(repo, backup.id, backup.branch, abort, { ...more, digest: backup.digest });
     try {
       try {
         await run(false);

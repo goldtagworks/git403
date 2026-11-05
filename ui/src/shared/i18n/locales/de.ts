@@ -1608,6 +1608,9 @@ export const de: Record<Key, string> = {
   "err.aiBackup.badId": "Ungültige Backup-ID",
   "err.aiBackup.missing": "Das Backup existiert nicht mehr",
   "err.aiBackup.operationInProgress": "Ein {op} läuft gerade; brechen Sie ihn zuerst ab",
+  "err.aiChat.configRefused": "Die KI kann wegen der Git-Konfiguration in diesem Repository nicht arbeiten: {reasons}",
+  "err.aiBackup.tampered": "Die Backup-Refs wurden nach dem Backup verändert, daher wurde das Zurücksetzen abgelehnt",
+  "err.aiChat.backupTampered": "Die Backup-Refs haben sich während der Aufgabe geändert. Das Zurücksetzen ist nicht mehr sicher",
   "err.aiChat.confirmRequired": "Vor der Arbeit der KI in diesem Repository ist eine Bestätigung nötig",
   "err.aiChat.historySaveFailed": "Der Chat konnte nicht im Verlauf gespeichert werden",
 };

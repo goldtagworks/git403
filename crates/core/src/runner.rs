@@ -138,9 +138,14 @@ impl GitRunner {
 
     /// stdin으로 `input`을 넘기고 끝날 때까지 기다린다 (`git apply`, `git commit -F -`).
     pub async fn output_stdin(&self, repo: &Path, args: &[&str], input: &[u8]) -> Result<Vec<u8>> {
+        self.output_stdin_env(repo, args, input, &[]).await
+    }
+
+    /// `output_stdin`에 이번 실행에만 쓸 환경 변수를 더한다 (임시 인덱스 `GIT_INDEX_FILE` 등).
+    pub async fn output_stdin_env(&self, repo: &Path, args: &[&str], input: &[u8], envs: &[(&str, &str)]) -> Result<Vec<u8>> {
         use tokio::io::AsyncWriteExt;
         let mut cmd = self.command(repo, args);
-        cmd.stdin(Stdio::piped());
+        cmd.envs(envs.iter().copied()).stdin(Stdio::piped());
         let mut child = cmd.spawn()?;
         let mut stdin = child.stdin.take().expect("piped stdin");
         stdin.write_all(input).await?;

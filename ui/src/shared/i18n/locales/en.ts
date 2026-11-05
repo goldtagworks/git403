@@ -1594,7 +1594,7 @@ export const en = {
   "aiChat.confirmShared": "{repo} is shared with {n} other collaborator(s). The AI will read files here and run git commands that may affect their work, and what it reads is sent to Anthropic.",
   "aiChat.confirmUnknown": "Could not tell whether {repo} is public or shared with others (no connected account, or the lookup failed). The AI will read files here and run git commands, and what it reads is sent to Anthropic.",
   "aiChat.confirmScope": "The AI can only run an allowed set of git commands (status, log, diff, add, commit, merge, rebase, fetch, pull, push without force, switch, stash and similar). It cannot force-push, hard-reset, delete branches, or read and edit files outside this repository. Continue?",
-  "aiChat.confirmExec": "This repository's git config can make git run programs ({keys}). Hooks, external diff and textconv are switched off while the AI works, but filters, merge drivers, credential helpers and similar settings still run.",
+  "aiChat.confirmExec": "This repository's git configuration (including submodules) has settings the app does not treat as safe ({keys}); some of them can make git run programs. Hooks, external diff and textconv are switched off while the AI works, but filters, merge drivers, credential helpers and similar settings still run.",
   "aiChat.undoBranchesAsk": "Also move the other local branches back to where they were before this task? (Branches the AI created are kept.)",
   "aiChat.undoWipAsk": "Also restore the files you had changed but not committed to how they were before this task? Files changed since then are overwritten with that snapshot.",
   "quick.aiChat": "Open / close AI chat",
@@ -1607,6 +1607,9 @@ export const en = {
   "err.aiBackup.badId": "Invalid backup id",
   "err.aiBackup.missing": "The backup no longer exists",
   "err.aiBackup.operationInProgress": "A {op} is in progress; abort it first",
+  "err.aiChat.configRefused": "AI cannot work in this repository because of its git configuration: {reasons}",
+  "err.aiBackup.tampered": "The backup refs were changed after the backup was made, so the undo was refused",
+  "err.aiChat.backupTampered": "The backup refs changed during the task. Undoing this task is no longer safe",
   "err.aiChat.confirmRequired": "Confirmation is required before AI can work on this repository",
   "err.aiChat.historySaveFailed": "The chat could not be saved to history",
 };

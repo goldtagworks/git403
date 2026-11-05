@@ -385,7 +385,8 @@ impl Backend {
                 let (repo, id, branch) = (a.repo()?, a.get::<String>("id")?, a.get::<Option<String>>("branch")?);
                 // branches: 백업 때의 다른 로컬 브랜치 위치도 되돌림, wip: 백업 때의 작업 트리 스냅숏 내용도 되돌림(둘 다 사용자 확인 뒤에만)
                 let (abort, branches, wip) = (a.get::<Option<bool>>("abortOngoing")?.unwrap_or(false), a.get::<Option<bool>>("branches")?.unwrap_or(false), a.get::<Option<bool>>("wip")?.unwrap_or(false));
-                self.ai_backup_restore(repo, id, branch, abort, branches, wip).await
+                let digest = a.get::<Option<String>>("digest")?; // 백업 때의 지문(이력의 `backup.digest`) — 있으면 백업 ref가 그대로인지 확인
+                self.ai_backup_restore(repo, id, branch, abort, branches, wip, digest).await
             }
             #[cfg(feature = "cli")]
             "ai_history_list" => self.ai_history_list(a.repo()?).await,

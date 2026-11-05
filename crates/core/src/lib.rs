@@ -5,6 +5,7 @@
 
 #[cfg(feature = "cli")]
 pub mod ai_backup;
+pub mod ai_config;
 pub mod ai_tool;
 pub mod backend;
 pub mod blame;

@@ -1608,6 +1608,9 @@ export const tl: Record<Key, string> = {
   "err.aiBackup.badId": "Di-wastong backup id",
   "err.aiBackup.missing": "Wala na ang backup",
   "err.aiBackup.operationInProgress": "May kasalukuyang {op}; i-abort muna ito",
+  "err.aiChat.configRefused": "Hindi makakapagtrabaho ang AI sa repositoryong ito dahil sa git configuration nito: {reasons}",
+  "err.aiBackup.tampered": "Binago ang mga backup ref pagkatapos gawin ang backup, kaya tinanggihan ang pag-undo",
+  "err.aiChat.backupTampered": "Nagbago ang mga backup ref habang nagtatrabaho. Hindi na ligtas i-undo ang gawaing ito",
   "err.aiChat.confirmRequired": "Kailangan ng kumpirmasyon bago magtrabaho ang AI sa repositoryong ito",
   "err.aiChat.historySaveFailed": "Hindi nai-save ang chat sa history",
 };

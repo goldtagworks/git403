@@ -1608,6 +1608,9 @@ export const es: Record<Key, string> = {
   "err.aiBackup.badId": "ID de copia de seguridad no válido",
   "err.aiBackup.missing": "La copia de seguridad ya no existe",
   "err.aiBackup.operationInProgress": "Hay un {op} en curso; abórtalo primero",
+  "err.aiChat.configRefused": "La IA no puede trabajar en este repositorio por su configuración de git: {reasons}",
+  "err.aiBackup.tampered": "Las referencias de copia de seguridad cambiaron después de crearla, así que se rechazó deshacer",
+  "err.aiChat.backupTampered": "Las referencias de copia de seguridad cambiaron durante la tarea. Deshacerla ya no es seguro",
   "err.aiChat.confirmRequired": "Se requiere confirmación antes de que la IA trabaje en este repositorio",
   "err.aiChat.historySaveFailed": "No se pudo guardar el chat en el historial",
 };

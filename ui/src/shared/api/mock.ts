@@ -626,7 +626,7 @@ function handle(cmd: string, args: any): any {
     if (cmd === "ai_history_clear") return chatHist.clear(), gitCalls.push(["ai_history_clear", (args as any).repo]), null;
     if (cmd === "ai_backup_restore") {
       const w = window as any;
-      gitCalls.push(["ai_backup_restore", JSON.stringify({ id: (args as any).id, branch: (args as any).branch ?? null, abortOngoing: !!(args as any).abortOngoing, branches: !!(args as any).branches, wip: !!(args as any).wip })]);
+      gitCalls.push(["ai_backup_restore", JSON.stringify({ id: (args as any).id, branch: (args as any).branch ?? null, abortOngoing: !!(args as any).abortOngoing, branches: !!(args as any).branches, wip: !!(args as any).wip, digest: (args as any).digest ?? null })]);
       if (w.__restoreFail && !(args as any).abortOngoing) throw JSON.stringify({ ...w.__restoreFail, message: "in progress" });
       return null;
     }
@@ -652,12 +652,13 @@ function handle(cmd: string, args: any): any {
       const key = `${conversation}\0${repo}`;
       if (!chatConfirmed.has(key)) {
         const risk = w.__risk ?? { level: "none" };
-        if ((risk.level !== "none" || risk.exec?.length) && !confirmed) throw JSON.stringify({ code: "aiChat.confirmRequired", vars: { level: risk.level, collaborators: risk.collaborators ?? 0, exec: risk.exec?.length ?? 0 }, message: "Confirmation is required" });
+        if (risk.refuse?.length) throw JSON.stringify({ code: "aiChat.configRefused", vars: { reasons: risk.refuse.join("; ") }, message: "refused" });
+        if ((risk.level !== "none" || risk.config?.length) && !confirmed) throw JSON.stringify({ code: "aiChat.confirmRequired", vars: { level: risk.level, collaborators: risk.collaborators ?? 0, config: risk.config?.length ?? 0 }, message: "Confirmation is required" });
         chatConfirmed.add(key);
       }
       if (w.__chatFail) throw w.__chatFail;
       if (chatRun.has(conversation)) throw JSON.stringify({ code: "aiChat.busy", vars: {}, message: "busy" });
-      const backup = w.__chatNoBackup ? null : { id: `b${++chatSeq}`, ref: `refs/git403/ai-backup/b${chatSeq}`, sha: "abc1234abc1234abc1234abc1234abc1234abc12", branch: "main", heads: w.__chatHeads ?? 1, wip: w.__chatWip ? "def5678def5678def5678def5678def5678def56" : null };
+      const backup = w.__chatNoBackup ? null : { id: `b${++chatSeq}`, ref: `refs/git403/ai-backup/b${chatSeq}`, sha: "abc1234abc1234abc1234abc1234abc1234abc12", branch: "main", heads: w.__chatHeads ?? 1, wip: w.__chatWip ? "def5678def5678def5678def5678def5678def56" : null, digest: "0123456789abcdef" };
       const script: any[] = w.__chatScript ?? [
         { kind: "text", text: "원격 변경을 가져옵니다." },
         { kind: "tool", id: "t1", name: "Bash", command: "git pull --no-rebase origin main" },

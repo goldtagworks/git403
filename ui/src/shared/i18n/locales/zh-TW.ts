@@ -1608,6 +1608,9 @@ export const zhTW: Record<Key, string> = {
   "err.aiBackup.badId": "備份 ID 無效",
   "err.aiBackup.missing": "該備份已不存在",
   "err.aiBackup.operationInProgress": "正在進行 {op}；請先中止它",
+  "err.aiChat.configRefused": "由於此儲存庫的 git 設定，AI 無法在其中工作：{reasons}",
+  "err.aiBackup.tampered": "備份建立後備份參照被修改，已拒絕復原",
+  "err.aiChat.backupTampered": "工作期間備份參照發生了變化。復原此工作已不再安全",
   "err.aiChat.confirmRequired": "AI 在此儲存庫中工作之前需要確認",
   "err.aiChat.historySaveFailed": "無法將對話儲存到歷史記錄",
 };

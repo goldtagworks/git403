@@ -1608,6 +1608,9 @@ export const uk: Record<Key, string> = {
   "err.aiBackup.badId": "Недійсний ідентифікатор резервної копії",
   "err.aiBackup.missing": "Резервної копії більше не існує",
   "err.aiBackup.operationInProgress": "Триває {op}; спершу перервіть його",
+  "err.aiChat.configRefused": "ШІ не може працювати в цьому репозиторії через його конфігурацію git: {reasons}",
+  "err.aiBackup.tampered": "Посилання резервної копії змінено після її створення, тому скасування відхилено",
+  "err.aiChat.backupTampered": "Посилання резервної копії змінилися під час завдання. Скасовувати його вже небезпечно",
   "err.aiChat.confirmRequired": "Перед роботою ШІ в цьому репозиторії потрібне підтвердження",
   "err.aiChat.historySaveFailed": "Не вдалося зберегти чат в історії",
 };

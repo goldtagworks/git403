@@ -32,14 +32,20 @@ pub struct Risk {
     /// 판정에 쓴 원격 URL(가져오기·보내기, `insteadOf` 적용 후)의 지문. 확인 키에 넣어 원격이 바뀌면 다시 묻는다. UI로는 보내지 않는다
     #[serde(skip)]
     pub fingerprint: String,
-    /// 저장소 로컬 설정(include 포함)에 있는, git이 프로그램을 실행하게 만드는 키 이름들(textconv·filter·sshCommand·credential.helper·driver 등, 값은 안 담음).
+    /// 저장소 쪽 git 설정(상위 local·worktree·include, 서브모듈 `modules/**/config`, 다른 worktree 설정)에서 **안전 목록 밖**인 키 이름들(값은 안 담음, `gc_core::ai_config`).
     /// 비어 있지 않으면 레벨과 무관하게 확인이 필요하다(훅·ext-diff·textconv는 앱이 끄지만 filter·driver·sshCommand 등은 끌 수 없다)
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub exec: Vec<String>,
+    pub config: Vec<String>,
+    /// 확인으로도 허용할 수 없는 사유(저장소 밖 worktree·bare·mirror·비기본 fetch/push refspec·백업 이름공간 언급 등). 있으면 AI 채팅을 시작하지 않는다
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub refuse: Vec<String>,
+    /// 판정에 쓴 설정 전체의 지문(UI로는 안 보냄). 확인 키에 넣고 MCP 서버가 도구 호출마다 다시 계산해 대조한다
+    #[serde(skip)]
+    pub config_fp: String,
 }
 
 const fn risk(level: Level, collaborators: Option<usize>) -> Risk {
-    Risk { level, collaborators, fingerprint: String::new(), exec: Vec::new() }
+    Risk { level, collaborators, fingerprint: String::new(), config: Vec::new(), refuse: Vec::new(), config_fp: String::new() }
 }
 
 /// 조회 결과 → 위험. 오류(접근 불가·한도·네트워크·GitHub 아님)는 전부 `unknown`.
@@ -117,10 +123,11 @@ impl Backend {
                 all.push(classify(gc_hosting::repo_exposure(&account, token.as_deref(), &info.repo).await));
             }
         }
-        // 저장소 로컬 설정의 실행형 키(키 이름에 URL이 있으면 자격 증명을 가려 보낸다)
-        let cfg = self.backend.run(repo, &["config", "--list", "--includes", "--show-scope", "-z"], &[1]).await.unwrap_or_default();
-        let exec = gc_core::ai_tool::exec_config_keys(&String::from_utf8_lossy(&cfg)).iter().map(|k| crate::settings_io::redact(k)).collect();
-        Ok(Risk { fingerprint: fp, exec, ..combine(all) })
+        // 저장소 쪽 git 설정을 허용 목록으로 판정(키 이름에 URL이 있으면 자격 증명을 가려 보낸다)
+        let (git, dir) = (self.git.git_path().to_string_lossy().into_owned(), repo.to_path_buf());
+        let v = tokio::task::spawn_blocking(move || gc_core::ai_config::check(&dir, &git)).await.map_err(|e| e.to_string())?;
+        let red = |l: Vec<String>| l.iter().map(|k| crate::settings_io::redact(k)).collect::<Vec<_>>();
+        Ok(Risk { fingerprint: fp, config: red(v.review), refuse: red(v.refuse), config_fp: v.fingerprint, ..combine(all) })
     }
 }
 

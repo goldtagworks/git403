@@ -1608,6 +1608,9 @@ export const th: Record<Key, string> = {
   "err.aiBackup.badId": "รหัสข้อมูลสำรองไม่ถูกต้อง",
   "err.aiBackup.missing": "ไม่มีข้อมูลสำรองนี้แล้ว",
   "err.aiBackup.operationInProgress": "กำลังมี {op} อยู่ ยกเลิกก่อน",
+  "err.aiChat.configRefused": "AI ทำงานในที่เก็บนี้ไม่ได้เพราะการตั้งค่า git: {reasons}",
+  "err.aiBackup.tampered": "การอ้างอิงสำรองถูกเปลี่ยนหลังสร้างข้อมูลสำรอง จึงปฏิเสธการย้อนกลับ",
+  "err.aiChat.backupTampered": "การอ้างอิงสำรองเปลี่ยนไประหว่างงาน การย้อนกลับงานนี้ไม่ปลอดภัยอีกต่อไป",
   "err.aiChat.confirmRequired": "ต้องยืนยันก่อนที่ AI จะทำงานในที่เก็บนี้",
   "err.aiChat.historySaveFailed": "ไม่สามารถบันทึกแชตลงในประวัติได้",
 };

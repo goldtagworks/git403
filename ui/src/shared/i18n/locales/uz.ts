@@ -1608,6 +1608,9 @@ export const uz: Record<Key, string> = {
   "err.aiBackup.badId": "Zaxira identifikatori noto'g'ri",
   "err.aiBackup.missing": "Zaxira endi mavjud emas",
   "err.aiBackup.operationInProgress": "{op} jarayoni ketmoqda; avval uni to'xtating",
+  "err.aiChat.configRefused": "Git sozlamalari sababli AI bu omborda ishlay olmaydi: {reasons}",
+  "err.aiBackup.tampered": "Zaxira havolalari zaxira yaratilgandan keyin o‘zgargan, shuning uchun bekor qilish rad etildi",
+  "err.aiChat.backupTampered": "Zaxira havolalari vazifa vaqtida o‘zgardi. Vazifani bekor qilish endi xavfsiz emas",
   "err.aiChat.confirmRequired": "AI bu omborda ishlashidan oldin tasdiqlash kerak",
   "err.aiChat.historySaveFailed": "Suhbatni tarixga saqlab bo‘lmadi",
 };

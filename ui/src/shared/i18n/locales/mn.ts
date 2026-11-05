@@ -1608,6 +1608,9 @@ export const mn: Record<Key, string> = {
   "err.aiBackup.badId": "Нөөцийн ID буруу байна",
   "err.aiBackup.missing": "Нөөц байхгүй болсон байна",
   "err.aiBackup.operationInProgress": "{op} явагдаж байна; эхлээд зогсооно уу",
+  "err.aiChat.configRefused": "Git тохиргооны улмаас AI энэ репозиторт ажиллах боломжгүй: {reasons}",
+  "err.aiBackup.tampered": "Нөөцлөлт хийсний дараа нөөцийн ref өөрчлөгдсөн тул буцаахаас татгалзлаа",
+  "err.aiChat.backupTampered": "Ажлын явцад нөөцийн ref өөрчлөгдсөн. Энэ ажлыг буцаах нь аюулгүй биш болсон",
   "err.aiChat.confirmRequired": "AI энэ репозиторт ажиллахаас өмнө баталгаажуулалт шаардлагатай",
   "err.aiChat.historySaveFailed": "Чатыг түүхэнд хадгалж чадсангүй",
 };

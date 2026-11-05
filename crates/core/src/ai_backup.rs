@@ -26,6 +26,9 @@ pub struct Backup {
     /// 작업 트리 스냅숏 커밋(작업 트리가 깨끗했으면 None)
     #[serde(default)]
     pub wip: Option<String>,
+    /// 백업 ref들(HEAD·브랜치들·스냅숏)의 이름+커밋을 묶은 지문. 되돌리기 전에 다시 계산해 다르면 거절한다(백업 ref가 바뀌었다 = 신뢰할 수 없음)
+    #[serde(default)]
+    pub digest: String,
 }
 
 fn check_id(id: &str) -> Result<()> {
@@ -48,7 +51,31 @@ pub async fn create(git: &GitRunner, repo: &Path, id: &str) -> Result<Option<Bac
     // 로컬 브랜치 전체: AI가 다른 브랜치를 옮기거나 지워도 되돌릴 수 있게(실패해도 HEAD 백업은 유효)
     let heads = snapshot_heads(git, repo, id).await.unwrap_or(0);
     let wip = snapshot_wip(git, repo, id).await.ok().flatten();
-    Ok(Some(Backup { id: id.to_owned(), ref_name, sha, branch, heads, wip }))
+    let digest = digest_of(git, repo, id).await.unwrap_or_default();
+    Ok(Some(Backup { id: id.to_owned(), ref_name, sha, branch, heads, wip, digest }))
+}
+
+/// 이 백업의 모든 ref(`ai-backup/<id>`·`ai-backup-heads/<id>/*`·`ai-backup-wip/<id>`)를 `이름 커밋` 줄로 모아 FNV-1a로 줄인다
+async fn digest_of(git: &GitRunner, repo: &Path, id: &str) -> Result<String> {
+    let mut lines = Vec::new();
+    for pat in [format!("{PREFIX}{id}"), format!("{WIP}{id}"), format!("{HEADS}{id}/")] {
+        let o = git.output(repo, &["for-each-ref", "--format=%(refname) %(objectname)", &pat]).await?;
+        lines.extend(String::from_utf8_lossy(&o).lines().filter(|l| {
+            let r = l.split(' ').next().unwrap_or_default();
+            r == format!("{PREFIX}{id}") || r == format!("{WIP}{id}") || r.starts_with(&format!("{HEADS}{id}/"))
+        }).map(str::to_owned));
+    }
+    lines.sort();
+    Ok(format!("{:016x}", lines.join("\n").bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3))))
+}
+
+/// 백업 ref가 만들 때와 같은가(차례 끝·되돌리기 전에 부른다). 다르면 `aiBackup.tampered`
+pub async fn verify(git: &GitRunner, repo: &Path, b: &Backup) -> Result<()> {
+    if b.digest.is_empty() || digest_of(git, repo, &b.id).await? == b.digest {
+        Ok(())
+    } else {
+        Err(gc_i18n::coded!("aiBackup.tampered", "the backup refs were modified after the backup was made; refusing to restore from them").into())
+    }
 }
 
 async fn snapshot_heads(git: &GitRunner, repo: &Path, id: &str) -> Result<usize> {
@@ -69,9 +96,29 @@ async fn snapshot_heads(git: &GitRunner, repo: &Path, id: &str) -> Result<usize>
 
 /// 작업 트리가 더러우면(추적 변경·untracked) 임시 인덱스로 `add -A` → `write-tree` → `commit-tree`해 `refs/git403/ai-backup-wip/<id>`에 보존한다.
 /// 진짜 인덱스·작업 트리는 건드리지 않는다. 깨끗하면 None.
+/// 무시된(ignored) 파일 중 하나 256KB 이하, 합계 20MB·5000개 이하만(앞에서부터). node_modules 같은 큰 폴더는 상한에 걸려 일부만 담긴다
+async fn ignored_within_caps(git: &GitRunner, repo: &Path) -> Vec<String> {
+    const EACH: u64 = 256 * 1024;
+    const TOTAL: u64 = 20 * 1024 * 1024;
+    const COUNT: usize = 5000;
+    let Ok(o) = git.query(repo, &["ls-files", "-o", "-i", "--exclude-standard", "-z"]).await else { return vec![] };
+    let (mut out, mut sum) = (Vec::new(), 0u64);
+    for p in String::from_utf8_lossy(&o).split('\0').filter(|p| !p.is_empty()) {
+        let Ok(m) = repo.join(p).symlink_metadata() else { continue };
+        if !m.is_file() || m.len() > EACH || sum + m.len() > TOTAL || out.len() >= COUNT {
+            continue;
+        }
+        sum += m.len();
+        out.push(p.to_owned());
+    }
+    out
+}
+
 async fn snapshot_wip(git: &GitRunner, repo: &Path, id: &str) -> Result<Option<String>> {
     let dirty = git.query(repo, &["status", "--porcelain", "--untracked-files=all"]).await?;
-    if dirty.iter().all(u8::is_ascii_whitespace) {
+    // .gitignore에 걸린 파일(.env·설정·로컬 DB)은 전환·병합이 조용히 덮어쓸 수 있어 크기 상한 안에서 스냅숏에 함께 담는다
+    let ignored = ignored_within_caps(git, repo).await;
+    if dirty.iter().all(u8::is_ascii_whitespace) && ignored.is_empty() {
         return Ok(None);
     }
     let gitdir = String::from_utf8_lossy(&git.output(repo, &["rev-parse", "--absolute-git-dir"]).await?).trim().to_owned();
@@ -80,6 +127,14 @@ async fn snapshot_wip(git: &GitRunner, repo: &Path, id: &str) -> Result<Option<S
     let res = async {
         git.output_env(repo, &["read-tree", "HEAD"], &env).await?;
         git.output_env(repo, &["add", "-A"], &env).await?;
+        if !ignored.is_empty() {
+            let mut list = Vec::new();
+            for p in &ignored {
+                list.extend_from_slice(p.as_bytes());
+                list.push(0);
+            }
+            git.output_stdin_env(repo, &["add", "-f", "--pathspec-from-file=-", "--pathspec-file-nul"], &list, &env).await?;
+        }
         let tree = String::from_utf8_lossy(&git.output_env(repo, &["write-tree"], &env).await?).trim().to_owned();
         let commit = git.output(repo, &["-c", "user.name=git403", "-c", "user.email=git403@localhost", "commit-tree", &tree, "-p", "HEAD", "-m", "git403: working tree snapshot before AI chat"]).await?;
         let commit = String::from_utf8_lossy(&commit).trim().to_owned();
@@ -108,8 +163,14 @@ pub async fn delete(git: &GitRunner, repo: &Path, id: &str) -> Result<()> {
 /// - 백업 때 브랜치였으면 그 브랜치로 `switch`(없으면 백업 커밋에서 다시 만든다), 분리였으면 `switch --detach`. `switch`는 덮어쓸 변경이 있으면 git이 거절한다.
 /// - 그다음 `reset --keep <sha>`: 커밋하지 않은 변경은 유지하고, 되돌릴 파일과 겹치면 git이 거절한다(작업 내용을 잃지 않는다).
 ///   untracked 파일은 건드리지 않는다.
-pub async fn restore(git: &GitRunner, repo: &Path, id: &str, branch: Option<&str>, abort_ongoing: bool, branches: bool, wip: bool) -> Result<()> {
+pub async fn restore(git: &GitRunner, repo: &Path, id: &str, branch: Option<&str>, abort_ongoing: bool, branches: bool, wip: bool, digest: Option<&str>) -> Result<()> {
     check_id(id)?;
+    // 호출 측이 백업을 만들 때의 지문을 주면(이력의 `backup.digest`) 백업 ref가 그대로인지 먼저 확인한다
+    if let Some(d) = digest.filter(|d| !d.is_empty()) {
+        if digest_of(git, repo, id).await? != d {
+            return Err(gc_i18n::coded!("aiBackup.tampered", "the backup refs were modified after the backup was made; refusing to restore from them").into());
+        }
+    }
     let ref_name = format!("{PREFIX}{id}");
     let out = git.output_allow(repo, &["rev-parse", "--verify", "-q", &format!("{ref_name}^{{commit}}")], &[1]).await?;
     let sha = String::from_utf8_lossy(&out).trim().to_owned();
@@ -228,7 +289,7 @@ mod tests {
         sh(&p, &["commit", "-qm", "ai2"]);
         std::fs::write(p.join("b.txt"), "local edit\n").unwrap();
         std::fs::write(p.join("untracked.txt"), "u\n").unwrap();
-        restore(&git, &p, "r1", b.branch.as_deref(), false, false, false).await.unwrap();
+        restore(&git, &p, "r1", b.branch.as_deref(), false, false, false, None).await.unwrap();
         assert_eq!(sh(&p, &["rev-parse", "HEAD"]), b.sha);
         assert_eq!(sh(&p, &["symbolic-ref", "--short", "HEAD"]), "main");
         assert_eq!(std::fs::read_to_string(p.join("a.txt")).unwrap(), "1\n", "AI가 바꾼 파일은 되돌아간다");
@@ -246,7 +307,7 @@ mod tests {
         sh(&p, &["commit", "-qam", "ai"]);
         std::fs::write(p.join("a.txt"), "mine\n").unwrap();
         let head = sh(&p, &["rev-parse", "HEAD"]);
-        assert!(restore(&git, &p, "r2", b.branch.as_deref(), false, false, false).await.is_err());
+        assert!(restore(&git, &p, "r2", b.branch.as_deref(), false, false, false, None).await.is_err());
         assert_eq!((sh(&p, &["rev-parse", "HEAD"]), std::fs::read_to_string(p.join("a.txt")).unwrap()), (head, "mine\n".into()), "거절되면 HEAD·파일 그대로");
     }
 
@@ -259,13 +320,13 @@ mod tests {
         std::fs::write(p.join("x.txt"), "x\n").unwrap();
         sh(&p, &["add", "."]);
         sh(&p, &["commit", "-qm", "on ai-work"]);
-        restore(&git, &p, "r3", b.branch.as_deref(), false, false, false).await.unwrap();
+        restore(&git, &p, "r3", b.branch.as_deref(), false, false, false, None).await.unwrap();
         assert_eq!((sh(&p, &["symbolic-ref", "--short", "HEAD"]), sh(&p, &["rev-parse", "HEAD"])), ("main".into(), b.sha.clone()));
         assert_eq!(sh(&p, &["rev-parse", "--verify", "ai-work"]).len(), 40, "다른 브랜치는 지우지 않는다");
         // 원래 브랜치가 지워졌으면 백업 커밋에서 다시 만든다
         sh(&p, &["switch", "-q", "ai-work"]);
         sh(&p, &["branch", "-D", "main"]);
-        restore(&git, &p, "r3", Some("main"), false, false, false).await.unwrap();
+        restore(&git, &p, "r3", Some("main"), false, false, false, None).await.unwrap();
         assert_eq!((sh(&p, &["symbolic-ref", "--short", "HEAD"]), sh(&p, &["rev-parse", "main"])), ("main".into(), b.sha));
     }
 
@@ -276,7 +337,7 @@ mod tests {
         sh(&p, &["checkout", "-q", "--detach", "HEAD~1"]);
         let b = create(&git, &p, "r4").await.unwrap().unwrap();
         sh(&p, &["switch", "-q", "main"]);
-        restore(&git, &p, "r4", b.branch.as_deref(), false, false, false).await.unwrap();
+        restore(&git, &p, "r4", b.branch.as_deref(), false, false, false, None).await.unwrap();
         assert_eq!(sh(&p, &["rev-parse", "HEAD"]), b.sha);
         assert!(std::process::Command::new("git").current_dir(&p).args(["symbolic-ref", "-q", "HEAD"]).output().unwrap().stdout.is_empty(), "분리 상태");
         assert_eq!(sh(&p, &["rev-parse", "main"]).len(), 40, "main 브랜치는 그대로(이동 없음)");
@@ -297,15 +358,15 @@ mod tests {
         // 충돌로 멈춘 merge
         let m = std::process::Command::new("git").current_dir(&p).args(["merge", "other"]).output().unwrap();
         assert!(!m.status.success() && p.join(".git/MERGE_HEAD").exists());
-        let err = restore(&git, &p, "r5", b.branch.as_deref(), false, false, false).await.unwrap_err();
+        let err = restore(&git, &p, "r5", b.branch.as_deref(), false, false, false, None).await.unwrap_err();
         assert_eq!(err.coded().unwrap().code, "aiBackup.operationInProgress");
         assert!(p.join(".git/MERGE_HEAD").exists(), "거절되면 merge 상태 유지");
-        restore(&git, &p, "r5", b.branch.as_deref(), true, false, false).await.unwrap();
+        restore(&git, &p, "r5", b.branch.as_deref(), true, false, false, None).await.unwrap();
         assert!(!p.join(".git/MERGE_HEAD").exists());
         assert_eq!(sh(&p, &["rev-parse", "HEAD"]), b.sha);
         assert_eq!(std::fs::read_to_string(p.join("a.txt")).unwrap(), "1\n");
         assert!(sh(&p, &["status", "--porcelain"]).is_empty());
-        assert_eq!(restore(&git, &p, "nope", None, false, false, false).await.unwrap_err().coded().unwrap().code, "aiBackup.missing");
+        assert_eq!(restore(&git, &p, "nope", None, false, false, false, None).await.unwrap_err().coded().unwrap().code, "aiBackup.missing");
     }
 
     #[tokio::test]
@@ -328,12 +389,12 @@ mod tests {
         std::fs::write(p.join("a.txt"), "2\n").unwrap();
         sh(&p, &["commit", "-qam", "ai on main"]);
         // 브랜치 되돌리기를 고르지 않으면 HEAD만
-        restore(&git, &p, "h1", b.branch.as_deref(), false, false, false).await.unwrap();
+        restore(&git, &p, "h1", b.branch.as_deref(), false, false, false, None).await.unwrap();
         assert_eq!(sh(&p, &["rev-parse", "HEAD"]), b.sha);
         assert_ne!(sh(&p, &["rev-parse", "dev"]), dev0);
         assert!(sh(&p, &["branch", "--list", "old"]).is_empty());
         // 고르면: dev는 원래 커밋으로, old는 다시 생기고, 새 브랜치는 그대로
-        restore(&git, &p, "h1", b.branch.as_deref(), false, true, false).await.unwrap();
+        restore(&git, &p, "h1", b.branch.as_deref(), false, true, false, None).await.unwrap();
         assert_eq!((sh(&p, &["rev-parse", "dev"]), sh(&p, &["rev-parse", "old"])), (dev0.clone(), old0));
         assert!(!sh(&p, &["branch", "--list", "ai-new"]).is_empty(), "AI가 만든 브랜치는 지우지 않는다");
         // 다른 worktree에서 체크아웃 중인 브랜치는 건드리지 않는다
@@ -345,7 +406,7 @@ mod tests {
         let wt = tempfile::tempdir().unwrap();
         sh(&p, &["worktree", "add", "-q", &wt.path().join("w").to_string_lossy(), "dev"]);
         let dev1 = sh(&p, &["rev-parse", "dev"]);
-        restore(&git, &p, "h1", b.branch.as_deref(), false, true, false).await.unwrap();
+        restore(&git, &p, "h1", b.branch.as_deref(), false, true, false, None).await.unwrap();
         assert_eq!(sh(&p, &["rev-parse", "dev"]), dev1, "worktree에서 쓰는 브랜치는 건너뜀");
         // delete는 세 이름공간을 모두 지운다
         delete(&git, &p, "h1").await.unwrap();
@@ -368,18 +429,73 @@ mod tests {
         assert_eq!((sh(&p, &["status", "--porcelain"]), sh(&p, &["diff", "--cached", "--name-only"])), before, "진짜 작업 트리·인덱스는 그대로");
         assert!(!p.join(".git/git403-wip-w1.idx").exists(), "임시 인덱스는 지운다");
         let files = sh(&p, &["ls-tree", "-r", "--name-only", &snap]);
-        assert!(files.contains("new.txt") && files.contains("a.txt") && !files.contains("ignored.log"), "{files}");
+        assert!(files.contains("new.txt") && files.contains("a.txt") && files.contains("ignored.log"), "무시된 작은 파일도 담는다: {files}");
         assert_eq!(sh(&p, &["show", &format!("{snap}:a.txt")]), "dirty tracked");
         // AI가 파일을 바꾸고 지운다 → HEAD만 되돌리면 그대로, wip을 고르면 내용 복원
         std::fs::write(p.join("a.txt"), "ai changed\n").unwrap();
         std::fs::remove_file(p.join("new.txt")).unwrap();
         sh(&p, &["stash", "-q"]);
-        restore(&git, &p, "w1", b.branch.as_deref(), false, false, false).await.unwrap();
+        restore(&git, &p, "w1", b.branch.as_deref(), false, false, false, None).await.unwrap();
         assert!(!p.join("new.txt").exists());
-        restore(&git, &p, "w1", b.branch.as_deref(), false, false, true).await.unwrap();
+        restore(&git, &p, "w1", b.branch.as_deref(), false, false, true, None).await.unwrap();
         assert_eq!((std::fs::read_to_string(p.join("a.txt")).unwrap(), std::fs::read_to_string(p.join("new.txt")).unwrap()), ("dirty tracked\n".into(), "untracked\n".into()));
         assert!(std::fs::read_to_string(p.join("ignored.log")).unwrap() == "ignored\n");
         delete(&git, &p, "w1").await.unwrap();
         assert!(sh(&p, &["for-each-ref", "refs/git403"]).is_empty());
+    }
+
+    #[tokio::test]
+    async fn tampered_backup_refs_are_detected_and_restore_refuses() {
+        let git = GitRunner::default();
+        let (_d, p) = repo();
+        sh(&p, &["branch", "dev"]);
+        let b = create(&git, &p, "t1").await.unwrap().unwrap();
+        assert!(!b.digest.is_empty());
+        verify(&git, &p, &b).await.unwrap();
+        // 공격자가 백업 ref(HEAD·브랜치·스냅숏)를 다른 커밋으로 덮어쓴다
+        sh(&p, &["switch", "-q", "-c", "evil"]);
+        std::fs::write(p.join("e.txt"), "evil\n").unwrap();
+        sh(&p, &["add", "."]);
+        sh(&p, &["commit", "-qm", "evil"]);
+        let evil = sh(&p, &["rev-parse", "HEAD"]);
+        for r in ["refs/git403/ai-backup/t1", "refs/git403/ai-backup-heads/t1/dev"] {
+            let old = sh(&p, &["rev-parse", r]);
+            sh(&p, &["update-ref", r, &evil]);
+            let e = verify(&git, &p, &b).await.unwrap_err();
+            assert_eq!(e.coded().unwrap().code, "aiBackup.tampered");
+            assert_eq!(restore(&git, &p, "t1", b.branch.as_deref(), false, true, false, Some(&b.digest)).await.unwrap_err().coded().unwrap().code, "aiBackup.tampered");
+            assert_eq!(sh(&p, &["rev-parse", "HEAD"]), evil, "거절되면 아무것도 안 바뀐다");
+            sh(&p, &["update-ref", r, &old]);
+            verify(&git, &p, &b).await.unwrap();
+        }
+        // 새 ref를 끼워 넣어도(브랜치 백업 추가) 지문이 달라진다
+        sh(&p, &["update-ref", "refs/git403/ai-backup-heads/t1/extra", &evil]);
+        assert!(verify(&git, &p, &b).await.is_err());
+        // 지문을 안 주면(옛 호출) 검사를 건너뛴다
+        sh(&p, &["switch", "-q", "main"]);
+        restore(&git, &p, "t1", b.branch.as_deref(), false, false, false, None).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn ignored_files_are_snapshotted_within_caps_and_survive_a_branch_switch() {
+        let git = GitRunner::default();
+        let (_d, p) = repo();
+        std::fs::write(p.join(".gitignore"), ".env\nbig.bin\n").unwrap();
+        sh(&p, &["add", ".gitignore"]);
+        sh(&p, &["commit", "-qm", "ignore"]);
+        std::fs::write(p.join(".env"), "SECRET=1\n").unwrap();
+        std::fs::write(p.join("big.bin"), vec![0u8; 300 * 1024]).unwrap(); // 하나 256KB 상한 초과
+        // 작업 트리가 깨끗해도 무시된 파일이 있으면 스냅숏
+        assert!(sh(&p, &["status", "--porcelain"]).is_empty());
+        let b = create(&git, &p, "i1").await.unwrap().unwrap();
+        let snap = b.wip.clone().expect("무시된 파일만 있어도 스냅숏");
+        let files = sh(&p, &["ls-tree", "-r", "--name-only", &snap]);
+        assert!(files.contains(".env") && !files.contains("big.bin"), "{files}");
+        assert!(sh(&p, &["status", "--porcelain"]).is_empty(), "진짜 작업 트리·인덱스는 그대로");
+        // 전환이 .env를 덮어쓰는 상황(대상 브랜치가 .env를 추적)을 흉내: 지우고 wip 복원
+        std::fs::remove_file(p.join(".env")).unwrap();
+        restore(&git, &p, "i1", b.branch.as_deref(), false, false, true, None).await.unwrap();
+        assert_eq!(std::fs::read_to_string(p.join(".env")).unwrap(), "SECRET=1\n");
+        assert!(p.join("big.bin").exists());
     }
 }

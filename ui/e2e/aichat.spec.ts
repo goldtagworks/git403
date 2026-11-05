@@ -182,7 +182,7 @@ test("끝나면 되돌리기 한 줄: OS 확인 후 백업으로 되돌리고, �
   const asked = await page.evaluate(() => (window as any).__asked as string[]);
   expect(asked.some((m) => m.includes("merge"))).toBe(true);
   const r = (await callsOf(page, "ai_backup_restore")).map((c) => JSON.parse(c[1]));
-  expect(r).toEqual([{ id: "b1", branch: "main", abortOngoing: false, branches: false, wip: false }, { id: "b1", branch: "main", abortOngoing: true, branches: false, wip: false }]);
+  expect(r).toEqual([{ id: "b1", branch: "main", abortOngoing: false, branches: false, wip: false, digest: "0123456789abcdef" }, { id: "b1", branch: "main", abortOngoing: true, branches: false, wip: false, digest: "0123456789abcdef" }]);
 });
 
 test("백업이 없으면(커밋 없는 저장소) 되돌리기 줄이 없다", async ({ page }) => {
@@ -347,8 +347,8 @@ test("이력 저장 실패 알림(note)은 토스트로 보인다", async ({ pag
   await expect(page.getByText("채팅을 이력에 저장하지 못했습니다")).toBeVisible();
 });
 
-test("저장소 로컬 git 설정에 실행형 항목이 있으면 로컬 전용이어도 이유(키 이름)를 담아 묻는다", async ({ page }) => {
-  await open(page, { __risk: { level: "none", exec: ["diff.evil.textconv", "core.sshcommand"] } });
+test("저장소 쪽 git 설정에 안전 목록 밖 항목이 있으면 로컬 전용이어도 이유(키 이름)를 담아 묻는다", async ({ page }) => {
+  await open(page, { __risk: { level: "none", config: ["diff.evil.textconv", "core.sshcommand"] } });
   await toggle(page);
   await send(page, "상태 알려줘");
   await done(page);
@@ -383,4 +383,36 @@ test("되돌리기: 브랜치·스냅숏이 없으면 추가 질문 없이 HEAD�
   const asked = await page.evaluate(() => (window as any).__asked as string[]);
   expect(asked.some((m) => m.includes("다른 로컬 브랜치 위치도") || m.includes("커밋하지 않고 바꿔 두었던 파일도"))).toBe(false);
   expect(JSON.parse((await callsOf(page, "ai_backup_restore"))[0][1])).toMatchObject({ branches: false, wip: false });
+});
+
+test("확인으로도 허용할 수 없는 저장소 설정(밖을 가리키는 worktree 등)은 묻지 않고 사유를 보이며 시작하지 않는다", async ({ page }) => {
+  await open(page, { __risk: { level: "none", refuse: ["core.worktree points outside the repository folder (/etc)"] } });
+  await toggle(page);
+  await send(page, "상태 알려줘");
+  await expect(col(page).getByRole("alert")).toContainText("git 설정 때문에 AI가 작업할 수 없습니다");
+  await expect(col(page).getByRole("alert")).toContainText("core.worktree points outside");
+  expect(await confirmAsks(page)).toHaveLength(0);
+  expect(await callsOf(page, "ai_chat_start")).toHaveLength(0);
+});
+
+test("되돌리기는 백업의 지문을 함께 보낸다(백업 ref 변조 확인용)", async ({ page }) => {
+  await open(page);
+  await toggle(page);
+  await send(page, "정리해 줘");
+  await done(page);
+  await col(page).getByRole("button", { name: "이 작업 되돌리기" }).click();
+  await expect.poll(async () => (await callsOf(page, "ai_backup_restore")).length).toBe(1);
+  expect(JSON.parse((await callsOf(page, "ai_backup_restore"))[0][1]).digest).toBe("0123456789abcdef");
+});
+
+test("AI 답의 링크는 실제 주소를 숨기지 않는다(호스트를 덧붙이고 title에 전체 주소)", async ({ page }) => {
+  await open(page, { __chatScript: [{ kind: "text", text: "[여기 누르세요](https://evil.example/login?x=1) 그리고 https://github.com/o/r 와 [github.com 문서](https://github.com/docs)" }, { kind: "done", sessionId: "s", result: "", isError: false }] });
+  await toggle(page);
+  await send(page, "링크 줘");
+  await done(page);
+  const a = col(page).locator(".ai-text a");
+  await expect(a.nth(0)).toHaveText("여기 누르세요 (evil.example)");
+  await expect(a.nth(0)).toHaveAttribute("title", "https://evil.example/login?x=1");
+  await expect(a.nth(1)).toHaveText("https://github.com/o/r");
+  await expect(a.nth(2)).toHaveText("github.com 문서");
 });

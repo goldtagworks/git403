@@ -1608,6 +1608,9 @@ export const ja: Record<Key, string> = {
   "err.aiBackup.badId": "バックアップ ID が無効です",
   "err.aiBackup.missing": "バックアップはすでに存在しません",
   "err.aiBackup.operationInProgress": "{op} が進行中です。先に中止してください",
+  "err.aiChat.configRefused": "このリポジトリの git 設定のため、AI は作業できません：{reasons}",
+  "err.aiBackup.tampered": "バックアップ作成後にバックアップ ref が変更されたため、元に戻す操作を拒否しました",
+  "err.aiChat.backupTampered": "作業中にバックアップ ref が変更されました。この作業を元に戻すのは安全ではなくなりました",
   "err.aiChat.confirmRequired": "AI がこのリポジトリで作業する前に確認が必要です",
   "err.aiChat.historySaveFailed": "チャットを履歴に保存できませんでした",
 };

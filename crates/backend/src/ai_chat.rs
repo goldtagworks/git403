@@ -24,8 +24,8 @@ fn summary(name: &str, command: &str) -> String {
 impl Backend {
     /// claude에 줄 `--mcp-config`: 이 실행 파일을 MCP 서버(`--git403-mcp <저장소>`)로. 서버 환경에는 PATH·git 경로·사용자 git 설정에 필요한 변수만 넣고,
     /// git 자식에게 줄 askpass 환경은 `GIT403_GIT_ENV`로 따로 싣는다(서버가 askpass로 오인되지 않게)
-    fn mcp_config(&self, repo: &std::path::Path, fingerprint: &str) -> String {
-        use crate::mcp::{GIT_BIN, GIT_ENV, REMOTE_FP};
+    fn mcp_config(&self, repo: &std::path::Path, fingerprint: &str, config_fp: &str) -> String {
+        use crate::mcp::{CONFIG_FP, GIT_BIN, GIT_ENV, REMOTE_FP};
         let exe = std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
         let mut env = serde_json::Map::new();
         for k in ["HOME", "USER", "LOGNAME", "SSH_AUTH_SOCK", "XDG_CONFIG_HOME", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_SSH", "GIT_SSH_COMMAND", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "SYSTEMROOT", "TMPDIR", "TEMP", "TMP", "LANG"] {
@@ -39,6 +39,7 @@ impl Backend {
         env.insert(GIT_BIN.into(), self.git.git_path().to_string_lossy().into_owned().into());
         let git_env: serde_json::Map<String, Value> = self.git.env_pairs().iter().map(|(k, v)| (k.clone(), v.clone().into())).collect();
         env.insert(REMOTE_FP.into(), fingerprint.into());
+        env.insert(CONFIG_FP.into(), config_fp.into());
         env.insert(GIT_ENV.into(), Value::Object(git_env).to_string().into());
         chat::mcp_config(&exe, &repo.to_string_lossy(), &env)
     }
@@ -67,10 +68,14 @@ impl Backend {
         // 위험 확인(공개·다수 협업자·판정 불가)은 대화 첫 실행에만. UI를 믿지 않고 여기서 다시 판정해 확인 없는 요청은 거절한다
         let r = self.ai_chat_risk(&repo).await?;
         // 확인 키에 원격 지문을 넣어, 확인한 뒤 원격(URL·pushurl)이 바뀌면 다시 묻는다
-        let key = format!("{conversation}\0{}\0{}\0{}", repo.display(), r.fingerprint, r.exec.join(","));
+        if !r.refuse.is_empty() {
+            // 확인으로도 허용할 수 없는 저장소 설정(밖을 가리키는 worktree·mirror·비기본 refspec…)
+            return Err(gc_i18n::coded!("aiChat.configRefused", "AI cannot work in this repository because of its git configuration: {reasons}", reasons = r.refuse.join("; ")).json());
+        }
+        let key = format!("{conversation}\0{}\0{}\0{}", repo.display(), r.fingerprint, r.config_fp);
         if !self.ai.confirmed.lock().contains(&key) {
-            if (r.level != crate::ai_risk::Level::None || !r.exec.is_empty()) && !confirmed {
-                return Err(gc_i18n::coded!("aiChat.confirmRequired", "Confirmation is required before AI can work on this repository ({level}, collaborators: {collaborators}, executable settings: {exec})", level = serde_json::to_value(r.level).ok().and_then(|v| v.as_str().map(String::from)).unwrap_or_default(), collaborators = r.collaborators.unwrap_or(0), exec = r.exec.len()).json());
+            if (r.level != crate::ai_risk::Level::None || !r.config.is_empty()) && !confirmed {
+                return Err(gc_i18n::coded!("aiChat.confirmRequired", "Confirmation is required before AI can work on this repository ({level}, collaborators: {collaborators}, settings outside the safe list: {config})", level = serde_json::to_value(r.level).ok().and_then(|v| v.as_str().map(String::from)).unwrap_or_default(), collaborators = r.collaborators.unwrap_or(0), config = r.config.len()).json());
             }
             self.ai.confirmed.lock().insert(key);
         }
@@ -82,7 +87,7 @@ impl Backend {
         let id = format!("b{:x}{}", now_ms(), SEQ.fetch_add(1, Ordering::Relaxed));
         let backup = ai_backup::create(&self.git, &repo, &id).await.map_err(|e| e.ipc())?;
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let args = chat::args(&input, session_id.as_deref(), &self.mcp_config(&repo, &r.fingerprint));
+        let args = chat::args(&input, session_id.as_deref(), &self.mcp_config(&repo, &r.fingerprint, &r.config_fp));
         let spawned = {
             let mut chats = self.ai.chats.lock();
             if chats.contains_key(&conversation) {
@@ -129,6 +134,12 @@ impl Backend {
                 }
             }
             let res = task.await;
+            // 차례가 끝났을 때 백업 ref가 그대로인지 확인한다: 바뀌었으면(저장소 설정·다른 도구가 덮어씀) 알린다(되돌리기도 거절된다)
+            if let Some(b) = &backup {
+                if gc_core::ai_backup::verify(&me.git, &repo, b).await.is_err() {
+                    me.emit_chat(&conversation, &ChatEvent::Note { code: "aiChat.backupTampered".into(), message: "backup refs changed during the task".into() });
+                }
+            }
             let last = match (res, done) {
                 (Ok(Err(CoreError::Cancelled)), _) => ChatEvent::Cancelled,
                 (_, Some(d)) => d,
@@ -168,8 +179,8 @@ impl Backend {
     }
 
     /// 백업 HEAD로 되돌린다 (`gc_core::ai_backup::restore`: 안전 규칙은 그쪽 문서)
-    pub(crate) async fn ai_backup_restore(&self, repo: PathBuf, id: String, branch: Option<String>, abort_ongoing: bool, branches: bool, wip: bool) -> Res<Value> {
-        gc_core::ai_backup::restore(&self.git, &repo, &id, branch.as_deref(), abort_ongoing, branches, wip).await.map_err(|e| e.ipc())?;
+    pub(crate) async fn ai_backup_restore(&self, repo: PathBuf, id: String, branch: Option<String>, abort_ongoing: bool, branches: bool, wip: bool, digest: Option<String>) -> Res<Value> {
+        gc_core::ai_backup::restore(&self.git, &repo, &id, branch.as_deref(), abort_ongoing, branches, wip, digest.as_deref()).await.map_err(|e| e.ipc())?;
         Ok(Value::Null)
     }
 
@@ -441,7 +452,7 @@ EOF"#;
         let r = b.ai_chat_start(&prog(&bin), repo.clone(), "r".into(), "커밋해".into(), None, true).await.unwrap();
         rec.last("r").await;
         assert_ne!(git(&repo, &["rev-parse", "HEAD"]), before, "가짜 claude가 커밋을 만들었다");
-        b.ai_backup_restore(repo.clone(), r["id"].as_str().unwrap().into(), Some("main".into()), false, false, false).await.unwrap();
+        b.ai_backup_restore(repo.clone(), r["id"].as_str().unwrap().into(), Some("main".into()), false, false, false, None).await.unwrap();
         assert_eq!(git(&repo, &["rev-parse", "HEAD"]), before);
     }
 
@@ -519,21 +530,21 @@ EOF"#;
     async fn local_repo_with_executable_config_needs_confirmation() {
         let (b, rec, repo, bin, _keep) = setup(OK).await;
         // 깨끗한 로컬 전용 저장소: 확인 없음
-        assert!(b.ai_chat_risk(&repo).await.unwrap().exec.is_empty());
+        assert!(b.ai_chat_risk(&repo).await.unwrap().config.is_empty());
         // 표준 LFS 필터 정의는 실행형으로 보지 않는다
         git(&repo, &["config", "filter.lfs.clean", "git-lfs clean -- %f"]);
         git(&repo, &["config", "filter.lfs.smudge", "git-lfs smudge -- %f"]);
         git(&repo, &["config", "filter.lfs.process", "git-lfs filter-process"]);
-        assert!(b.ai_chat_risk(&repo).await.unwrap().exec.is_empty());
+        assert!(b.ai_chat_risk(&repo).await.unwrap().config.is_empty());
         // 저장소 로컬 textconv, include된 파일의 sshCommand
         git(&repo, &["config", "diff.evil.textconv", "sh -c id"]);
         std::fs::write(repo.join(".git/extra.cfg"), "[core]\n\tsshCommand = ssh -v\n").unwrap();
         git(&repo, &["config", "include.path", "extra.cfg"]);
         let r = b.ai_chat_risk(&repo).await.unwrap();
-        assert_eq!((r.level, r.exec.clone()), (crate::ai_risk::Level::None, vec!["core.sshcommand".to_string(), "diff.evil.textconv".to_string()]));
-        assert_eq!(b.ai_chat_risk_ipc(repo.clone()).await.unwrap(), json!({"level": "none", "exec": ["core.sshcommand", "diff.evil.textconv"]}));
+        assert_eq!((r.level, r.config.clone()), (crate::ai_risk::Level::None, vec!["core.sshcommand".to_string(), "diff.evil.textconv".to_string()]));
+        assert_eq!(b.ai_chat_risk_ipc(repo.clone()).await.unwrap(), json!({"level": "none", "config": ["core.sshcommand", "diff.evil.textconv"]}));
         let e = b.ai_chat_start(&prog(&bin), repo.clone(), "ex".into(), "a".into(), None, false).await.unwrap_err();
-        assert!(e.contains("aiChat.confirmRequired") && e.contains("\"exec\":\"2\""), "{e}");
+        assert!(e.contains("aiChat.confirmRequired") && e.contains("\"config\":\"2\""), "{e}");
         b.ai_chat_start(&prog(&bin), repo.clone(), "ex".into(), "a".into(), None, true).await.unwrap();
         rec.last("ex").await;
         // 확인 뒤 실행형 설정이 늘면 같은 대화도 다시 묻는다
@@ -554,7 +565,7 @@ EOF"#;
         git(&repo, &["branch", "-D", "dev"]);
         std::fs::write(repo.join("w.txt"), "ai\n").unwrap();
         let id = r["id"].as_str().unwrap().to_string();
-        b.ai_backup_restore(repo.clone(), id, Some("main".into()), false, true, true).await.unwrap();
+        b.ai_backup_restore(repo.clone(), id, Some("main".into()), false, true, true, None).await.unwrap();
         assert_eq!(git(&repo, &["rev-parse", "dev"]), dev0);
         assert_eq!(std::fs::read_to_string(repo.join("w.txt")).unwrap(), "mine\n");
     }

@@ -1608,6 +1608,9 @@ export const ru: Record<Key, string> = {
   "err.aiBackup.badId": "Недопустимый идентификатор резервной копии",
   "err.aiBackup.missing": "Резервной копии больше нет",
   "err.aiBackup.operationInProgress": "Выполняется {op}; сначала прервите его",
+  "err.aiChat.configRefused": "ИИ не может работать в этом репозитории из-за его конфигурации git: {reasons}",
+  "err.aiBackup.tampered": "Ссылки резервной копии были изменены после её создания, поэтому отмена отклонена",
+  "err.aiChat.backupTampered": "Ссылки резервной копии изменились во время задачи. Отменять её уже небезопасно",
   "err.aiChat.confirmRequired": "Перед работой ИИ в этом репозитории требуется подтверждение",
   "err.aiChat.historySaveFailed": "Не удалось сохранить чат в истории",
 };

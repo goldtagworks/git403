@@ -47,6 +47,31 @@ md.core.ruler.push("sha", (state) => {
   }
 });
 
+// 링크는 실제 주소를 숨기지 않는다(피싱 방지): 전체 주소를 title로 달고, 보이는 글자에 그 호스트가 없으면 ` (호스트)`를 덧붙인다.
+md.core.ruler.push("link-url", (state) => {
+  for (const blk of state.tokens) {
+    if (blk.type !== "inline" || !blk.children) continue;
+    const out: typeof blk.children = [];
+    let open: { host: string; text: string } | null = null;
+    for (const tk of blk.children) {
+      if (tk.type === "link_open") {
+        const href = tk.attrGet("href") ?? "";
+        let host = "";
+        try {
+          host = /^https?:\/\//i.test(href) ? new URL(href).host : "";
+        } catch {}
+        if (host && !tk.attrGet("data-sha")) (tk.attrSet("title", href), (open = { host, text: "" }));
+      } else if (open && (tk.type === "text" || tk.type === "code_inline")) open.text += tk.content;
+      else if (tk.type === "link_close" && open) {
+        if (!open.text.toLowerCase().includes(open.host.toLowerCase())) out.push(Object.assign(new state.Token("text", "", 0), { content: ` (${open.host})` }));
+        open = null;
+      }
+      out.push(tk);
+    }
+    blk.children = out;
+  }
+});
+
 /** 링크는 앱 안에서 이동하지 않고 브라우저로 연다 */
 const onClick = (e: MouseEvent) => {
   const a = (e.target as HTMLElement).closest("a");

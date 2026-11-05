@@ -1608,6 +1608,9 @@ export const lo: Record<Key, string> = {
   "err.aiBackup.badId": "ID ການສຳຮອງບໍ່ຖືກຕ້ອງ",
   "err.aiBackup.missing": "ການສຳຮອງບໍ່ມີອີກແລ້ວ",
   "err.aiBackup.operationInProgress": "ມີ {op} ກຳລັງດຳເນີນຢູ່; ກະລຸນາຢຸດມັນກ່ອນ",
+  "err.aiChat.configRefused": "AI ເຮັດວຽກໃນບ່ອນເກັບນີ້ບໍ່ໄດ້ເພາະການຕັ້ງຄ່າ git: {reasons}",
+  "err.aiBackup.tampered": "ການອ້າງອີງສຳຮອງຖືກປ່ຽນຫຼັງສ້າງສຳຮອງ ຈຶ່ງປະຕິເສດການຍ້ອນກັບ",
+  "err.aiChat.backupTampered": "ການອ້າງອີງສຳຮອງປ່ຽນໄປລະຫວ່າງວຽກ ການຍ້ອນກັບວຽກນີ້ບໍ່ປອດໄພອີກຕໍ່ໄປ",
   "err.aiChat.confirmRequired": "ຕ້ອງຢືນຢັນກ່ອນ AI ຈະເຮັດວຽກໃນບ່ອນເກັບນີ້",
   "err.aiChat.historySaveFailed": "ບໍ່ສາມາດບັນທຶກການສົນທະນາລົງປະຫວັດໄດ້",
 };

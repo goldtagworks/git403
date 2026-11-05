@@ -146,7 +146,7 @@ export const api = {
   aiChatCancel: (conversation: string) => invoke<void>("ai_chat_cancel", { conversation }),
   /** 백업 HEAD로 되돌린다. 머지·리베이스 등이 진행 중이면 aiBackup.operationInProgress — abortOngoing:true로 중단하고 되돌린다 */
   /** branches: 백업 때의 다른 로컬 브랜치 위치도 되돌림, wip: 백업 때의 작업 트리 스냅숏 내용도 되돌림(둘 다 사용자 확인 뒤에만) */
-  aiBackupRestore: (repo: string, id: string, branch: string | null, abortOngoing = false, more: { branches?: boolean; wip?: boolean } = {}) => invoke<void>("ai_backup_restore", { repo, id, ...(branch ? { branch } : {}), ...(abortOngoing ? { abortOngoing } : {}), ...(more.branches ? { branches: true } : {}), ...(more.wip ? { wip: true } : {}) }),
+  aiBackupRestore: (repo: string, id: string, branch: string | null, abortOngoing = false, more: { branches?: boolean; wip?: boolean; digest?: string } = {}) => invoke<void>("ai_backup_restore", { repo, id, ...(branch ? { branch } : {}), ...(abortOngoing ? { abortOngoing } : {}), ...(more.branches ? { branches: true } : {}), ...(more.wip ? { wip: true } : {}), ...(more.digest ? { digest: more.digest } : {}) }),
   aiHistoryList: (repo: string) => invoke<AiChatSummary[]>("ai_history_list", { repo }),
   aiHistoryRead: (repo: string, conversation: string) => invoke<AiChatEntry[]>("ai_history_read", { repo, conversation }),
   aiHistoryClear: (repo: string) => invoke<void>("ai_history_clear", { repo }),

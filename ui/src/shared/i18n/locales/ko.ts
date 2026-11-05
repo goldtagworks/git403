@@ -1595,7 +1595,7 @@ export const ko: Record<Key, string> = {
   "aiChat.confirmShared": "{repo}은(는) 다른 협업자 {n}명과 공유하는 저장소입니다. AI가 파일을 읽고 협업자의 작업에 영향을 줄 수 있는 git 명령을 실행하며, 읽은 내용은 Anthropic으로 전송됩니다.",
   "aiChat.confirmUnknown": "{repo}이(가) 공개 저장소인지, 다른 사람과 공유하는지 확인하지 못했습니다(연결된 계정이 없거나 조회에 실패). AI가 파일을 읽고 git 명령을 실행하며, 읽은 내용은 Anthropic으로 전송됩니다.",
   "aiChat.confirmScope": "AI는 허용된 git 명령(status, log, diff, add, commit, merge, rebase, fetch, pull, 강제가 아닌 push, switch, stash 등)만 실행할 수 있습니다. 강제 push, hard reset, 브랜치 삭제는 할 수 없고, 이 저장소 밖의 파일은 읽거나 수정할 수 없습니다. 계속할까요?",
-  "aiChat.confirmExec": "이 저장소의 git 설정에는 git이 프로그램을 실행하게 만드는 항목이 있습니다({keys}). AI가 작업하는 동안 훅·외부 diff·textconv는 꺼지지만, 필터·병합 드라이버·자격 증명 도우미 같은 설정은 그대로 실행됩니다.",
+  "aiChat.confirmExec": "이 저장소의 git 설정(서브모듈 포함)에 앱이 안전하다고 보지 않는 항목이 있습니다({keys}). 그중에는 git이 프로그램을 실행하게 만드는 것도 있습니다. AI가 작업하는 동안 훅·외부 diff·textconv는 꺼지지만, 필터·병합 드라이버·자격 증명 도우미 같은 설정은 그대로 실행됩니다.",
   "aiChat.undoBranchesAsk": "이 작업 전의 다른 로컬 브랜치 위치도 되돌릴까요? (AI가 만든 브랜치는 남겨 둡니다.)",
   "aiChat.undoWipAsk": "커밋하지 않고 바꿔 두었던 파일도 이 작업 전 상태로 되돌릴까요? 그 뒤에 바뀐 파일은 그때의 내용으로 덮어씁니다.",
   "quick.aiChat": "AI 채팅 열기·닫기",
@@ -1608,6 +1608,9 @@ export const ko: Record<Key, string> = {
   "err.aiBackup.badId": "백업 id가 올바르지 않습니다",
   "err.aiBackup.missing": "백업이 더 이상 없습니다",
   "err.aiBackup.operationInProgress": "{op} 작업이 진행 중입니다. 먼저 중단하세요",
+  "err.aiChat.configRefused": "이 저장소의 git 설정 때문에 AI가 작업할 수 없습니다: {reasons}",
+  "err.aiBackup.tampered": "백업을 만든 뒤 백업 ref가 바뀌어서 되돌리기를 거절했습니다",
+  "err.aiChat.backupTampered": "작업 중에 백업 ref가 바뀌었습니다. 이 작업을 되돌리는 것은 더 이상 안전하지 않습니다",
   "err.aiChat.confirmRequired": "AI가 이 저장소에서 작업하기 전에 확인이 필요합니다",
   "err.aiChat.historySaveFailed": "채팅을 이력에 저장하지 못했습니다",
 };

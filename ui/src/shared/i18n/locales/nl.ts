@@ -1608,6 +1608,9 @@ export const nl: Record<Key, string> = {
   "err.aiBackup.badId": "Ongeldig back-up-id",
   "err.aiBackup.missing": "De back-up bestaat niet meer",
   "err.aiBackup.operationInProgress": "Er is een {op} bezig; breek die eerst af",
+  "err.aiChat.configRefused": "De AI kan niet in deze repository werken vanwege de git-configuratie: {reasons}",
+  "err.aiBackup.tampered": "De back-upverwijzingen zijn na de back-up gewijzigd, dus ongedaan maken is geweigerd",
+  "err.aiChat.backupTampered": "De back-upverwijzingen zijn tijdens de taak gewijzigd. Ongedaan maken is niet meer veilig",
   "err.aiChat.confirmRequired": "Bevestiging is nodig voordat de AI in deze repository werkt",
   "err.aiChat.historySaveFailed": "De chat kon niet in de geschiedenis worden opgeslagen",
 };

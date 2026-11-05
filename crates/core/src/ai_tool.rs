@@ -250,60 +250,27 @@ pub fn resolve(repo: &Path, p: &str) -> Res<PathBuf> {
     Ok(norm)
 }
 
-/// AI가 **쓰면 안 되는** 경로(정규화된 저장소 상대 경로): 다른 도구·사용자가 나중에 자동으로 읽거나 실행하는 설정이라 AI가 고치면 지속형 인젝션이 된다.
-/// 에디터·에이전트 설정(`.vscode`·`.idea`·`.cursor`·`.windsurf`·`.zed`·`.devcontainer`·`.aider*`·`.continue`, `.mcp.json`·`CLAUDE.md`·`AGENTS.md`·`GEMINI.md`·`.cursorrules`…),
-/// 환경 자동 로드(`.envrc`), 훅 관리 도구(`.githooks`·`.husky`·`.lefthook`·`lefthook.yml`·`.pre-commit-config.yaml` — 이후 사용자의 commit이 실행한다).
-/// 읽기는 막지 않는다. 같은 규칙을 `mv` 인자에도 적용한다(고친 파일을 이 이름으로 옮겨 우회하지 못하게).
+/// AI가 **쓰면 안 되는** 경로(정규화된 저장소 상대 경로): 다른 도구·사용자·CI가 나중에 자동으로 읽거나 실행하는 설정이라 AI가 고치면 지속형 인젝션이 된다.
+/// - 에디터·에이전트: `.vscode`·`.idea`·`.cursor`·`.windsurf`·`.zed`·`.devcontainer`·`.continue`, `.mcp.json`·`CLAUDE.md`·`AGENTS.md`·`GEMINI.md`·`.cursorrules`·`.aider*`…
+/// - 환경 자동 로드: `.envrc`, 도구 버전 관리 `mise*.toml`·`.tool-versions`
+/// - 훅 관리 도구(이후 사용자의 commit이 실행): `.githooks`·`.husky`·`.lefthook`·`lefthook.yml`·`.pre-commit-config.yaml`
+/// - CI·빌드·패키지 설정: `.github/**`(workflows·actions), `.gitlab-ci.yml`·`.gitlab`, `.circleci`, `.travis.yml`, `azure-pipelines.yml`, `bitbucket-pipelines.yml`, `Jenkinsfile`,
+///   `.cargo/config*`(링커·rustflags가 빌드 때 실행), `.npmrc`·`.yarnrc*`·`.pnpmfile.cjs`(스크립트·레지스트리·훅), `.gitmodules`·`.gitattributes`(서브모듈 URL·필터·diff 드라이버 지정)
+/// `package.json`·`Makefile`·`build.rs` 같은 **프로젝트 본문**은 막지 않는다 — 막으면 AI 작업의 대부분이 불가능하고, 실행은 사용자가 빌드·실행할 때 일어나며 diff에 보인다(문서에 명시한 수용 위험).
+/// 읽기는 막지 않는다. 같은 규칙을 `mv` 인자와, 작업 트리를 바꾸는 git 작업이 들여오는 변경(`mcp::preflight`)에도 적용한다.
 pub fn write_protected(rel: &Path) -> bool {
-    const DIRS: [&str; 10] = [".vscode", ".idea", ".cursor", ".windsurf", ".zed", ".devcontainer", ".githooks", ".husky", ".lefthook", ".continue"];
-    const FILES: [&str; 18] = ["claude.md", "claude.local.md", "agents.md", "gemini.md", ".mcp.json", ".envrc", ".cursorrules", ".windsurfrules", ".aider.conf.yml", ".aiderignore", ".pre-commit-config.yaml", "lefthook.yml", "lefthook.yaml", ".lefthook.yml", ".lefthook.yaml", "copilot-instructions.md", ".clinerules", ".roomodes"];
+    const DIRS: [&str; 13] = [".vscode", ".idea", ".cursor", ".windsurf", ".zed", ".devcontainer", ".githooks", ".husky", ".lefthook", ".continue", ".github", ".gitlab", ".circleci"];
+    const FILES: [&str; 33] = [
+        "claude.md", "claude.local.md", "agents.md", "gemini.md", ".mcp.json", ".envrc", ".cursorrules", ".windsurfrules", ".aider.conf.yml", ".aiderignore", ".pre-commit-config.yaml", "lefthook.yml", "lefthook.yaml", ".lefthook.yml", ".lefthook.yaml", "copilot-instructions.md", ".clinerules", ".roomodes",
+        ".gitlab-ci.yml", ".travis.yml", "azure-pipelines.yml", "bitbucket-pipelines.yml", "jenkinsfile", ".npmrc", ".yarnrc", ".yarnrc.yml", ".pnpmfile.cjs", ".tool-versions", ".gitmodules", ".gitattributes", ".gitpod.yml", ".mise.toml", "mise.toml",
+    ];
     let names: Vec<String> = rel.components().filter_map(|c| matches!(c, Component::Normal(_)).then(|| c.as_os_str().to_string_lossy().to_lowercase())).collect();
     let n = names.len();
-    names.iter().enumerate().any(|(i, c)| (i + 1 < n && DIRS.contains(&c.as_str())) || (i + 1 == n && (FILES.contains(&c.as_str()) || DIRS.contains(&c.as_str()))) || c.starts_with(".aider"))
-}
-
-/// 저장소 로컬 설정에서 **git이 프로그램을 실행하게 만드는 키**를 찾는다(`git config --list --includes --show-scope -z` 출력 → 키 이름들, 값은 담지 않는다).
-/// 저장소 로컬(local)·worktree 범위만 본다 — 사용자 전역 설정은 사용자 것이다. 표준 git-lfs 필터 정의는 제외.
-/// 키 목록(git 문서 기준): `core.sshCommand|editor|askPass|gitProxy|alternateRefsCommand`, `diff.external`, `diff.<d>.command|textconv`, `merge.<d>.driver`,
-/// `filter.<d>.clean|smudge|process`, `credential[.<url>].helper`, `gpg.program`·`gpg.<fmt>.program`·`gpg.ssh.defaultKeyCommand`, `remote.<n>.uploadpack|receivepack|vcs`,
-/// `sequence.editor`, `trailer.<t>.command|cmd`, 그리고 파일을 읽어 오류로 내용을 드러내는 `blame.ignoreRevsFile`. (`core.fsmonitor`·`core.hooksPath`·`core.pager`는 앱이 `-c`로 덮어써 제외.)
-pub fn exec_config_keys(listing: &str) -> Vec<String> {
-    let toks: Vec<&str> = listing.split('\0').collect();
-    let mut out: Vec<String> = Vec::new();
-    for pair in toks.chunks(2) {
-        let [scope, kv] = pair else { continue };
-        if *scope != "local" && *scope != "worktree" {
-            continue;
-        }
-        let (key, value) = kv.split_once('\n').unwrap_or((kv, ""));
-        let k = key.to_ascii_lowercase();
-        let parts: Vec<&str> = k.split('.').collect();
-        let (first, last) = (parts[0], parts[parts.len() - 1]);
-        let mid = parts.len() > 2;
-        let hit = match first {
-            "core" => parts.len() == 2 && ["sshcommand", "editor", "askpass", "gitproxy", "alternaterefscommand"].contains(&last),
-            "diff" => (parts.len() == 2 && last == "external") || (mid && (last == "command" || last == "textconv")),
-            "merge" => mid && last == "driver",
-            "filter" => mid && ["clean", "smudge", "process"].contains(&last) && !lfs_standard(&k, value),
-            "credential" => last == "helper" && !value.trim().is_empty(),
-            "gpg" => last == "program" || last == "defaultkeycommand",
-            "remote" => mid && ["uploadpack", "receivepack", "vcs"].contains(&last),
-            "sequence" => parts.len() == 2 && last == "editor",
-            "trailer" => mid && (last == "command" || last == "cmd"),
-            "blame" => parts.len() == 2 && last == "ignorerevsfile",
-            _ => false,
-        };
-        if hit && !out.contains(&k) {
-            out.push(k);
-        }
-    }
-    out.sort();
-    out
-}
-
-/// 표준 git-lfs 필터 정의(`git lfs install`이 쓰는 값)인가
-fn lfs_standard(key: &str, value: &str) -> bool {
-    matches!((key, value), ("filter.lfs.clean", "git-lfs clean -- %f") | ("filter.lfs.smudge", "git-lfs smudge -- %f") | ("filter.lfs.process", "git-lfs filter-process"))
+    let dir_hit = |c: &str| DIRS.contains(&c) || c.starts_with(".aider");
+    names.iter().enumerate().any(|(i, c)| {
+        let last = i + 1 == n;
+        (!last && dir_hit(c)) || (last && (FILES.contains(&c.as_str()) || dir_hit(c) || ((c.starts_with("mise.") || c.starts_with(".mise.")) && c.ends_with(".toml")) || (c.starts_with("config") && i > 0 && names[i - 1] == ".cargo")))
+    })
 }
 
 /// 브랜치·태그 이름(또는 `refs/heads/…`·`refs/tags/…`). `refs/`의 다른 이름(백업 `refs/git403/`·`refs/stash`·`refs/remotes` 등)·`+`·`:`·글롭·따옴표·공백은 불가
@@ -569,12 +536,18 @@ pub fn validate(args: &[String], repo: &Path, remotes: &[String]) -> Res<Vec<Str
         ("diff" | "log" | "show", _) | ("stash", Some("show")) => &["--no-ext-diff", "--no-textconv"],
         ("blame", _) => &["--no-textconv"],
         ("fetch" | "pull" | "push", _) => &["--no-recurse-submodules"],
+        // 무시 목록(.gitignore)에 걸린 파일(.env 등)을 병합·전환이 조용히 덮어쓰지 않게 한다
+        ("merge" | "switch", _) => &["--no-overwrite-ignore"],
         _ => &[],
     };
     for (k, e) in extra.iter().enumerate() {
         body.insert(at + k, (*e).to_string());
     }
-    let mut full = prefix();
+    // 원격 명령은 그 원격의 prune·mirror 설정도 꺼 둔다(저장소 설정이 있어도 이긴다)
+    let mut full = prefix(repo);
+    if let ("fetch" | "pull" | "push", Some(r)) = (body[0].as_str(), body.iter().skip(1).find(|a| remotes.contains(a))) {
+        full.extend(["-c".to_string(), format!("remote.{r}.prune=false"), "-c".into(), format!("remote.{r}.mirror=false"), "-c".into(), format!("remote.{r}.pruneTags=false")]);
+    }
     full.extend(body);
     Ok(full)
 }
@@ -582,11 +555,19 @@ pub fn validate(args: &[String], repo: &Path, remotes: &[String]) -> Res<Vec<Str
 /// null 장치(훅 폴더를 비워 훅을 막는 데 쓴다)
 const NULL_DEV: &str = if cfg!(windows) { "NUL" } else { "/dev/null" };
 
-/// 모든 AI git 호출 앞에 붙는 전역 설정: pager 없음, 외부 프로토콜·fsmonitor 끔, **훅 끔**(`core.hooksPath` = null 장치).
-/// 저장소 안 훅 폴더(`.githooks`·husky)를 AI가 고친 뒤 commit이 그것을 실행하는 길과 pull로 받은 원격 훅 실행을 AI 차례 동안 막는다 —
-/// AI 차례의 commit·merge·rebase·push는 훅(pre-commit 등)을 실행하지 않는다.
-pub fn prefix() -> Vec<String> {
-    ["--no-pager", "-c", "protocol.ext.allow=never", "-c", "core.fsmonitor=false", "-c", "core.pager=cat", "-c", "core.quotepath=false", "-c"].map(String::from).into_iter().chain([format!("core.hooksPath={NULL_DEV}")]).collect()
+/// 모든 AI git 호출 앞에 붙는 전역 설정(`repo`는 저장소 폴더, 정규화된 경로):
+/// - `--work-tree=<repo>`: 저장소 설정 `core.worktree`가 밖을 가리켜도 작업 트리는 이 폴더(명령줄이 설정을 이긴다)
+/// - pager 없음, 외부 프로토콜·fsmonitor 끔, **훅 끔**(`core.hooksPath` = null 장치) — 저장소 안 훅 폴더(`.githooks`·husky)를 AI가 고친 뒤 commit이 실행하는 길과
+///   pull로 받은 원격 훅 실행을 AI 차례 동안 막는다(AI 차례의 commit·merge·rebase·push는 훅을 실행하지 않는다)
+/// - 서브모듈 안으로 들어가지 않는다: `submodule.recurse=false`·`diff.ignoreSubmodules=all`·`status.submoduleSummary=false`(서브모듈 설정의 filter가 status 한 번에 실행되던 길)
+/// - 원격 조작은 안전하게: `fetch.prune=false`·`fetch.pruneTags=false`·`push.default=nothing`(refspec 없는 push 불가), 원격별 설정은 `validate`가 더한다
+pub fn prefix(repo: &Path) -> Vec<String> {
+    let mut v: Vec<String> = vec!["--no-pager".into(), format!("--work-tree={}", repo.display())];
+    for c in ["protocol.ext.allow=never", "core.fsmonitor=false", "core.pager=cat", "core.quotepath=false", "submodule.recurse=false", "diff.ignoreSubmodules=all", "status.submoduleSummary=false", "fetch.prune=false", "fetch.pruneTags=false", "push.default=nothing", "push.recurseSubmodules=no"] {
+        v.extend(["-c".into(), c.into()]);
+    }
+    v.extend(["-c".into(), format!("core.hooksPath={NULL_DEV}")]);
+    v
 }
 
 /// 원격 목록 지문: `(이름, URL)` 쌍(가져오기·보내기 URL, `insteadOf` 적용 후)을 정렬·중복 제거해 FNV-1a 64비트로 줄인다.
@@ -685,22 +666,36 @@ mod tests {
         validate(&v(a), r, &remotes()).is_ok()
     }
     fn args_of(r: &Path, a: &[&str]) -> Vec<String> {
-        validate(&v(a), r, &remotes()).unwrap().split_off(prefix().len())
+        {
+            let mut x = validate(&v(a), r, &remotes()).unwrap().split_off(prefix(r).len());
+            // 원격 명령은 앞에 원격별 `-c remote.<r>.…` 설정이 더 붙는다
+            while x.first().is_some_and(|t| t == "-c") && x.get(1).is_some_and(|t| t.starts_with("remote.")) {
+                x.drain(..2);
+            }
+            x
+        }
     }
 
     #[test]
     fn builds_safe_argv_in_original_order() {
         let (_d, r) = repo();
         let full = validate(&v(&["log", "--oneline", "-n", "5", "main", "--", "src/a.rs"]), &r, &remotes()).unwrap();
-        assert_eq!(&full[..prefix().len()], &prefix()[..]);
-        let pre = prefix().join(" ");
-        assert!(pre.starts_with("--no-pager -c protocol.ext.allow=never -c core.fsmonitor=false") && pre.contains("-c core.hooksPath=/dev/null"), "훅 끔: {pre}");
-        assert_eq!(&full[prefix().len()..], ["log", "--no-ext-diff", "--no-textconv", "--oneline", "-n", "5", "main", "--", "src/a.rs"], "외부 diff·textconv를 끈다");
+        assert_eq!(&full[..prefix(&r).len()], &prefix(&r)[..]);
+        let pre = prefix(&r).join(" ");
+        assert!(pre.starts_with(&format!("--no-pager --work-tree={} -c protocol.ext.allow=never -c core.fsmonitor=false", r.display())), "작업 트리 고정: {pre}");
+        for c in ["-c core.hooksPath=/dev/null", "-c submodule.recurse=false", "-c diff.ignoreSubmodules=all", "-c status.submoduleSummary=false", "-c fetch.prune=false", "-c fetch.pruneTags=false", "-c push.default=nothing"] {
+            assert!(pre.contains(c), "{c}: {pre}");
+        }
+        assert_eq!(&full[prefix(&r).len()..], ["log", "--no-ext-diff", "--no-textconv", "--oneline", "-n", "5", "main", "--", "src/a.rs"], "외부 diff·textconv를 끈다");
         assert_eq!(args_of(&r, &["diff", "--cached"]), ["diff", "--no-ext-diff", "--no-textconv", "--cached", "--"]);
         assert_eq!(args_of(&r, &["blame", "--", "src/a.rs"]), ["blame", "--no-textconv", "--", "src/a.rs"]);
         assert_eq!(args_of(&r, &["stash", "show", "-p"]), ["stash", "show", "--no-ext-diff", "--no-textconv", "-p"]);
         assert_eq!(args_of(&r, &["fetch", "origin"]), ["fetch", "--no-recurse-submodules", "origin"]);
         assert_eq!(args_of(&r, &["push", "-u", "origin", "feat"]), ["push", "--no-recurse-submodules", "-u", "origin", "feat"]);
+        let full = validate(&v(&["push", "origin", "feat"]), &r, &remotes()).unwrap().join(" ");
+        assert!(full.contains("-c remote.origin.prune=false -c remote.origin.mirror=false -c remote.origin.pruneTags=false"), "원격별 설정: {full}");
+        assert_eq!(args_of(&r, &["merge", "dev"]), ["merge", "--no-overwrite-ignore", "dev"]);
+        assert_eq!(args_of(&r, &["switch", "-c", "x"]), ["switch", "--no-overwrite-ignore", "-c", "x"]);
         assert_eq!(args_of(&r, &["add", "./src/../src/a.rs"]), ["add", "src/a.rs"], "경로는 정규화해 넘긴다");
         assert_eq!(args_of(&r, &["add", &format!("{}/src/a.rs", r.display())]), ["add", "src/a.rs"], "저장소 안 절대 경로는 상대로");
         assert_eq!(args_of(&r, &["stash"]), ["stash", "push"]);
@@ -968,7 +963,7 @@ mod tests {
     #[test]
     fn persistent_config_paths_are_write_protected_for_edit_and_mv() {
         let (_d, r) = repo();
-        for p in [".vscode/settings.json", ".idea/workspace.xml", ".cursor/rules/a.mdc", "CLAUDE.md", "sub/CLAUDE.md", "Agents.md", "AGENTS.md", "GEMINI.md", ".mcp.json", ".envrc", ".githooks/pre-commit", ".husky/pre-commit", "a/.husky/_/x", ".pre-commit-config.yaml", "lefthook.yml", ".aider.chat.history.md", ".devcontainer/devcontainer.json", ".github/copilot-instructions.md", ".cursorrules", ".githooks"] {
+        for p in [".vscode/settings.json", ".idea/workspace.xml", ".cursor/rules/a.mdc", "CLAUDE.md", "sub/CLAUDE.md", "Agents.md", "AGENTS.md", "GEMINI.md", ".mcp.json", ".envrc", ".githooks/pre-commit", ".husky/pre-commit", "a/.husky/_/x", ".pre-commit-config.yaml", "lefthook.yml", ".aider.chat.history.md", ".devcontainer/devcontainer.json", ".github/copilot-instructions.md", ".cursorrules", ".githooks", ".github/workflows/ci.yml", ".github", ".gitlab-ci.yml", ".circleci/config.yml", ".cargo/config.toml", ".cargo/config", ".npmrc", ".yarnrc.yml", ".yarnrc", ".pnpmfile.cjs", "mise.toml", ".mise.toml", "mise.local.toml", ".tool-versions", ".gitmodules", ".gitattributes", "sub/.gitattributes", "Jenkinsfile", "azure-pipelines.yml"] {
             assert!(write_protected(Path::new(p)), "{p}");
             assert!(edit_file(&r, p, "", "x", false).is_err(), "edit {p}");
         }
@@ -976,32 +971,13 @@ mod tests {
         std::fs::write(r.join(".githooks/pre-commit"), "#!/bin/sh\n").unwrap();
         assert!(edit_file(&r, ".githooks/pre-commit", "sh", "bash", false).is_err());
         assert_eq!(std::fs::read_to_string(r.join(".githooks/pre-commit")).unwrap(), "#!/bin/sh\n");
-        for p in ["src/a.rs", "README.md", "docs/CLAUDE_notes.md", ".github/workflows/ci.yml", "vscode/x", "src/idea.rs"] {
+        for p in ["src/a.rs", "README.md", "docs/CLAUDE_notes.md", "vscode/x", "src/idea.rs", "package.json", "Makefile", "build.rs", "cargo/config.toml", ".cargo/registry.txt"] {
             assert!(!write_protected(Path::new(p)), "{p}");
         }
         assert!(edit_file(&r, "src/a.rs", "fn a()", "fn b()", false).is_ok());
         assert!(ok(&r, &["mv", "src/a.rs", "src/b.rs"]) && !ok(&r, &["mv", "src/a.rs", ".githooks/x"]) && !ok(&r, &["mv", "--", "src/a.rs", "CLAUDE.md"]));
         // 8.3 이름: `.claude` → `CLAUDE~1`
         assert!(resolve(&r, "CLAUDE~1/x").is_err() && resolve(&r, "claude~2").is_err() && resolve(&r, "GIT~1").is_err());
-    }
-
-    #[test]
-    fn exec_config_keys_lists_program_running_settings_from_local_scope_only() {
-        let l = |rows: &[(&str, &str)]| rows.iter().map(|(s, kv)| format!("{s}\0{kv}\0")).collect::<String>();
-        let local = [
-            ("local", "diff.x.textconv\ncat"), ("local", "filter.evil.clean\nsh -c id"), ("local", "filter.evil.smudge\nx"), ("local", "filter.evil.process\nx"), ("local", "core.sshcommand\nssh -v"), ("local", "core.editor\nvim"), ("local", "core.askpass\nx"), ("local", "core.gitproxy\nx"),
-            ("local", "diff.external\nx"), ("local", "diff.d.command\nx"), ("local", "merge.m.driver\nx %O"), ("local", "credential.helper\n!x"), ("local", "credential.https://h.com.helper\n!x"), ("worktree", "gpg.program\nx"), ("local", "gpg.ssh.program\nx"), ("local", "gpg.ssh.defaultkeycommand\nx"),
-            ("local", "remote.origin.uploadpack\nx"), ("local", "remote.origin.receivepack\nx"), ("local", "remote.o.vcs\nx"), ("local", "sequence.editor\nx"), ("local", "trailer.t.command\nx"), ("local", "blame.ignorerevsfile\n/etc/passwd"), ("local", "core.alternaterefscommand\nx"),
-        ];
-        let got = exec_config_keys(&l(&local));
-        assert_eq!(got.len(), local.len(), "{got:?}");
-        assert!(got.contains(&"credential.https://h.com.helper".to_string()) && got.contains(&"filter.evil.clean".to_string()));
-        // 해당 없음: 전역 설정, 표준 LFS 필터, 앱이 덮어쓰는 키, 비어 있는 credential.helper(초기화), 평범한 키
-        let none = l(&[("global", "core.sshcommand\nssh"), ("global", "filter.x.clean\nx"), ("local", "filter.lfs.clean\ngit-lfs clean -- %f"), ("local", "filter.lfs.smudge\ngit-lfs smudge -- %f"), ("local", "filter.lfs.process\ngit-lfs filter-process"), ("local", "filter.lfs.required\ntrue"), ("local", "core.hookspath\n.githooks"), ("local", "core.fsmonitor\nx"), ("local", "core.pager\nless"), ("local", "credential.helper\n"), ("local", "user.name\nt"), ("local", "remote.origin.url\nhttps://x"), ("local", "core.filemode\ntrue"), ("command", "core.sshcommand\nx")]);
-        assert!(exec_config_keys(&none).is_empty(), "{:?}", exec_config_keys(&none));
-        // 표준이 아닌 lfs 정의는 잡는다
-        assert_eq!(exec_config_keys(&l(&[("local", "filter.lfs.clean\nsh -c evil")])), ["filter.lfs.clean"]);
-        assert!(exec_config_keys("").is_empty() && exec_config_keys("garbage").is_empty());
     }
 
     /// 3·4차 리뷰의 실행형 설정(textconv·ext-diff·훅·서브모듈)이 앱이 붙인 옵션으로 실제 git에서 실행되지 않는다

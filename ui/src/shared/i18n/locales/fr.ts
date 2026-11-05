@@ -1608,6 +1608,9 @@ export const fr: Record<Key, string> = {
   "err.aiBackup.badId": "Identifiant de sauvegarde invalide",
   "err.aiBackup.missing": "La sauvegarde n’existe plus",
   "err.aiBackup.operationInProgress": "Un {op} est en cours ; abandonnez-le d’abord",
+  "err.aiChat.configRefused": "L'IA ne peut pas travailler dans ce dépôt à cause de sa configuration git : {reasons}",
+  "err.aiBackup.tampered": "Les références de sauvegarde ont été modifiées après la sauvegarde ; l'annulation est refusée",
+  "err.aiChat.backupTampered": "Les références de sauvegarde ont changé pendant la tâche. L'annuler n'est plus sûr",
   "err.aiChat.confirmRequired": "Une confirmation est requise avant que l'IA travaille sur ce dépôt",
   "err.aiChat.historySaveFailed": "Le chat n'a pas pu être enregistré dans l'historique",
 };

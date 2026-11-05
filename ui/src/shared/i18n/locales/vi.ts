@@ -1608,6 +1608,9 @@ export const vi: Record<Key, string> = {
   "err.aiBackup.badId": "ID bản sao lưu không hợp lệ",
   "err.aiBackup.missing": "Bản sao lưu không còn tồn tại",
   "err.aiBackup.operationInProgress": "Một {op} đang diễn ra; hãy hủy bỏ nó trước",
+  "err.aiChat.configRefused": "AI không thể làm việc trong kho lưu trữ này vì cấu hình git: {reasons}",
+  "err.aiBackup.tampered": "Các tham chiếu sao lưu đã bị thay đổi sau khi sao lưu nên việc hoàn tác bị từ chối",
+  "err.aiChat.backupTampered": "Các tham chiếu sao lưu đã thay đổi trong khi thực hiện tác vụ. Hoàn tác tác vụ này không còn an toàn",
   "err.aiChat.confirmRequired": "Cần xác nhận trước khi AI làm việc trong kho lưu trữ này",
   "err.aiChat.historySaveFailed": "Không thể lưu cuộc trò chuyện vào lịch sử",
 };

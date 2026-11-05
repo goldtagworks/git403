@@ -1608,6 +1608,9 @@ export const ptBR: Record<Key, string> = {
   "err.aiBackup.badId": "ID de backup inválido",
   "err.aiBackup.missing": "O backup não existe mais",
   "err.aiBackup.operationInProgress": "Há um {op} em andamento; aborte-o primeiro",
+  "err.aiChat.configRefused": "A IA não pode trabalhar neste repositório por causa da configuração do git: {reasons}",
+  "err.aiBackup.tampered": "As referências de backup foram alteradas após o backup, então o desfazer foi recusado",
+  "err.aiChat.backupTampered": "As referências de backup mudaram durante a tarefa. Desfazer a tarefa já não é seguro",
   "err.aiChat.confirmRequired": "É necessária confirmação antes de a IA trabalhar neste repositório",
   "err.aiChat.historySaveFailed": "Não foi possível salvar o chat no histórico",
 };

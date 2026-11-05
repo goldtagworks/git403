@@ -1608,6 +1608,9 @@ export const pl: Record<Key, string> = {
   "err.aiBackup.badId": "Nieprawidłowy identyfikator kopii zapasowej",
   "err.aiBackup.missing": "Kopia zapasowa już nie istnieje",
   "err.aiBackup.operationInProgress": "Trwa operacja {op}; najpierw ją przerwij",
+  "err.aiChat.configRefused": "AI nie może pracować w tym repozytorium z powodu jego konfiguracji git: {reasons}",
+  "err.aiBackup.tampered": "Odwołania kopii zapasowej zostały zmienione po jej utworzeniu, więc cofnięcie odrzucono",
+  "err.aiChat.backupTampered": "Odwołania kopii zapasowej zmieniły się podczas zadania. Cofanie nie jest już bezpieczne",
   "err.aiChat.confirmRequired": "Przed pracą AI w tym repozytorium wymagane jest potwierdzenie",
   "err.aiChat.historySaveFailed": "Nie udało się zapisać czatu w historii",
 };

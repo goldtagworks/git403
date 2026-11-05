@@ -1608,6 +1608,9 @@ export const tr: Record<Key, string> = {
   "err.aiBackup.badId": "Geçersiz yedek kimliği",
   "err.aiBackup.missing": "Yedek artık mevcut değil",
   "err.aiBackup.operationInProgress": "Devam eden bir {op} var; önce iptal edin",
+  "err.aiChat.configRefused": "Git yapılandırması nedeniyle yapay zekâ bu depoda çalışamaz: {reasons}",
+  "err.aiBackup.tampered": "Yedek başvuruları yedek alındıktan sonra değiştirildi, bu yüzden geri alma reddedildi",
+  "err.aiChat.backupTampered": "Yedek başvuruları görev sırasında değişti. Bu görevi geri almak artık güvenli değil",
   "err.aiChat.confirmRequired": "Yapay zekâ bu depoda çalışmadan önce onay gerekir",
   "err.aiChat.historySaveFailed": "Sohbet geçmişe kaydedilemedi",
 };

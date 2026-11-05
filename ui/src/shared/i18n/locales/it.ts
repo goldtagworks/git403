@@ -1608,6 +1608,9 @@ export const it: Record<Key, string> = {
   "err.aiBackup.badId": "ID backup non valido",
   "err.aiBackup.missing": "Il backup non esiste più",
   "err.aiBackup.operationInProgress": "{op} è in corso; interrompilo prima",
+  "err.aiChat.configRefused": "L'IA non può lavorare in questo repository a causa della sua configurazione git: {reasons}",
+  "err.aiBackup.tampered": "I riferimenti di backup sono stati modificati dopo il backup, quindi l'annullamento è stato rifiutato",
+  "err.aiChat.backupTampered": "I riferimenti di backup sono cambiati durante l'attività. Annullarla non è più sicuro",
   "err.aiChat.confirmRequired": "Serve una conferma prima che l'IA lavori su questo repository",
   "err.aiChat.historySaveFailed": "Impossibile salvare la chat nella cronologia",
 };

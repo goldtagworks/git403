@@ -1608,6 +1608,9 @@ export const zhCN: Record<Key, string> = {
   "err.aiBackup.badId": "备份 ID 无效",
   "err.aiBackup.missing": "该备份已不存在",
   "err.aiBackup.operationInProgress": "正在进行 {op}；请先中止它",
+  "err.aiChat.configRefused": "由于此仓库的 git 配置，AI 无法在其中工作：{reasons}",
+  "err.aiBackup.tampered": "备份创建后备份引用被修改，已拒绝撤销",
+  "err.aiChat.backupTampered": "任务期间备份引用发生了变化。撤销此任务已不再安全",
   "err.aiChat.confirmRequired": "AI 在此仓库中工作之前需要确认",
   "err.aiChat.historySaveFailed": "无法将聊天保存到历史记录",
 };

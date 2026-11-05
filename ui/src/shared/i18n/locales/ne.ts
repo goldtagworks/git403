@@ -1608,6 +1608,9 @@ export const ne: Record<Key, string> = {
   "err.aiBackup.badId": "अमान्य ब्याकअप ID",
   "err.aiBackup.missing": "ब्याकअप अब छैन",
   "err.aiBackup.operationInProgress": "{op} चलिरहेको छ; पहिले यसलाई रोक्नुहोस्",
+  "err.aiChat.configRefused": "Git कन्फिगका कारण AI ले यो रिपोजिटरीमा काम गर्न सक्दैन: {reasons}",
+  "err.aiBackup.tampered": "ब्याकअप बनाएपछि ब्याकअप ref परिवर्तन भयो, त्यसैले अनडू अस्वीकार गरियो",
+  "err.aiChat.backupTampered": "कामको क्रममा ब्याकअप ref परिवर्तन भयो। यो कार्य अनडू गर्नु अब सुरक्षित छैन",
   "err.aiChat.confirmRequired": "AI ले यो रिपोजिटरीमा काम गर्नुअघि पुष्टि चाहिन्छ",
   "err.aiChat.historySaveFailed": "च्याट इतिहासमा सुरक्षित गर्न सकिएन",
 };
