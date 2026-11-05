@@ -1595,7 +1595,7 @@ export const zhCN: Record<Key, string> = {
   "aiChat.confirmShared": "{repo} 与另外 {n} 位协作者共享。AI 将读取文件并运行可能影响他们工作的 git 命令，读取的内容会发送给 Anthropic。",
   "aiChat.confirmUnknown": "无法确定 {repo} 是公开仓库还是与他人共享（没有已连接的账户，或查询失败）。AI 将读取文件并运行 git 命令，读取的内容会发送给 Anthropic。",
   "aiChat.confirmScope": "AI 只能运行允许的 git 命令（status、log、diff、add、commit、merge、rebase、fetch、pull、不带 force 的 push、switch、stash 等）。它不能强制推送、hard reset、删除分支，也不能读取或修改此仓库之外的文件。继续吗？",
-  "aiChat.confirmExec": "此仓库的 git 配置中有会让 git 运行程序的设置（{keys}）。AI 工作期间钩子、外部 diff 和 textconv 会被关闭，但过滤器、合并驱动、凭据助手等设置仍会运行。",
+  "aiChat.confirmExec": "此仓库的 git 配置（包括子模块）中有应用不认为安全的设置（{keys}），其中一些会让 git 运行程序。AI 工作期间钩子、外部 diff 和 textconv 会被关闭，但过滤器、合并驱动、凭据助手等设置仍会运行。",
   "aiChat.undoBranchesAsk": "是否也将其他本地分支恢复到此任务之前的位置？（AI 创建的分支会保留。）",
   "aiChat.undoWipAsk": "是否也将未提交的修改恢复到此任务之前的状态？此后改动过的文件会被当时的快照覆盖。",
   "quick.aiChat": "打开 / 关闭 AI 聊天",

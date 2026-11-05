@@ -1595,7 +1595,7 @@ export const vi: Record<Key, string> = {
   "aiChat.confirmShared": "{repo} được chia sẻ với {n} cộng tác viên khác. AI sẽ đọc tệp và chạy các lệnh git có thể ảnh hưởng đến công việc của họ; nội dung đã đọc được gửi tới Anthropic.",
   "aiChat.confirmUnknown": "Không xác định được {repo} là công khai hay chia sẻ với người khác (chưa kết nối tài khoản hoặc tra cứu thất bại). AI sẽ đọc tệp và chạy lệnh git; nội dung đã đọc được gửi tới Anthropic.",
   "aiChat.confirmScope": "AI chỉ có thể chạy các lệnh git được phép (status, log, diff, add, commit, merge, rebase, fetch, pull, push không force, switch, stash và tương tự). AI không thể force push, hard reset, xóa nhánh hay đọc và sửa tệp ngoài kho lưu trữ này. Tiếp tục?",
-  "aiChat.confirmExec": "Cấu hình git của kho lưu trữ này có thể khiến git chạy chương trình ({keys}). Hook, diff ngoài và textconv bị tắt khi AI làm việc, nhưng bộ lọc, trình điều khiển hợp nhất, trình trợ giúp thông tin xác thực và các thiết lập tương tự vẫn chạy.",
+  "aiChat.confirmExec": "Cấu hình git của kho lưu trữ này (gồm cả submodule) có các thiết lập mà ứng dụng không coi là an toàn ({keys}); một số có thể khiến git chạy chương trình. Hook, diff ngoài và textconv bị tắt khi AI làm việc, nhưng bộ lọc, trình điều khiển hợp nhất, trình trợ giúp thông tin xác thực và các thiết lập tương tự vẫn chạy.",
   "aiChat.undoBranchesAsk": "Đồng thời đưa các nhánh cục bộ khác về vị trí trước tác vụ này? (Nhánh do AI tạo được giữ lại.)",
   "aiChat.undoWipAsk": "Đồng thời khôi phục các tệp đã sửa nhưng chưa commit về trạng thái trước tác vụ này? Các tệp đã thay đổi từ đó sẽ bị ghi đè bằng bản chụp đó.",
   "quick.aiChat": "Mở / đóng trò chuyện AI",
