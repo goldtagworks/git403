@@ -7,8 +7,13 @@
 <p align="center">가볍고 빠른 크로스플랫폼 git 클라이언트</p>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshot-dark.png">
-  <img src="docs/images/screenshot-light.png" alt="git403 화면">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshot-right-dark.png">
+  <img src="docs/images/screenshot-right-light.png" alt="git403 화면 — 상세 오른쪽 배치">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshot-bottom-dark.png">
+  <img src="docs/images/screenshot-bottom-light.png" alt="git403 화면 — 상세 아래쪽 배치">
 </picture>
 
 ## 특징
