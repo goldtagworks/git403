@@ -299,7 +299,11 @@ export type AiChatEvent =
   | { kind: "toolResult"; id: string; output: string; isError: boolean }
   | { kind: "done"; sessionId: string | null; result: string; isError: boolean }
   | { kind: "error"; code: string | null; message: string }
+  /** 대화는 계속되지만 알릴 일(이력 저장 실패 `aiChat.historySaveFailed` 등). 마지막 이벤트 전에 올 수 있다 */
+  | { kind: "note"; code: string; message: string }
   | { kind: "cancelled" };
+/** 시작 전 확인이 필요한 저장소인지: none=로컬 전용·본인만 쓰는 private, public=공개, shared=본인 외 협업자 있음, unknown=판정 불가(위험으로 본다) */
+export interface AiRisk { level: "none" | "public" | "shared" | "unknown"; collaborators?: number }
 /** 한 차례(입력·답)의 이력 한 줄 */
 export interface AiChatEntry { time: number; repo: string; input: string; answer: string; commands: string[]; backup: AiBackup | null; sessionId: string | null; status: "done" | "error" | "cancelled" }
 export interface AiChatSummary { conversation: string; title: string; time: number; turns: number }

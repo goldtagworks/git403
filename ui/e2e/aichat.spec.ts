@@ -291,3 +291,58 @@ test("모바일(Android)에는 열이 없다", async ({ browser }) => {
   await expect(page.getByRole("complementary", { name: "AI 채팅" })).toHaveCount(0);
   await ctx.close();
 });
+
+// ---- 위험 저장소 확인(공개·다수 협업자·판정 불가는 대화 첫 실행 전 OS 확인, 로컬 전용은 생략) ----
+const confirmAsks = (page: Page) => page.evaluate(() => ((window as any).__asked as string[]).filter((m) => m.includes("허용된 git 명령")));
+const riskCases: [string, Record<string, unknown>, RegExp][] = [
+  ["공개 저장소", { __risk: { level: "public" } }, /공개 저장소입니다/],
+  ["협업자가 여러 명인 저장소", { __risk: { level: "shared", collaborators: 3 } }, /협업자 3명과 공유/],
+  ["판정 불가(호스팅 미연결)", { __risk: { level: "unknown" } }, /확인하지 못했습니다/],
+  ["판정 불가(조회 실패)", { __riskFail: "network error" }, /확인하지 못했습니다/],
+];
+for (const [name, flags, why] of riskCases) {
+  test(`${name}: 첫 실행 전에 이유와 범위를 담아 묻고, 이어 가기 차례는 다시 묻지 않는다`, async ({ page }) => {
+    await open(page, flags);
+    await toggle(page);
+    await send(page, "상태 알려줘");
+    await done(page);
+    const asks = await confirmAsks(page);
+    expect(asks).toHaveLength(1);
+    expect(asks[0]).toMatch(why);
+    expect(asks[0]).toContain("이 저장소 밖의 파일은 읽거나 수정할 수 없습니다");
+    const [start] = await callsOf(page, "ai_chat_start");
+    expect(JSON.parse(start[1]).confirmed).toBe(true);
+    await send(page, "이어서");
+    await expect.poll(async () => (await callsOf(page, "ai_chat_start")).length).toBe(2);
+    await expect(col(page).getByRole("button", { name: "이 작업 되돌리기" })).toHaveCount(2);
+    expect(await confirmAsks(page)).toHaveLength(1); // 이어 가기는 묻지 않는다
+    expect(await callsOf(page, "ai_chat_risk")).toHaveLength(1);
+  });
+}
+
+test("로컬 전용 저장소는 확인 없이 진행한다", async ({ page }) => {
+  await open(page);
+  await toggle(page);
+  await send(page, "상태 알려줘");
+  await done(page);
+  expect(await confirmAsks(page)).toHaveLength(0);
+  expect(await callsOf(page, "ai_chat_start")).toHaveLength(1);
+});
+
+test("확인을 거절하면 실행하지 않는다", async ({ page }) => {
+  await open(page, { __risk: { level: "public" }, __askNo: true });
+  await toggle(page);
+  await send(page, "상태 알려줘");
+  await expect.poll(async () => (await confirmAsks(page)).length).toBe(1);
+  await expect(col(page).getByText("상태 알려줘")).toHaveCount(0); // 입력 줄도 거둔다
+  expect(await callsOf(page, "ai_chat_start")).toHaveLength(0);
+  await expect(input(page)).toBeEnabled();
+});
+
+test("이력 저장 실패 알림(note)은 토스트로 보인다", async ({ page }) => {
+  await open(page, { __chatScript: [{ kind: "text", text: "끝" }, { kind: "note", code: "aiChat.historySaveFailed", message: "disk full" }, { kind: "done", sessionId: "s", result: "끝", isError: false }] });
+  await toggle(page);
+  await send(page, "해줘");
+  await done(page);
+  await expect(page.getByText("채팅을 이력에 저장하지 못했습니다")).toBeVisible();
+});

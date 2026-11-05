@@ -5,7 +5,7 @@ import { t, tErr } from "../i18n/i18n";
 import { isMobile } from "../lib/platform";
 import { toast, toastError } from "../lib/toast";
 import { aiProvider } from "./aiProviders";
-import type { AiBackup, AiChatEntry, AiChatEvent } from "../api/types";
+import type { AiBackup, AiChatEntry, AiChatEvent, AiRisk } from "../api/types";
 
 // AI 채팅(맨 오른쪽 독립 열) 상태. React 밖의 외부 스토어: 이벤트(text·tool…)가 계속 와도 구독한 화면(`features/ai/AiChat.tsx`)만 다시 그리고
 // 그래프·사이드바·상세·툴바·상태바는 건드리지 않는다. 구독은 종류별 — 대화(저장소별)·실행 중 여부(상태바)·열림(저장소별).
@@ -18,7 +18,8 @@ export type Item =
   | { k: "note"; text: string; error?: boolean }
   /** 이번 차례 끝의 "이 작업 되돌리기" 한 줄. done = 되돌린 뒤 */
   | { k: "undo"; backup: AiBackup; done?: boolean };
-export interface Chat { id: string; repo: string; sessionId: string | null; items: Item[]; running: boolean }
+/** confirmed: 이 대화는 위험 확인(공개·다수 협업자·판정 불가)을 마쳤다 — 이어 가기 차례는 다시 묻지 않는다 (백엔드도 같은 규칙으로 다시 검사) */
+export interface Chat { id: string; repo: string; sessionId: string | null; items: Item[]; running: boolean; confirmed: boolean }
 
 /** 데스크탑 전용 (모바일·VS Code 좁은 뷰·커밋 상세 탭에는 열이 없다) */
 export const available = !isMobile && !COMPACT && !DETAIL;
@@ -56,7 +57,7 @@ let opened = readOpen();
 const isOpen = (repo: string) => available && !!repo && !!opened[repo];
 
 const newId = () => `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-const blank = (repo: string): Chat => ({ id: newId(), repo, sessionId: null, items: [], running: false });
+const blank = (repo: string): Chat => ({ id: newId(), repo, sessionId: null, items: [], running: false, confirmed: false });
 const find = (id: string) => [...chats.values()].find((c) => c.id === id);
 
 let hooks = { reload: () => {}, open: (_repo: string) => {} };
@@ -101,6 +102,9 @@ function onEvent(conversation: string, ev: AiChatEvent) {
       backups.delete(c.id);
       return finish({ ...c, items: [...c.items, { k: "note", text, error: true }] }, b, false, text);
     }
+    case "note":
+      toastError(tErr(ev.code, undefined, ev.message));
+      return;
     case "cancelled": {
       const b = backups.get(c.id) ?? null;
       backups.delete(c.id);
@@ -114,6 +118,14 @@ async function consent() {
   if (!(await ask(t("ops.ai.consent", { p: aiProvider("anthropic").org }), { title: t("ops.ai.consentTitle"), kind: "warning" }))) return false;
   await api.aiSettingsSet({ provider: "anthropic", consent: true });
   return true;
+}
+
+/** 공개·다수 협업자·판정 불가 저장소는 대화 첫 실행 전에 OS 확인창으로 묻는다(거절하면 false). 로컬 전용·본인만 쓰는 private은 묻지 않는다 */
+async function confirmRisk(repo: string, risk: AiRisk) {
+  if (risk.level === "none") return true;
+  const key = risk.level === "public" ? "aiChat.confirmPublic" : risk.level === "shared" ? "aiChat.confirmShared" : "aiChat.confirmUnknown";
+  const name = repo.split(/[\\/]/).filter(Boolean).pop() ?? repo;
+  return ask(`${t(key, { repo: name, n: risk.collaborators ?? 0 })}\n\n${t("aiChat.confirmScope")}`, { title: t("aiChat.confirmTitle"), kind: "warning" });
 }
 
 export const aiChat = {
@@ -148,9 +160,16 @@ export const aiChat = {
     if (!text || cur.running) return;
     const start = { ...cur, running: true, items: [...cur.items, { k: "user", text } as Item] };
     put(start);
-    const run = () => api.aiChatStart(repo, start.id, text, start.sessionId);
+    let confirmed = cur.confirmed;
+    const run = () => api.aiChatStart(repo, start.id, text, start.sessionId, confirmed);
     const drop = (items: Item[]) => put({ ...chats.get(repo)!, running: false, items });
     try {
+      // 대화 첫 실행: 위험 판정(조회 실패 = 판정 불가 = 확인). 거절하면 입력 줄만 거두고 실행하지 않는다
+      if (!confirmed) {
+        const risk = await api.aiChatRisk(repo).catch((): AiRisk => ({ level: "unknown" }));
+        if (!(await confirmRisk(repo, risk))) return drop(cur.items);
+        confirmed = true;
+      }
       let b: AiBackup | null;
       try {
         b = await run();
@@ -160,6 +179,7 @@ export const aiChat = {
         b = await run();
       }
       if (b) backups.set(start.id, b);
+      put({ ...chats.get(repo)!, confirmed: true });
     } catch (e) {
       backups.delete(start.id);
       drop([...chats.get(repo)!.items, { k: "note", text: String(e), error: true }]);
@@ -189,7 +209,7 @@ export const aiChat = {
         ...(e.status === "error" ? [{ k: "note", text: t("aiChat.failedTurn"), error: true } as Item] : e.status === "cancelled" ? [{ k: "note", text: t("aiChat.cancelled") } as Item] : []),
         ...(e.backup ? [{ k: "undo", backup: e.backup } as Item] : []),
       ]);
-      put({ id: conversation, repo, sessionId: [...entries].reverse().find((e) => e.sessionId)?.sessionId ?? null, items, running: false });
+      put({ id: conversation, repo, sessionId: [...entries].reverse().find((e) => e.sessionId)?.sessionId ?? null, items, running: false, confirmed: false });
     } catch (e) {
       toastError(String(e));
     }

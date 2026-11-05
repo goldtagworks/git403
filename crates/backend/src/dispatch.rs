@@ -369,8 +369,12 @@ impl Backend {
             #[cfg(feature = "cli")]
             "ai_chat_start" => {
                 let (repo, conversation, input, session) = (a.repo()?, a.get::<String>("conversation")?, a.get::<String>("input")?, a.get::<Option<String>>("sessionId")?);
-                self.ai_chat_start(gc_ai::Provider::Anthropic.program(), repo, conversation, input, session).await
+                // confirmed: 사용자가 위험 확인창(공개·다수 협업자·판정 불가)에서 승낙했는지. 필요한데 false면 `aiChat.confirmRequired`
+                let confirmed = a.get::<Option<bool>>("confirmed")?.unwrap_or(false);
+                self.ai_chat_start(gc_ai::Provider::Anthropic.program(), repo, conversation, input, session, confirmed).await
             }
+            #[cfg(feature = "cli")]
+            "ai_chat_risk" => self.ai_chat_risk_ipc(a.repo()?).await,
             #[cfg(feature = "cli")]
             "ai_chat_cancel" => {
                 self.ai_chat_cancel(&a.get::<String>("conversation")?);

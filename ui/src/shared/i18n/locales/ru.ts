@@ -1590,6 +1590,11 @@ export const ru: Record<Key, string> = {
   "aiChat.saveHistory": "Сохранять историю чатов",
   "aiChat.retention": "Хранить историю (дней)",
   "aiChat.retentionHelp": "Более старые чаты удаляются при запуске приложения.",
+  "aiChat.confirmTitle": "Разрешить ИИ работать в этом репозитории?",
+  "aiChat.confirmPublic": "{repo} — публичный репозиторий. ИИ будет читать здесь файлы и выполнять команды git; прочитанное отправляется в Anthropic.",
+  "aiChat.confirmShared": "{repo} используется совместно ещё с {n} участник(ами). ИИ будет читать файлы и выполнять команды git, которые могут повлиять на их работу; прочитанное отправляется в Anthropic.",
+  "aiChat.confirmUnknown": "Не удалось определить, является ли {repo} публичным или общим с другими (нет подключённой учётной записи или запрос не удался). ИИ будет читать файлы и выполнять команды git; прочитанное отправляется в Anthropic.",
+  "aiChat.confirmScope": "ИИ может выполнять только разрешённые команды git (status, log, diff, add, commit, merge, rebase, fetch, pull, push без force, switch, stash и подобные). Он не может делать принудительный push, hard reset, удалять ветки, читать и изменять файлы вне этого репозитория. Продолжить?",
   "quick.aiChat": "Открыть / закрыть чат с ИИ",
   "err.aiChat.badId": "Недопустимый идентификатор беседы",
   "err.aiChat.emptyInput": "Введите сообщение",
@@ -1600,4 +1605,6 @@ export const ru: Record<Key, string> = {
   "err.aiBackup.badId": "Недопустимый идентификатор резервной копии",
   "err.aiBackup.missing": "Резервной копии больше нет",
   "err.aiBackup.operationInProgress": "Выполняется {op}; сначала прервите его",
+  "err.aiChat.confirmRequired": "Перед работой ИИ в этом репозитории требуется подтверждение",
+  "err.aiChat.historySaveFailed": "Не удалось сохранить чат в истории",
 };

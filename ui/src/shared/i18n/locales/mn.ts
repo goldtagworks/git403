@@ -1590,6 +1590,11 @@ export const mn: Record<Key, string> = {
   "aiChat.saveHistory": "Чатын түүх хадгалах",
   "aiChat.retention": "Түүхийг хадгалах хугацаа (өдөр)",
   "aiChat.retentionHelp": "Үүнээс хуучин чатууд аппыг эхлүүлэх үед устгагдана.",
+  "aiChat.confirmTitle": "AI-д энэ репозиторт ажиллахыг зөвшөөрөх үү?",
+  "aiChat.confirmPublic": "{repo} нь нийтэд нээлттэй репозитор юм. AI энд файл уншиж, git командууд ажиллуулна; уншсан зүйл нь Anthropic рүү илгээгдэнэ.",
+  "aiChat.confirmShared": "{repo} нь өөр {n} хамтран ажиллагчтай хуваалцсан. AI файл уншиж, тэдний ажилд нөлөөлж болох git командууд ажиллуулна; уншсан зүйл нь Anthropic рүү илгээгдэнэ.",
+  "aiChat.confirmUnknown": "{repo} нийтэд нээлттэй эсвэл бусадтай хуваалцсан эсэхийг тогтоож чадсангүй (холбосон бүртгэл байхгүй эсвэл лавлагаа амжилтгүй). AI файл уншиж, git командууд ажиллуулна; уншсан зүйл нь Anthropic рүү илгээгдэнэ.",
+  "aiChat.confirmScope": "AI зөвхөн зөвшөөрөгдсөн git командуудыг (status, log, diff, add, commit, merge, rebase, fetch, pull, force-гүй push, switch, stash гэх мэт) ажиллуулж чадна. Хүчээр push хийх, hard reset, салбар устгах, энэ репозиторын гаднах файлыг унших эсвэл засахыг чадахгүй. Үргэлжлүүлэх үү?",
   "quick.aiChat": "AI чатыг нээх / хаах",
   "err.aiChat.badId": "Харилцан ярианы ID буруу байна",
   "err.aiChat.emptyInput": "Мессеж оруулна уу",
@@ -1600,4 +1605,6 @@ export const mn: Record<Key, string> = {
   "err.aiBackup.badId": "Нөөцийн ID буруу байна",
   "err.aiBackup.missing": "Нөөц байхгүй болсон байна",
   "err.aiBackup.operationInProgress": "{op} явагдаж байна; эхлээд зогсооно уу",
+  "err.aiChat.confirmRequired": "AI энэ репозиторт ажиллахаас өмнө баталгаажуулалт шаардлагатай",
+  "err.aiChat.historySaveFailed": "Чатыг түүхэнд хадгалж чадсангүй",
 };

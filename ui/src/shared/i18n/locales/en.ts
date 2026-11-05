@@ -1589,6 +1589,11 @@ export const en = {
   "aiChat.saveHistory": "Save chat history",
   "aiChat.retention": "Keep history for (days)",
   "aiChat.retentionHelp": "Chats older than this are deleted when the app starts.",
+  "aiChat.confirmTitle": "Let AI work on this repository?",
+  "aiChat.confirmPublic": "{repo} is a public repository. The AI will read files here and run git commands, and what it reads is sent to Anthropic.",
+  "aiChat.confirmShared": "{repo} is shared with {n} other collaborator(s). The AI will read files here and run git commands that may affect their work, and what it reads is sent to Anthropic.",
+  "aiChat.confirmUnknown": "Could not tell whether {repo} is public or shared with others (no connected account, or the lookup failed). The AI will read files here and run git commands, and what it reads is sent to Anthropic.",
+  "aiChat.confirmScope": "The AI can only run an allowed set of git commands (status, log, diff, add, commit, merge, rebase, fetch, pull, push without force, switch, stash and similar). It cannot force-push, hard-reset, delete branches, or read and edit files outside this repository. Continue?",
   "quick.aiChat": "Open / close AI chat",
   "err.aiChat.badId": "Invalid conversation id",
   "err.aiChat.emptyInput": "Enter a message",
@@ -1599,5 +1604,7 @@ export const en = {
   "err.aiBackup.badId": "Invalid backup id",
   "err.aiBackup.missing": "The backup no longer exists",
   "err.aiBackup.operationInProgress": "A {op} is in progress; abort it first",
+  "err.aiChat.confirmRequired": "Confirmation is required before AI can work on this repository",
+  "err.aiChat.historySaveFailed": "The chat could not be saved to history",
 };
 export type Key = keyof typeof en;

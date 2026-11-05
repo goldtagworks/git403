@@ -565,7 +565,7 @@ function App() {
               <Details repo={repo} commit={commit} rules={issueRules} />
             )}
           </main>
-          <AiChatHost repo={repo} status={status} />
+          <AiChatHost repo={repo} operation={status?.operation ?? null} behind={(status?.behind ?? 0) > 0} />
           <PrReviewHost repo={repo} onSelectCommit={reveal} />
         </div>
       ) : (

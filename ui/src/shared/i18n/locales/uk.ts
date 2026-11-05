@@ -1590,6 +1590,11 @@ export const uk: Record<Key, string> = {
   "aiChat.saveHistory": "Зберігати історію чатів",
   "aiChat.retention": "Зберігати історію (днів)",
   "aiChat.retentionHelp": "Старіші чати видаляються під час запуску застосунку.",
+  "aiChat.confirmTitle": "Дозволити ШІ працювати в цьому репозиторії?",
+  "aiChat.confirmPublic": "{repo} — публічний репозиторій. ШІ читатиме тут файли та виконуватиме команди git; прочитане надсилається до Anthropic.",
+  "aiChat.confirmShared": "{repo} спільний ще з {n} учасником(-ами). ШІ читатиме файли та виконуватиме команди git, що можуть вплинути на їхню роботу; прочитане надсилається до Anthropic.",
+  "aiChat.confirmUnknown": "Не вдалося визначити, чи {repo} публічний або спільний з іншими (немає підключеного облікового запису або запит не вдався). ШІ читатиме файли та виконуватиме команди git; прочитане надсилається до Anthropic.",
+  "aiChat.confirmScope": "ШІ може виконувати лише дозволені команди git (status, log, diff, add, commit, merge, rebase, fetch, pull, push без force, switch, stash тощо). Він не може робити примусовий push, hard reset, видаляти гілки, читати чи змінювати файли поза цим репозиторієм. Продовжити?",
   "quick.aiChat": "Відкрити / закрити чат AI",
   "err.aiChat.badId": "Недійсний ідентифікатор розмови",
   "err.aiChat.emptyInput": "Введіть повідомлення",
@@ -1600,4 +1605,6 @@ export const uk: Record<Key, string> = {
   "err.aiBackup.badId": "Недійсний ідентифікатор резервної копії",
   "err.aiBackup.missing": "Резервної копії більше не існує",
   "err.aiBackup.operationInProgress": "Триває {op}; спершу перервіть його",
+  "err.aiChat.confirmRequired": "Перед роботою ШІ в цьому репозиторії потрібне підтвердження",
+  "err.aiChat.historySaveFailed": "Не вдалося зберегти чат в історії",
 };

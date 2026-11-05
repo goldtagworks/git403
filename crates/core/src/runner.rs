@@ -196,7 +196,8 @@ impl GitRunner {
         events: mpsc::UnboundedSender<JobEvent>,
     ) -> Result<(JobHandle, tokio::task::JoinHandle<Result<()>>)> {
         let mut cmd = Command::new(program);
-        cmd.args(args);
+        // 자식이 부르는 git이 편집기·pager를 띄워 멈추지 않게 한다
+        cmd.args(args).env("GIT_EDITOR", "true").env("GIT_MERGE_AUTOEDIT", "no").env("GIT_PAGER", "cat");
         run_job(self.configure(cmd, repo), events)
     }
 

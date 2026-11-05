@@ -286,6 +286,8 @@ const chatCfg = { save: true, retentionDays: 90 };
 const chatHist = new Map<string, any[]>();
 const chatRun = new Map<string, (cancel: boolean) => void>();
 let chatSeq = 0;
+/** 위험 확인을 마친 대화(`대화\0저장소`) — 백엔드와 같은 규칙 */
+const chatConfirmed = new Set<string>();
 const aiPending = new Map<string, (e: string) => void>();
 const AI_RESULTS: AiResults = {
   commit: { subject: "feat: AI 커밋 메시지 추가", body: "스테이지된 변경을 요약합니다." },
@@ -634,11 +636,25 @@ function handle(cmd: string, args: any): any {
       chatRun.get(c)?.(true);
       return null;
     }
+    // AI 채팅 위험 판정: window.__risk({level: none|public|shared|unknown, collaborators?}, 기본 none), __riskFail = 조회 자체 실패
+    if (cmd === "ai_chat_risk") {
+      const w = window as any;
+      gitCalls.push(["ai_chat_risk", (args as any).repo]);
+      if (w.__riskFail) throw w.__riskFail;
+      return w.__risk ?? { level: "none" };
+    }
     if (cmd === "ai_chat_start") {
       const w = window as any;
-      const { repo, conversation, input, sessionId } = args as { repo: string; conversation: string; input: string; sessionId?: string };
-      gitCalls.push(["ai_chat_start", JSON.stringify({ repo, conversation, input, ...(sessionId ? { sessionId } : {}) })]);
+      const { repo, conversation, input, sessionId, confirmed } = args as { repo: string; conversation: string; input: string; sessionId?: string; confirmed?: boolean };
+      gitCalls.push(["ai_chat_start", JSON.stringify({ repo, conversation, input, ...(sessionId ? { sessionId } : {}), ...(confirmed ? { confirmed } : {}) })]);
       if (!aiState().consent) throw JSON.stringify({ code: "ai.consentRequired", vars: {}, message: "Consent to use AI is required" });
+      // 백엔드는 UI를 믿지 않고 다시 판정한다: 대화 첫 실행에 위험(none 아님)이고 확인이 없으면 거절
+      const key = `${conversation}\0${repo}`;
+      if (!chatConfirmed.has(key)) {
+        const risk = w.__risk ?? { level: "none" };
+        if (risk.level !== "none" && !confirmed) throw JSON.stringify({ code: "aiChat.confirmRequired", vars: { level: risk.level, collaborators: risk.collaborators ?? 0 }, message: "Confirmation is required" });
+        chatConfirmed.add(key);
+      }
       if (w.__chatFail) throw w.__chatFail;
       if (chatRun.has(conversation)) throw JSON.stringify({ code: "aiChat.busy", vars: {}, message: "busy" });
       const backup = w.__chatNoBackup ? null : { id: `b${++chatSeq}`, ref: `refs/git403/ai-backup/b${chatSeq}`, sha: "abc1234abc1234abc1234abc1234abc1234abc12", branch: "main" };

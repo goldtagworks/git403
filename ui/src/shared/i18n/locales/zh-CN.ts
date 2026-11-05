@@ -1590,6 +1590,11 @@ export const zhCN: Record<Key, string> = {
   "aiChat.saveHistory": "保存聊天历史",
   "aiChat.retention": "历史保留时间（天）",
   "aiChat.retentionHelp": "早于此时间的聊天会在应用启动时删除。",
+  "aiChat.confirmTitle": "要让 AI 在此仓库中工作吗？",
+  "aiChat.confirmPublic": "{repo} 是公开仓库。AI 将读取此处的文件并运行 git 命令，读取的内容会发送给 Anthropic。",
+  "aiChat.confirmShared": "{repo} 与另外 {n} 位协作者共享。AI 将读取文件并运行可能影响他们工作的 git 命令，读取的内容会发送给 Anthropic。",
+  "aiChat.confirmUnknown": "无法确定 {repo} 是公开仓库还是与他人共享（没有已连接的账户，或查询失败）。AI 将读取文件并运行 git 命令，读取的内容会发送给 Anthropic。",
+  "aiChat.confirmScope": "AI 只能运行允许的 git 命令（status、log、diff、add、commit、merge、rebase、fetch、pull、不带 force 的 push、switch、stash 等）。它不能强制推送、hard reset、删除分支，也不能读取或修改此仓库之外的文件。继续吗？",
   "quick.aiChat": "打开 / 关闭 AI 聊天",
   "err.aiChat.badId": "对话 ID 无效",
   "err.aiChat.emptyInput": "请输入消息",
@@ -1600,4 +1605,6 @@ export const zhCN: Record<Key, string> = {
   "err.aiBackup.badId": "备份 ID 无效",
   "err.aiBackup.missing": "该备份已不存在",
   "err.aiBackup.operationInProgress": "正在进行 {op}；请先中止它",
+  "err.aiChat.confirmRequired": "AI 在此仓库中工作之前需要确认",
+  "err.aiChat.historySaveFailed": "无法将聊天保存到历史记录",
 };

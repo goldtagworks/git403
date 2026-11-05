@@ -1590,6 +1590,11 @@ export const it: Record<Key, string> = {
   "aiChat.saveHistory": "Salva la cronologia delle chat",
   "aiChat.retention": "Conserva la cronologia per (giorni)",
   "aiChat.retentionHelp": "Le chat più vecchie vengono eliminate all'avvio dell'app.",
+  "aiChat.confirmTitle": "Lasciare che l'IA lavori su questo repository?",
+  "aiChat.confirmPublic": "{repo} è un repository pubblico. L'IA leggerà file qui ed eseguirà comandi git; ciò che legge viene inviato ad Anthropic.",
+  "aiChat.confirmShared": "{repo} è condiviso con altri {n} collaboratori. L'IA leggerà file qui ed eseguirà comandi git che possono influire sul loro lavoro; ciò che legge viene inviato ad Anthropic.",
+  "aiChat.confirmUnknown": "Impossibile stabilire se {repo} sia pubblico o condiviso con altri (nessun account collegato o ricerca non riuscita). L'IA leggerà file qui ed eseguirà comandi git; ciò che legge viene inviato ad Anthropic.",
+  "aiChat.confirmScope": "L'IA può eseguire solo un insieme consentito di comandi git (status, log, diff, add, commit, merge, rebase, fetch, pull, push senza force, switch, stash e simili). Non può fare push forzati, reset --hard, eliminare branch né leggere o modificare file fuori da questo repository. Continuare?",
   "quick.aiChat": "Apri / chiudi la chat AI",
   "err.aiChat.badId": "ID conversazione non valido",
   "err.aiChat.emptyInput": "Inserisci un messaggio",
@@ -1600,4 +1605,6 @@ export const it: Record<Key, string> = {
   "err.aiBackup.badId": "ID backup non valido",
   "err.aiBackup.missing": "Il backup non esiste più",
   "err.aiBackup.operationInProgress": "{op} è in corso; interrompilo prima",
+  "err.aiChat.confirmRequired": "Serve una conferma prima che l'IA lavori su questo repository",
+  "err.aiChat.historySaveFailed": "Impossibile salvare la chat nella cronologia",
 };

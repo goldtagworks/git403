@@ -1590,6 +1590,11 @@ export const tl: Record<Key, string> = {
   "aiChat.saveHistory": "I-save ang kasaysayan ng chat",
   "aiChat.retention": "Itago ang kasaysayan nang (araw)",
   "aiChat.retentionHelp": "Buburahin ang mga chat na mas luma rito kapag nagsimula ang app.",
+  "aiChat.confirmTitle": "Payagan ang AI na magtrabaho sa repositoryong ito?",
+  "aiChat.confirmPublic": "Ang {repo} ay pampublikong repository. Babasahin ng AI ang mga file dito at magpapatakbo ng mga git command; ang nabasa nito ay ipapadala sa Anthropic.",
+  "aiChat.confirmShared": "Ang {repo} ay ibinabahagi sa {n} pang katuwang. Babasahin ng AI ang mga file at magpapatakbo ng mga git command na maaaring makaapekto sa trabaho nila; ang nabasa nito ay ipapadala sa Anthropic.",
+  "aiChat.confirmUnknown": "Hindi matukoy kung pampubliko ang {repo} o ibinabahagi sa iba (walang nakakonektang account o nabigo ang pagsusuri). Babasahin ng AI ang mga file at magpapatakbo ng mga git command; ang nabasa nito ay ipapadala sa Anthropic.",
+  "aiChat.confirmScope": "Ang AI ay makakapagpatakbo lamang ng mga pinapayagang git command (status, log, diff, add, commit, merge, rebase, fetch, pull, push na walang force, switch, stash at katulad). Hindi ito makakapag-force push, hard reset, magbura ng branch, o magbasa at mag-edit ng file sa labas ng repository na ito. Magpatuloy?",
   "quick.aiChat": "Buksan / isara ang AI chat",
   "err.aiChat.badId": "Di-wastong conversation id",
   "err.aiChat.emptyInput": "Maglagay ng mensahe",
@@ -1600,4 +1605,6 @@ export const tl: Record<Key, string> = {
   "err.aiBackup.badId": "Di-wastong backup id",
   "err.aiBackup.missing": "Wala na ang backup",
   "err.aiBackup.operationInProgress": "May kasalukuyang {op}; i-abort muna ito",
+  "err.aiChat.confirmRequired": "Kailangan ng kumpirmasyon bago magtrabaho ang AI sa repositoryong ito",
+  "err.aiChat.historySaveFailed": "Hindi nai-save ang chat sa history",
 };

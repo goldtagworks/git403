@@ -1590,6 +1590,11 @@ export const fr: Record<Key, string> = {
   "aiChat.saveHistory": "Enregistrer l’historique des chats",
   "aiChat.retention": "Conserver l’historique pendant (jours)",
   "aiChat.retentionHelp": "Les chats plus anciens sont supprimés au démarrage de l’application.",
+  "aiChat.confirmTitle": "Laisser l'IA travailler sur ce dépôt ?",
+  "aiChat.confirmPublic": "{repo} est un dépôt public. L'IA lira des fichiers ici et exécutera des commandes git ; ce qu'elle lit est envoyé à Anthropic.",
+  "aiChat.confirmShared": "{repo} est partagé avec {n} autre(s) collaborateur(s). L'IA lira des fichiers ici et exécutera des commandes git pouvant affecter leur travail ; ce qu'elle lit est envoyé à Anthropic.",
+  "aiChat.confirmUnknown": "Impossible de savoir si {repo} est public ou partagé avec d'autres (aucun compte connecté ou échec de la requête). L'IA lira des fichiers ici et exécutera des commandes git ; ce qu'elle lit est envoyé à Anthropic.",
+  "aiChat.confirmScope": "L'IA ne peut exécuter qu'un ensemble autorisé de commandes git (status, log, diff, add, commit, merge, rebase, fetch, pull, push sans force, switch, stash, etc.). Elle ne peut pas faire de push forcé, de reset --hard, supprimer des branches, ni lire ou modifier des fichiers hors de ce dépôt. Continuer ?",
   "quick.aiChat": "Ouvrir / fermer le chat IA",
   "err.aiChat.badId": "Identifiant de conversation invalide",
   "err.aiChat.emptyInput": "Saisissez un message",
@@ -1600,4 +1605,6 @@ export const fr: Record<Key, string> = {
   "err.aiBackup.badId": "Identifiant de sauvegarde invalide",
   "err.aiBackup.missing": "La sauvegarde n’existe plus",
   "err.aiBackup.operationInProgress": "Un {op} est en cours ; abandonnez-le d’abord",
+  "err.aiChat.confirmRequired": "Une confirmation est requise avant que l'IA travaille sur ce dépôt",
+  "err.aiChat.historySaveFailed": "Le chat n'a pas pu être enregistré dans l'historique",
 };

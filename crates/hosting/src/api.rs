@@ -115,6 +115,42 @@ pub(crate) async fn github_commit_avatar(a: &Account, token: Option<&str>, repo:
     Ok(v["author"]["avatar_url"].as_str().map(String::from))
 }
 
+/// 저장소가 얼마나 열려 있는가: 공개 여부와 본인 외 협업자 수. GitHub만(그 밖의 서비스는 `Unsupported`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Exposure {
+    pub private: bool,
+    /// private일 때만: 본인 제외 협업자 수. 알 수 없으면(권한 부족·조회 실패) None
+    pub collaborators: Option<usize>,
+}
+
+/// `GET /repos/{o}/{r}`의 `private`(토큰 없이도 공개 저장소는 읽힘 — 404면 비공개거나 접근 불가라 `NotFound`).
+/// private이면 `GET /user`(본인) + `GET /repos/{o}/{r}/collaborators?per_page=100`(push 권한 필요 — 403·404면 협업자 수 None)에서 본인을 뺀 수를 센다.
+pub async fn repo_exposure(a: &Account, token: Option<&str>, repo: &RemoteRepo) -> Result<Exposure> {
+    if a.provider != Provider::GitHub {
+        return Err(Error::Unsupported);
+    }
+    let get = |path: String| {
+        let b = client().get(format!("{}{path}", api_base(a))).header("User-Agent", "git403").header("Accept", "application/vnd.github+json");
+        send(match token {
+            Some(t) => b.bearer_auth(t),
+            None => b,
+        })
+    };
+    let r = get(format!("/repos/{}/{}", repo.owner, repo.name)).await?;
+    let Some(private) = r["private"].as_bool() else { return Err(Error::Rejected("no visibility".into())) };
+    if !private {
+        return Ok(Exposure { private, collaborators: None });
+    }
+    let others = async {
+        let me = get("/user".into()).await?;
+        let list = get(format!("/repos/{}/{}/collaborators?per_page=100", repo.owner, repo.name)).await?;
+        let me = s(&me["login"]);
+        Ok::<_, Error>(list.as_array().map_or(0, |l| l.iter().filter(|c| !s(&c["login"]).eq_ignore_ascii_case(&me)).count()))
+    };
+    Ok(Exposure { private, collaborators: others.await.ok() })
+}
+
 /// Gravatar 사진 URL(이메일은 소문자). `d=404`로 등록 여부만 확인하고 본문은 받지 않는다.
 pub(crate) async fn gravatar(email: &str) -> Result<Option<String>> {
     use sha2::{Digest, Sha256};
@@ -507,5 +543,60 @@ pub(crate) mod tests {
         assert!(matches!(&e, Error::Rejected(m) if m.contains("Line could not be resolved")), "{e}");
         assert!(matches!(pr_review_submit(&a, "t", &r, 1, "c", "MERGE", "", &[]).await, Err(Error::Rejected(_))));
         assert!(matches!(pr_review_submit(&acct(Provider::GitLab, &host), "t", &r, 1, "c", "COMMENT", "", &[]).await, Err(Error::UnsupportedProvider)));
+    }
+
+    /// 경로별로 (상태, 본문)을 돌려주는 미니 서버(요청 여러 개). 받은 요청 줄(`GET /path`)을 모아 돌려준다.
+    async fn routes(routes: Vec<(&'static str, u16, &'static str)>, n: usize) -> (String, tokio::task::JoinHandle<Vec<String>>) {
+        let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let host = format!("http://{}", l.local_addr().unwrap());
+        let h = tokio::spawn(async move {
+            let mut seen = Vec::new();
+            for _ in 0..n {
+                let (mut sock, _) = l.accept().await.unwrap();
+                let mut buf = vec![0u8; 8192];
+                let len = sock.read(&mut buf).await.unwrap();
+                let text = String::from_utf8_lossy(&buf[..len]).to_string();
+                let line = text.lines().next().unwrap_or_default().to_string();
+                let path = line.split(' ').nth(1).unwrap_or_default().to_string();
+                seen.push(format!("{} auth={}", line.trim_end_matches(" HTTP/1.1"), text.to_lowercase().contains("authorization: bearer")));
+                let (status, body) = routes.iter().find(|(p, _, _)| path.ends_with(p)).map_or((404, "{}"), |(_, s, b)| (*s, *b));
+                let res = format!("HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+                sock.write_all(res.as_bytes()).await.unwrap();
+            }
+            seen
+        });
+        (host, h)
+    }
+
+    #[tokio::test]
+    async fn exposure_public_private_shared_and_unknown() {
+        let repo = |h: &str| (Account { provider: Provider::GitHub, host: h.into(), username: "me".into() }, RemoteRepo { host: h.into(), owner: "o".into(), name: "r".into() });
+        // 공개: 토큰 없이도 읽힌다(1요청)
+        let (h, seen) = routes(vec![("/repos/o/r", 200, r#"{"private":false}"#)], 1).await;
+        let (a, r) = repo(&h);
+        assert_eq!(repo_exposure(&a, None, &r).await.unwrap(), Exposure { private: false, collaborators: None });
+        assert_eq!(seen.await.unwrap(), ["GET /api/v3/repos/o/r auth=false"]);
+        // 비공개 + 본인만: 0명
+        let (h, _) = routes(vec![("/repos/o/r", 200, r#"{"private":true}"#), ("/user", 200, r#"{"login":"Me"}"#), ("per_page=100", 200, r#"[{"login":"me"}]"#)], 3).await;
+        let (a, r) = repo(&h);
+        assert_eq!(repo_exposure(&a, Some("t"), &r).await.unwrap(), Exposure { private: true, collaborators: Some(0) });
+        // 비공개 + 다른 사람 2명
+        let (h, seen) = routes(vec![("/repos/o/r", 200, r#"{"private":true}"#), ("/user", 200, r#"{"login":"me"}"#), ("per_page=100", 200, r#"[{"login":"me"},{"login":"a"},{"login":"b"}]"#)], 3).await;
+        let (a, r) = repo(&h);
+        assert_eq!(repo_exposure(&a, Some("t"), &r).await.unwrap(), Exposure { private: true, collaborators: Some(2) });
+        assert!(seen.await.unwrap().iter().all(|l| l.ends_with("auth=true")));
+        // 협업자 조회 권한 없음(403) → 수 모름
+        let (h, _) = routes(vec![("/repos/o/r", 200, r#"{"private":true}"#), ("/user", 200, r#"{"login":"me"}"#), ("per_page=100", 403, r#"{"message":"forbidden"}"#)], 3).await;
+        let (a, r) = repo(&h);
+        assert_eq!(repo_exposure(&a, Some("t"), &r).await.unwrap(), Exposure { private: true, collaborators: None });
+        // 저장소를 못 봄(404)·형식 이상·GitHub 아님
+        let (h, _) = routes(vec![], 1).await;
+        let (a, r) = repo(&h);
+        assert!(matches!(repo_exposure(&a, None, &r).await, Err(Error::NotFound)));
+        let (h, _) = routes(vec![("/repos/o/r", 200, "{}")], 1).await;
+        let (a, r) = repo(&h);
+        assert!(repo_exposure(&a, None, &r).await.is_err());
+        let gl = Account { provider: Provider::GitLab, host: "gitlab.com".into(), username: String::new() };
+        assert!(matches!(repo_exposure(&gl, None, &r).await, Err(Error::Unsupported)));
     }
 }

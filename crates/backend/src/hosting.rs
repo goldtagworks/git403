@@ -15,11 +15,11 @@ pub(crate) struct RemoteInfo {
     remote: String,
     url: String,
     /// 호스트로 추정한 서비스. 모르면 None
-    provider: Option<Provider>,
-    repo: RemoteRepo,
+    pub(crate) provider: Option<Provider>,
+    pub(crate) repo: RemoteRepo,
     web_url: String,
     /// provider·host가 같은 연결된 계정
-    account: Option<Account>,
+    pub(crate) account: Option<Account>,
 }
 
 pub(crate) struct Hosting {
@@ -63,7 +63,7 @@ impl Hosting {
 
     /// PR 조회용 토큰: 연결된 계정(키체인) → 없으면 `gh auth token --hostname <host>`(저장하지 않음).
     /// 계정이 없으면(None) 원격 host로 GitHub 계정을 대신 만든다.
-    async fn pr_auth(&self, account: Option<Account>, repo: &RemoteRepo, path: Option<&str>, bound: Option<String>) -> Res<(Account, String)> {
+    pub(crate) async fn pr_auth(&self, account: Option<Account>, repo: &RemoteRepo, path: Option<&str>, bound: Option<String>) -> Res<(Account, String)> {
         let acct = account.clone().unwrap_or_else(|| Account { provider: Provider::GitHub, host: repo.host.clone(), username: String::new() });
         // 저장소에 연결된 gh 계정 토큰이 있으면 그것이 먼저(사용자가 이 저장소에 쓰기로 고른 계정)
         let stored = match (&account, bound) {

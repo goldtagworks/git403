@@ -88,17 +88,44 @@ fn has_secret(v: &Value) -> bool {
     }
 }
 
-/// 저장 전 자격 증명 가림: 토큰처럼 보이는 단어와 URL의 `사용자:비밀번호@`는 `***`로, `password=값`·`token: 값` 꼴은 값을 `***`로 바꾼다.
+/// 개인키 블록(`-----BEGIN … PRIVATE KEY-----` … `-----END … PRIVATE KEY-----`)을 통째로 `***`로 바꾼다. END가 없으면 끝까지.
+#[cfg(feature = "cli")]
+fn redact_pem(text: &str) -> String {
+    let (mut out, mut rest) = (String::with_capacity(text.len()), text);
+    while let Some(b) = rest.find("-----BEGIN ") {
+        let after = &rest[b + 11..];
+        if !after.lines().next().is_some_and(|l| l.contains("PRIVATE KEY-----")) {
+            out.push_str(&rest[..b + 11]);
+            rest = after;
+            continue;
+        }
+        out.push_str(&rest[..b]);
+        out.push_str("***");
+        rest = match after.find("-----END ").and_then(|e| after[e + 9..].find("-----").map(|d| e + 9 + d + 5)) {
+            Some(end) => &after[end..],
+            None => "",
+        };
+    }
+    out.push_str(rest);
+    out
+}
+
+/// 저장 전 자격 증명 가림: 개인키 블록·토큰처럼 보이는 단어·URL의 `사용자:비밀번호@`(비밀번호에 `/`가 있어도)는 `***`로,
+/// `password=값`·`token: 값`·`Authorization: Bearer 값`·`bearer 값` 꼴은 값을 `***`로 바꾼다.
 #[cfg(feature = "cli")]
 pub(crate) fn redact(text: &str) -> String {
+    let text = redact_pem(text);
     let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    // URL userinfo: `scheme://user:pass@host` → `scheme://***@host` (공백·`/`이 오기 전에 `@`가 있을 때만)
+    let mut rest = text.as_str();
+    // URL userinfo: `scheme://user:pass@host`. 권한 부분은 첫 `/`·공백까지이고, 비밀번호에 `/`가 들어 있을 수 있어
+    // 공백 전 토큰의 마지막 `@` 앞에 `:`가 `/`보다 먼저 나오면(= `user:pass…`) 그 앞 전부를 userinfo로 본다.
     while let Some(i) = rest.find("://") {
         let (head, tail) = rest.split_at(i + 3);
         out.push_str(head);
-        let end = tail.find(|c: char| c.is_whitespace() || c == '/').unwrap_or(tail.len());
-        match tail[..end].rfind('@') {
+        let token = &tail[..tail.find(char::is_whitespace).unwrap_or(tail.len())];
+        let slash = token.find('/').unwrap_or(token.len());
+        let at = token.rfind('@').filter(|&at| at < slash || token[..at].find(':').is_some_and(|c| c < slash));
+        match at {
             Some(at) => {
                 out.push_str("***");
                 rest = &tail[at..];
@@ -108,30 +135,39 @@ pub(crate) fn redact(text: &str) -> String {
     }
     out.push_str(rest);
     // 단어 단위: 토큰 모양, 그리고 비밀 이름 뒤에 `=`·`:`로 이어지는 값
-    const NAMES: [&str; 6] = ["token", "secret", "password", "passwd", "apikey", "api_key"];
+    const NAMES: [&str; 12] = ["token", "secret", "password", "passwd", "pass", "pwd", "apikey", "api_key", "credential", "credentials", "private_key", "passphrase"];
+    let is_name = |w: &str| {
+        let w = w.to_ascii_lowercase();
+        w == "authorization" || NAMES.iter().any(|n| w.ends_with(n))
+    };
     let (mut res, mut word, mut mask_next) = (String::with_capacity(out.len()), String::new(), false);
+    // 단어를 비우며 내보낸다. 값을 가릴 차례여도 `Bearer`·`Basic`은 값이 아니라 방식 이름이라 그대로 두고 다음 단어를 가린다.
     let flush = |res: &mut String, word: &mut String, mask_next: &mut bool| {
         if word.is_empty() {
             return;
         }
-        if is_secret_word(word) || *mask_next {
+        let lower = word.to_ascii_lowercase();
+        let scheme = lower == "bearer" || lower == "basic";
+        if is_secret_word(word) || (*mask_next && !scheme) {
             res.push_str("***");
+            *mask_next = false;
         } else {
             res.push_str(word);
+            *mask_next = scheme; // 방식 이름 바로 뒤 단어가 값이다(`bearer <tok>`)
         }
-        *mask_next = false;
         word.clear();
     };
     let mut chars = out.chars().peekable();
     while let Some(c) = chars.next() {
-        if is_word_char(c) {
+        // 가릴 값이면 공백·따옴표 전까지 통째로(`abc.def-1`처럼 단어 문자가 아닌 글자가 섞인 토큰)
+        if is_word_char(c) || (mask_next && !c.is_whitespace() && c != '"' && c != '\'') {
             word.push(c);
             continue;
         }
-        let name = NAMES.iter().any(|n| word.to_ascii_lowercase().ends_with(n));
+        let name = is_name(&word);
         flush(&mut res, &mut word, &mut mask_next);
         res.push(c);
-        // `이름=` / `이름: ` 바로 뒤 단어를 가린다 (`이름` 단어를 방금 비웠으므로 직전 값으로 판단)
+        // `이름=` / `이름: ` 바로 뒤 단어를 가린다
         if (c == '=' || c == ':') && name {
             mask_next = true;
             while let Some(&n) = chars.peek() {
@@ -536,6 +572,20 @@ fn utc_now() -> (String, String) {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn redact_covers_slash_passwords_bearer_names_and_private_keys() {
+        assert_eq!(redact("git clone https://bob:pa/ss/word@github.com/o/r.git"), "git clone https://***@github.com/o/r.git");
+        assert_eq!(redact("curl -H 'Authorization: Bearer abc.def-123' x"), "curl -H 'Authorization: Bearer ***' x");
+        assert_eq!(redact("Authorization: Basic dXNlcjpwYXNz"), "Authorization: Basic ***");
+        assert_eq!(redact("send bearer zzTopSecret now"), "send bearer *** now");
+        assert_eq!(redact("pass=abc pwd: def credential=ghi private_key=jkl passphrase=mno"), "pass=*** pwd: *** credential=*** private_key=*** passphrase=***");
+        let pem = "before\n-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXk\nAAAA\n-----END OPENSSH PRIVATE KEY-----\nafter";
+        assert_eq!(redact(pem), "before\n***\nafter");
+        assert_eq!(redact("x -----BEGIN RSA PRIVATE KEY-----\nabc"), "x ***", "END 없으면 끝까지");
+        assert_eq!(redact("-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----"), "-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----", "공개 인증서는 그대로");
+        assert_eq!(redact("bypass of the review; the author said hi"), "bypass of the review; the author said hi");
+    }
 
     #[test]
     fn redact_hides_tokens_url_userinfo_and_named_values() {

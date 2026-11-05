@@ -1590,6 +1590,11 @@ export const ne: Record<Key, string> = {
   "aiChat.saveHistory": "च्याट इतिहास सुरक्षित गर्नुहोस्",
   "aiChat.retention": "इतिहास राख्ने अवधि (दिन)",
   "aiChat.retentionHelp": "यसभन्दा पुराना च्याटहरू एप सुरु हुँदा मेटिन्छन्।",
+  "aiChat.confirmTitle": "यो रिपोजिटरीमा AI लाई काम गर्न दिने?",
+  "aiChat.confirmPublic": "{repo} सार्वजनिक रिपोजिटरी हो। AI ले यहाँका फाइल पढ्नेछ र git कमाण्ड चलाउनेछ; पढिएको कुरा Anthropic लाई पठाइन्छ।",
+  "aiChat.confirmShared": "{repo} अरू {n} सहकर्मीसँग साझा गरिएको छ। AI ले फाइल पढ्नेछ र उनीहरूको कामलाई असर गर्न सक्ने git कमाण्ड चलाउनेछ; पढिएको कुरा Anthropic लाई पठाइन्छ।",
+  "aiChat.confirmUnknown": "{repo} सार्वजनिक हो वा अरूसँग साझा हो भनी थाहा पाउन सकिएन (जडान गरिएको खाता छैन वा खोज असफल भयो)। AI ले फाइल पढ्नेछ र git कमाण्ड चलाउनेछ; पढिएको कुरा Anthropic लाई पठाइन्छ।",
+  "aiChat.confirmScope": "AI ले अनुमति दिइएका git कमाण्ड मात्र (status, log, diff, add, commit, merge, rebase, fetch, pull, force बिनाको push, switch, stash आदि) चलाउन सक्छ। यसले जबरजस्ती push, hard reset, ब्रान्च मेटाउन वा यस रिपोजिटरी बाहिरका फाइल पढ्न/सम्पादन गर्न सक्दैन। जारी राख्ने?",
   "quick.aiChat": "AI च्याट खोल्नुहोस् / बन्द गर्नुहोस्",
   "err.aiChat.badId": "अमान्य कुराकानी ID",
   "err.aiChat.emptyInput": "सन्देश हाल्नुहोस्",
@@ -1600,4 +1605,6 @@ export const ne: Record<Key, string> = {
   "err.aiBackup.badId": "अमान्य ब्याकअप ID",
   "err.aiBackup.missing": "ब्याकअप अब छैन",
   "err.aiBackup.operationInProgress": "{op} चलिरहेको छ; पहिले यसलाई रोक्नुहोस्",
+  "err.aiChat.confirmRequired": "AI ले यो रिपोजिटरीमा काम गर्नुअघि पुष्टि चाहिन्छ",
+  "err.aiChat.historySaveFailed": "च्याट इतिहासमा सुरक्षित गर्न सकिएन",
 };

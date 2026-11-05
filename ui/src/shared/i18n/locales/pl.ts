@@ -1590,6 +1590,11 @@ export const pl: Record<Key, string> = {
   "aiChat.saveHistory": "Zapisuj historię czatów",
   "aiChat.retention": "Przechowuj historię przez (dni)",
   "aiChat.retentionHelp": "Starsze czaty są usuwane przy uruchomieniu aplikacji.",
+  "aiChat.confirmTitle": "Pozwolić AI pracować w tym repozytorium?",
+  "aiChat.confirmPublic": "{repo} to repozytorium publiczne. AI będzie tu czytać pliki i uruchamiać polecenia git; to, co przeczyta, trafia do Anthropic.",
+  "aiChat.confirmShared": "{repo} jest udostępnione jeszcze {n} współpracownikom. AI będzie czytać pliki i uruchamiać polecenia git, które mogą wpłynąć na ich pracę; to, co przeczyta, trafia do Anthropic.",
+  "aiChat.confirmUnknown": "Nie udało się ustalić, czy {repo} jest publiczne, czy współdzielone z innymi (brak połączonego konta lub zapytanie się nie powiodło). AI będzie czytać pliki i uruchamiać polecenia git; to, co przeczyta, trafia do Anthropic.",
+  "aiChat.confirmScope": "AI może uruchamiać tylko dozwolone polecenia git (status, log, diff, add, commit, merge, rebase, fetch, pull, push bez force, switch, stash i podobne). Nie może wymuszać push, robić reset --hard, usuwać gałęzi ani czytać i edytować plików poza tym repozytorium. Kontynuować?",
   "quick.aiChat": "Otwórz / zamknij czat AI",
   "err.aiChat.badId": "Nieprawidłowy identyfikator rozmowy",
   "err.aiChat.emptyInput": "Wpisz wiadomość",
@@ -1600,4 +1605,6 @@ export const pl: Record<Key, string> = {
   "err.aiBackup.badId": "Nieprawidłowy identyfikator kopii zapasowej",
   "err.aiBackup.missing": "Kopia zapasowa już nie istnieje",
   "err.aiBackup.operationInProgress": "Trwa operacja {op}; najpierw ją przerwij",
+  "err.aiChat.confirmRequired": "Przed pracą AI w tym repozytorium wymagane jest potwierdzenie",
+  "err.aiChat.historySaveFailed": "Nie udało się zapisać czatu w historii",
 };

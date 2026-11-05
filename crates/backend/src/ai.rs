@@ -27,6 +27,9 @@ pub(crate) struct Ai {
     tasks: Mutex<Tasks>,
     /// 진행 중인 AI 채팅 (대화 id → 프로세스 핸들)
     pub(crate) chats: Mutex<HashMap<String, gc_core::JobHandle>>,
+    /// 이 프로세스에서 위험 확인을 마친 대화 (`<대화id>\0<저장소>`). 이어 가기 차례는 다시 묻지 않는다
+    #[cfg(feature = "cli")]
+    pub(crate) confirmed: Mutex<HashSet<String>>,
 }
 
 fn cancelled() -> String {
@@ -35,7 +38,7 @@ fn cancelled() -> String {
 
 impl Ai {
     pub fn new(config_dir: &Path) -> Self {
-        Self { path: config_dir.join("ai.json"), tasks: Default::default(), chats: Default::default() }
+        Self { path: config_dir.join("ai.json"), tasks: Default::default(), chats: Default::default(), #[cfg(feature = "cli")] confirmed: Default::default() }
     }
 
     pub async fn settings(&self) -> Res<gc_ai::Settings> {

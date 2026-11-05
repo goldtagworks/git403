@@ -1590,6 +1590,11 @@ export const ko: Record<Key, string> = {
   "aiChat.saveHistory": "대화 이력 저장",
   "aiChat.retention": "보관 기간(일)",
   "aiChat.retentionHelp": "이 기간이 지난 대화는 앱을 시작할 때 지웁니다.",
+  "aiChat.confirmTitle": "이 저장소에서 AI가 작업하게 할까요?",
+  "aiChat.confirmPublic": "{repo}은(는) 공개 저장소입니다. AI가 이 저장소의 파일을 읽고 git 명령을 실행하며, 읽은 내용은 Anthropic으로 전송됩니다.",
+  "aiChat.confirmShared": "{repo}은(는) 다른 협업자 {n}명과 공유하는 저장소입니다. AI가 파일을 읽고 협업자의 작업에 영향을 줄 수 있는 git 명령을 실행하며, 읽은 내용은 Anthropic으로 전송됩니다.",
+  "aiChat.confirmUnknown": "{repo}이(가) 공개 저장소인지, 다른 사람과 공유하는지 확인하지 못했습니다(연결된 계정이 없거나 조회에 실패). AI가 파일을 읽고 git 명령을 실행하며, 읽은 내용은 Anthropic으로 전송됩니다.",
+  "aiChat.confirmScope": "AI는 허용된 git 명령(status, log, diff, add, commit, merge, rebase, fetch, pull, 강제가 아닌 push, switch, stash 등)만 실행할 수 있습니다. 강제 push, hard reset, 브랜치 삭제는 할 수 없고, 이 저장소 밖의 파일은 읽거나 수정할 수 없습니다. 계속할까요?",
   "quick.aiChat": "AI 채팅 열기·닫기",
   "err.aiChat.badId": "대화 id가 올바르지 않습니다",
   "err.aiChat.emptyInput": "메시지를 입력하세요",
@@ -1600,4 +1605,6 @@ export const ko: Record<Key, string> = {
   "err.aiBackup.badId": "백업 id가 올바르지 않습니다",
   "err.aiBackup.missing": "백업이 더 이상 없습니다",
   "err.aiBackup.operationInProgress": "{op} 작업이 진행 중입니다. 먼저 중단하세요",
+  "err.aiChat.confirmRequired": "AI가 이 저장소에서 작업하기 전에 확인이 필요합니다",
+  "err.aiChat.historySaveFailed": "채팅을 이력에 저장하지 못했습니다",
 };

@@ -1590,6 +1590,11 @@ export const nl: Record<Key, string> = {
   "aiChat.saveHistory": "Chatgeschiedenis opslaan",
   "aiChat.retention": "Geschiedenis bewaren voor (dagen)",
   "aiChat.retentionHelp": "Oudere chats worden verwijderd wanneer de app start.",
+  "aiChat.confirmTitle": "AI in deze repository laten werken?",
+  "aiChat.confirmPublic": "{repo} is een openbare repository. De AI leest hier bestanden en voert git-opdrachten uit; wat de AI leest, wordt naar Anthropic verzonden.",
+  "aiChat.confirmShared": "{repo} wordt gedeeld met {n} andere medewerker(s). De AI leest bestanden en voert git-opdrachten uit die hun werk kunnen beïnvloeden; wat de AI leest, wordt naar Anthropic verzonden.",
+  "aiChat.confirmUnknown": "Kon niet vaststellen of {repo} openbaar is of met anderen wordt gedeeld (geen gekoppeld account of de opvraag is mislukt). De AI leest bestanden en voert git-opdrachten uit; wat de AI leest, wordt naar Anthropic verzonden.",
+  "aiChat.confirmScope": "De AI mag alleen toegestane git-opdrachten uitvoeren (status, log, diff, add, commit, merge, rebase, fetch, pull, push zonder force, switch, stash en vergelijkbare). De AI kan niet geforceerd pushen, hard resetten, branches verwijderen of bestanden buiten deze repository lezen of bewerken. Doorgaan?",
   "quick.aiChat": "AI-chat openen / sluiten",
   "err.aiChat.badId": "Ongeldig gesprek-id",
   "err.aiChat.emptyInput": "Voer een bericht in",
@@ -1600,4 +1605,6 @@ export const nl: Record<Key, string> = {
   "err.aiBackup.badId": "Ongeldig back-up-id",
   "err.aiBackup.missing": "De back-up bestaat niet meer",
   "err.aiBackup.operationInProgress": "Er is een {op} bezig; breek die eerst af",
+  "err.aiChat.confirmRequired": "Bevestiging is nodig voordat de AI in deze repository werkt",
+  "err.aiChat.historySaveFailed": "De chat kon niet in de geschiedenis worden opgeslagen",
 };

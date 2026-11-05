@@ -440,6 +440,25 @@ try {
     }
   });
 
+  if (process.platform !== "win32") await step("AI 채팅 위험 확인(진짜 IPC): 로컬 전용은 확인 없음, 호스팅 원격은 백엔드가 확인 없는 시작을 거절한다(확인 후 진행은 위 AI 채팅 단계와 같은 경로)", async () => {
+    const inv = (cmd, args) => js(`return await window.__TAURI_INTERNALS__.invoke(${JSON.stringify(cmd)}, ${JSON.stringify(args)});`);
+    const start = (conversation, extra = {}) => js(`try { await window.__TAURI_INTERNALS__.invoke("ai_chat_start", ${JSON.stringify({ repo, conversation, input: "상태", ...extra })}); return "ok"; } catch (e) { return String(e); }`);
+    eq((await inv("ai_chat_risk", { repo })).level, "none", "원격 없음 = 로컬 전용");
+    git("remote", "add", "origin", join(repo, "..", "no-such-bare.git")); // 같은 컴퓨터의 경로 원격도 로컬 전용
+    try {
+      eq((await inv("ai_chat_risk", { repo })).level, "none", "로컬 경로 원격 = 로컬 전용");
+      git("remote", "set-url", "origin", "https://gitlab.com/o/r.git"); // GitHub가 아니라 판정 불가 = 위험
+      eq((await inv("ai_chat_risk", { repo })).level, "unknown", "판정 불가");
+      const refs = () => git("for-each-ref", "refs/git403/ai-backup").split("\n").filter(Boolean).length;
+      const before = refs();
+      const refused = await start("risk-1");
+      if (!refused.includes("aiChat.confirmRequired")) throw new Error("확인 없는 시작이 거절되지 않음: " + refused);
+      eq(refs(), before, "거절된 시작은 백업을 만들지 않는다");
+    } finally {
+      try { git("remote", "remove", "origin"); } catch {}
+    }
+  });
+
   await step("상세 오른쪽 배치(기본값): 그래프 | 상세 열, 파일을 누르면 진짜 diff가 그래프 자리에 열리고 Esc로 돌아온다", async () => {
     await js(`localStorage.removeItem("detailLayout"); setTimeout(() => location.reload(), 0);`);
     await new Promise((r) => setTimeout(r, 1000));

@@ -1590,6 +1590,11 @@ export const vi: Record<Key, string> = {
   "aiChat.saveHistory": "Lưu lịch sử trò chuyện",
   "aiChat.retention": "Giữ lịch sử trong (ngày)",
   "aiChat.retentionHelp": "Các cuộc trò chuyện cũ hơn sẽ bị xóa khi ứng dụng khởi động.",
+  "aiChat.confirmTitle": "Cho phép AI làm việc trong kho lưu trữ này?",
+  "aiChat.confirmPublic": "{repo} là kho lưu trữ công khai. AI sẽ đọc tệp ở đây và chạy lệnh git; nội dung đã đọc được gửi tới Anthropic.",
+  "aiChat.confirmShared": "{repo} được chia sẻ với {n} cộng tác viên khác. AI sẽ đọc tệp và chạy các lệnh git có thể ảnh hưởng đến công việc của họ; nội dung đã đọc được gửi tới Anthropic.",
+  "aiChat.confirmUnknown": "Không xác định được {repo} là công khai hay chia sẻ với người khác (chưa kết nối tài khoản hoặc tra cứu thất bại). AI sẽ đọc tệp và chạy lệnh git; nội dung đã đọc được gửi tới Anthropic.",
+  "aiChat.confirmScope": "AI chỉ có thể chạy các lệnh git được phép (status, log, diff, add, commit, merge, rebase, fetch, pull, push không force, switch, stash và tương tự). AI không thể force push, hard reset, xóa nhánh hay đọc và sửa tệp ngoài kho lưu trữ này. Tiếp tục?",
   "quick.aiChat": "Mở / đóng trò chuyện AI",
   "err.aiChat.badId": "ID cuộc trò chuyện không hợp lệ",
   "err.aiChat.emptyInput": "Hãy nhập tin nhắn",
@@ -1600,4 +1605,6 @@ export const vi: Record<Key, string> = {
   "err.aiBackup.badId": "ID bản sao lưu không hợp lệ",
   "err.aiBackup.missing": "Bản sao lưu không còn tồn tại",
   "err.aiBackup.operationInProgress": "Một {op} đang diễn ra; hãy hủy bỏ nó trước",
+  "err.aiChat.confirmRequired": "Cần xác nhận trước khi AI làm việc trong kho lưu trữ này",
+  "err.aiChat.historySaveFailed": "Không thể lưu cuộc trò chuyện vào lịch sử",
 };

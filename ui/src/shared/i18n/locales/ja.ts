@@ -1590,6 +1590,11 @@ export const ja: Record<Key, string> = {
   "aiChat.saveHistory": "チャット履歴を保存",
   "aiChat.retention": "履歴の保存期間 (日)",
   "aiChat.retentionHelp": "これより古いチャットはアプリの起動時に削除されます。",
+  "aiChat.confirmTitle": "このリポジトリでAIに作業させますか？",
+  "aiChat.confirmPublic": "{repo} は公開リポジトリです。AI はここのファイルを読み、git コマンドを実行します。読み取った内容は Anthropic に送信されます。",
+  "aiChat.confirmShared": "{repo} は他の共同作業者 {n} 人と共有されています。AI はファイルを読み、その人たちの作業に影響しうる git コマンドを実行します。読み取った内容は Anthropic に送信されます。",
+  "aiChat.confirmUnknown": "{repo} が公開か他の人と共有かを確認できませんでした（連携アカウントなし、または取得に失敗）。AI はファイルを読み、git コマンドを実行します。読み取った内容は Anthropic に送信されます。",
+  "aiChat.confirmScope": "AI は許可された git コマンド（status、log、diff、add、commit、merge、rebase、fetch、pull、force なしの push、switch、stash など）だけを実行できます。強制 push、hard reset、ブランチ削除はできず、このリポジトリ外のファイルの読み取り・編集もできません。続行しますか？",
   "quick.aiChat": "AI チャットを開く / 閉じる",
   "err.aiChat.badId": "会話 ID が無効です",
   "err.aiChat.emptyInput": "メッセージを入力してください",
@@ -1600,4 +1605,6 @@ export const ja: Record<Key, string> = {
   "err.aiBackup.badId": "バックアップ ID が無効です",
   "err.aiBackup.missing": "バックアップはすでに存在しません",
   "err.aiBackup.operationInProgress": "{op} が進行中です。先に中止してください",
+  "err.aiChat.confirmRequired": "AI がこのリポジトリで作業する前に確認が必要です",
+  "err.aiChat.historySaveFailed": "チャットを履歴に保存できませんでした",
 };

@@ -1590,6 +1590,11 @@ export const uz: Record<Key, string> = {
   "aiChat.saveHistory": "Chat tarixini saqlash",
   "aiChat.retention": "Tarixni saqlash muddati (kun)",
   "aiChat.retentionHelp": "Bundan eski chatlar ilova ishga tushganda o'chiriladi.",
+  "aiChat.confirmTitle": "AI shu omborda ishlashiga ruxsat beraymi?",
+  "aiChat.confirmPublic": "{repo} — ommaviy ombor. AI bu yerdagi fayllarni o‘qiydi va git buyruqlarini bajaradi; o‘qiganlari Anthropic’ga yuboriladi.",
+  "aiChat.confirmShared": "{repo} yana {n} hamkor bilan ulashilgan. AI fayllarni o‘qiydi va ularning ishiga ta’sir qilishi mumkin bo‘lgan git buyruqlarini bajaradi; o‘qiganlari Anthropic’ga yuboriladi.",
+  "aiChat.confirmUnknown": "{repo} ommaviymi yoki boshqalar bilan ulashilganmi, aniqlab bo‘lmadi (ulangan hisob yo‘q yoki so‘rov muvaffaqiyatsiz). AI fayllarni o‘qiydi va git buyruqlarini bajaradi; o‘qiganlari Anthropic’ga yuboriladi.",
+  "aiChat.confirmScope": "AI faqat ruxsat etilgan git buyruqlarini (status, log, diff, add, commit, merge, rebase, fetch, pull, force’siz push, switch, stash va shunga o‘xshash) bajara oladi. U majburiy push, hard reset, branchlarni o‘chirish qila olmaydi va bu ombordan tashqaridagi fayllarni o‘qiy yoki tahrirlay olmaydi. Davom etilsinmi?",
   "quick.aiChat": "AI chatni ochish / yopish",
   "err.aiChat.badId": "Suhbat identifikatori noto'g'ri",
   "err.aiChat.emptyInput": "Xabar kiriting",
@@ -1600,4 +1605,6 @@ export const uz: Record<Key, string> = {
   "err.aiBackup.badId": "Zaxira identifikatori noto'g'ri",
   "err.aiBackup.missing": "Zaxira endi mavjud emas",
   "err.aiBackup.operationInProgress": "{op} jarayoni ketmoqda; avval uni to'xtating",
+  "err.aiChat.confirmRequired": "AI bu omborda ishlashidan oldin tasdiqlash kerak",
+  "err.aiChat.historySaveFailed": "Suhbatni tarixga saqlab bo‘lmadi",
 };

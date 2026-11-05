@@ -10,7 +10,7 @@ pub use accounts::{init_secret_dir, set_secret_cipher};
 pub use accounts::{Accounts, FileSecrets, Keychain, SecretCipher, SecretStore};
 pub use avatar::{author_avatars, AvatarCache, AvatarQuery, AvatarResult};
 pub use graphql::{pr_detail, pr_inbox, Activity, InboxPr, PrDetail, ReviewThread, ThreadComment, TimelineItem};
-pub use api::{create_pr, list_prs, page_limit, pr_review_submit, verify, Pr, ReviewComment};
+pub use api::{create_pr, repo_exposure, Exposure, list_prs, page_limit, pr_review_submit, verify, Pr, ReviewComment};
 pub use remote::{commit_web_url, detect_provider, parse_remote, pr_web_url, RemoteRepo};
 
 use serde::{Deserialize, Serialize};

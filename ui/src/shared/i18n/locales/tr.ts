@@ -1590,6 +1590,11 @@ export const tr: Record<Key, string> = {
   "aiChat.saveHistory": "Sohbet geçmişini kaydet",
   "aiChat.retention": "Geçmişi saklama süresi (gün)",
   "aiChat.retentionHelp": "Bundan eski sohbetler uygulama başlarken silinir.",
+  "aiChat.confirmTitle": "Yapay zekânın bu depoda çalışmasına izin verilsin mi?",
+  "aiChat.confirmPublic": "{repo} herkese açık bir depo. Yapay zekâ buradaki dosyaları okuyacak ve git komutları çalıştıracak; okudukları Anthropic'e gönderilir.",
+  "aiChat.confirmShared": "{repo}, {n} diğer katkıcıyla paylaşılıyor. Yapay zekâ dosyaları okuyacak ve onların işini etkileyebilecek git komutları çalıştıracak; okudukları Anthropic'e gönderilir.",
+  "aiChat.confirmUnknown": "{repo} deposunun herkese açık mı yoksa başkalarıyla paylaşılan bir depo mu olduğu anlaşılamadı (bağlı hesap yok veya sorgu başarısız). Yapay zekâ dosyaları okuyacak ve git komutları çalıştıracak; okudukları Anthropic'e gönderilir.",
+  "aiChat.confirmScope": "Yapay zekâ yalnızca izin verilen git komutlarını (status, log, diff, add, commit, merge, rebase, fetch, pull, force olmayan push, switch, stash vb.) çalıştırabilir. Zorla push, hard reset, dal silme yapamaz ve bu depo dışındaki dosyaları okuyup düzenleyemez. Devam edilsin mi?",
   "quick.aiChat": "AI sohbetini aç / kapat",
   "err.aiChat.badId": "Geçersiz konuşma kimliği",
   "err.aiChat.emptyInput": "Bir mesaj girin",
@@ -1600,4 +1605,6 @@ export const tr: Record<Key, string> = {
   "err.aiBackup.badId": "Geçersiz yedek kimliği",
   "err.aiBackup.missing": "Yedek artık mevcut değil",
   "err.aiBackup.operationInProgress": "Devam eden bir {op} var; önce iptal edin",
+  "err.aiChat.confirmRequired": "Yapay zekâ bu depoda çalışmadan önce onay gerekir",
+  "err.aiChat.historySaveFailed": "Sohbet geçmişe kaydedilemedi",
 };

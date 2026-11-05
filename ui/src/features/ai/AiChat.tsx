@@ -12,7 +12,7 @@ import { useSplit } from "../../shared/ui/Splitter";
 import { toast, toastError } from "../../shared/lib/toast";
 import { ctx, ops } from "../../shared/model/ops";
 import { SettingsGroup, SettingsRow } from "../../shared/ui/SettingsLayout";
-import type { AiBackup, Status } from "../../shared/api/types";
+import type { AiBackup } from "../../shared/api/types";
 
 // 맨 오른쪽 독립 AI 채팅 열 (detailLayout과 무관). 상태·이벤트는 shared/model/aichat.ts(외부 스토어),
 // 여기는 화면만: 열림은 `useChatOpen`, 대화는 `useChat`을 구독하고 입력 글자는 `ChatInput` 안에만 둔다(타이핑이 목록을 다시 그리지 않게).
@@ -63,7 +63,7 @@ function UndoRow({ repo, backup, done }: { repo: string; backup: AiBackup; done:
 }
 
 /** 입력란 + 추천 칩. 입력 글자는 여기 상태에만 둔다 */
-const ChatInput = memo(function ChatInput({ repo, running, status }: { repo: string; running: boolean; status: Status | null }) {
+const ChatInput = memo(function ChatInput({ repo, running, operation, behind }: { repo: string; running: boolean; operation: string | null; behind: boolean }) {
   countRender("AiChatInput");
   useLocale();
   const [text, setText] = useState("");
@@ -75,8 +75,8 @@ const ChatInput = memo(function ChatInput({ repo, running, status }: { repo: str
     setText("");
   };
   const chips: { label: string; prompt: string }[] = [];
-  if (status?.operation) chips.push({ label: t("aiChat.chipResolve"), prompt: t("aiChat.promptResolve", { op: status.operation }) });
-  if (status && status.behind > 0) chips.push({ label: t("aiChat.chipPull"), prompt: t("aiChat.promptPull") });
+  if (operation) chips.push({ label: t("aiChat.chipResolve"), prompt: t("aiChat.promptResolve", { op: operation }) });
+  if (behind) chips.push({ label: t("aiChat.chipPull"), prompt: t("aiChat.promptPull") });
   if (!chips.length) chips.push({ label: t("aiChat.chipStatus"), prompt: t("aiChat.promptStatus") }, { label: t("aiChat.chipLog"), prompt: t("aiChat.promptLog") });
   return (
     <div className="ai-input">
@@ -104,7 +104,7 @@ const ChatInput = memo(function ChatInput({ repo, running, status }: { repo: str
   );
 });
 
-function AiChat({ repo, status, width }: { repo: string; status: Status | null; width: number }) {
+function AiChat({ repo, operation, behind, width }: { repo: string; operation: string | null; behind: boolean; width: number }) {
   countRender("AiChat");
   useLocale();
   const chat = useChat(repo);
@@ -148,13 +148,14 @@ function AiChat({ repo, status, width }: { repo: string; status: Status | null; 
         {chat?.items.length ? chat.items.map((it, i) => <Row key={i} item={it} repo={repo} />) : <p className="ai-intro">{t("aiChat.intro")}</p>}
         {running && <div className="ai-run" role="status">{t("aiChat.running")}</div>}
       </div>
-      <ChatInput key={repo} repo={repo} running={running} status={status} />
+      <ChatInput key={repo} repo={repo} running={running} operation={operation} behind={behind} />
     </aside>
   );
 }
 
 /** App의 작업 영역 끝(맨 오른쪽)에 한 번 둔다. 닫혀 있으면 아무것도 그리지 않는다 */
-export const AiChatHost = memo(function AiChatHost({ repo, status }: { repo: string; status: Status | null }) {
+/** operation·behind는 추천 칩에 필요한 원시값만 받는다(status 객체가 새로 만들어져도 이 열이 다시 그려지지 않게) */
+export const AiChatHost = memo(function AiChatHost({ repo, operation, behind }: { repo: string; operation: string | null; behind: boolean }) {
   countRender("AiChatHost");
   const open = useChatOpen(repo);
   const [w, split] = useSplit("ai-col", 380, 280, 720, "x", undefined, true);
@@ -162,7 +163,7 @@ export const AiChatHost = memo(function AiChatHost({ repo, status }: { repo: str
   return (
     <div className="ai-wrap">
       {split}
-      <AiChat repo={repo} status={status} width={w} />
+      <AiChat repo={repo} operation={operation} behind={behind} width={w} />
     </div>
   );
 });

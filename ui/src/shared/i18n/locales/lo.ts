@@ -1590,6 +1590,11 @@ export const lo: Record<Key, string> = {
   "aiChat.saveHistory": "ບັນທຶກປະຫວັດແຊັດ",
   "aiChat.retention": "ເກັບປະຫວັດໄວ້ (ມື້)",
   "aiChat.retentionHelp": "ແຊັດທີ່ເກົ່າກວ່ານີ້ຈະຖືກລຶບເມື່ອແອັບເລີ່ມ.",
+  "aiChat.confirmTitle": "ອະນຸຍາດໃຫ້ AI ເຮັດວຽກໃນບ່ອນເກັບນີ້ບໍ?",
+  "aiChat.confirmPublic": "{repo} ເປັນບ່ອນເກັບສາທາລະນະ. AI ຈະອ່ານໄຟລ໌ຢູ່ນີ້ ແລະ ແລ່ນຄຳສັ່ງ git; ສິ່ງທີ່ອ່ານຈະຖືກສົ່ງໄປ Anthropic.",
+  "aiChat.confirmShared": "{repo} ແບ່ງປັນກັບຜູ້ຮ່ວມງານອີກ {n} ຄົນ. AI ຈະອ່ານໄຟລ໌ ແລະ ແລ່ນຄຳສັ່ງ git ທີ່ອາດກະທົບວຽກຂອງເຂົາເຈົ້າ; ສິ່ງທີ່ອ່ານຈະຖືກສົ່ງໄປ Anthropic.",
+  "aiChat.confirmUnknown": "ບໍ່ສາມາດກວດໄດ້ວ່າ {repo} ເປັນສາທາລະນະ ຫຼື ແບ່ງປັນກັບຄົນອື່ນບໍ (ບໍ່ມີບັນຊີທີ່ເຊື່ອມຕໍ່ ຫຼື ການຄົ້ນຫາລົ້ມເຫຼວ). AI ຈະອ່ານໄຟລ໌ ແລະ ແລ່ນຄຳສັ່ງ git; ສິ່ງທີ່ອ່ານຈະຖືກສົ່ງໄປ Anthropic.",
+  "aiChat.confirmScope": "AI ແລ່ນໄດ້ສະເພາະຄຳສັ່ງ git ທີ່ອະນຸຍາດ (status, log, diff, add, commit, merge, rebase, fetch, pull, push ທີ່ບໍ່ມີ force, switch, stash ແລະ ທີ່ຄ້າຍກັນ). ບໍ່ສາມາດ force push, hard reset, ລຶບສາຂາ ຫຼື ອ່ານ/ແກ້ໄຂໄຟລ໌ນອກບ່ອນເກັບນີ້. ສືບຕໍ່ບໍ?",
   "quick.aiChat": "ເປີດ / ປິດແຊັດ AI",
   "err.aiChat.badId": "ID ການສົນທະນາບໍ່ຖືກຕ້ອງ",
   "err.aiChat.emptyInput": "ກະລຸນາໃສ່ຂໍ້ຄວາມ",
@@ -1600,4 +1605,6 @@ export const lo: Record<Key, string> = {
   "err.aiBackup.badId": "ID ການສຳຮອງບໍ່ຖືກຕ້ອງ",
   "err.aiBackup.missing": "ການສຳຮອງບໍ່ມີອີກແລ້ວ",
   "err.aiBackup.operationInProgress": "ມີ {op} ກຳລັງດຳເນີນຢູ່; ກະລຸນາຢຸດມັນກ່ອນ",
+  "err.aiChat.confirmRequired": "ຕ້ອງຢືນຢັນກ່ອນ AI ຈະເຮັດວຽກໃນບ່ອນເກັບນີ້",
+  "err.aiChat.historySaveFailed": "ບໍ່ສາມາດບັນທຶກການສົນທະນາລົງປະຫວັດໄດ້",
 };

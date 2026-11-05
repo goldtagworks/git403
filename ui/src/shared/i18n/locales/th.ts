@@ -1590,6 +1590,11 @@ export const th: Record<Key, string> = {
   "aiChat.saveHistory": "บันทึกประวัติแชต",
   "aiChat.retention": "เก็บประวัติไว้ (วัน)",
   "aiChat.retentionHelp": "แชตที่เก่ากว่านี้จะถูกลบเมื่อแอปเริ่มทำงาน",
+  "aiChat.confirmTitle": "ให้ AI ทำงานในที่เก็บนี้หรือไม่?",
+  "aiChat.confirmPublic": "{repo} เป็นที่เก็บสาธารณะ AI จะอ่านไฟล์ที่นี่และรันคำสั่ง git สิ่งที่อ่านจะถูกส่งไปยัง Anthropic",
+  "aiChat.confirmShared": "{repo} แชร์กับผู้ร่วมงานอีก {n} คน AI จะอ่านไฟล์และรันคำสั่ง git ที่อาจกระทบงานของพวกเขา สิ่งที่อ่านจะถูกส่งไปยัง Anthropic",
+  "aiChat.confirmUnknown": "ไม่สามารถตรวจสอบได้ว่า {repo} เป็นสาธารณะหรือแชร์กับผู้อื่นหรือไม่ (ไม่มีบัญชีที่เชื่อมต่อ หรือการค้นหาล้มเหลว) AI จะอ่านไฟล์และรันคำสั่ง git สิ่งที่อ่านจะถูกส่งไปยัง Anthropic",
+  "aiChat.confirmScope": "AI รันได้เฉพาะคำสั่ง git ที่อนุญาต (status, log, diff, add, commit, merge, rebase, fetch, pull, push แบบไม่ force, switch, stash และคล้ายกัน) ไม่สามารถ force push, hard reset, ลบสาขา หรืออ่านและแก้ไขไฟล์นอกที่เก็บนี้ ดำเนินการต่อหรือไม่?",
   "quick.aiChat": "เปิด / ปิดแชต AI",
   "err.aiChat.badId": "รหัสการสนทนาไม่ถูกต้อง",
   "err.aiChat.emptyInput": "กรอกข้อความ",
@@ -1600,4 +1605,6 @@ export const th: Record<Key, string> = {
   "err.aiBackup.badId": "รหัสข้อมูลสำรองไม่ถูกต้อง",
   "err.aiBackup.missing": "ไม่มีข้อมูลสำรองนี้แล้ว",
   "err.aiBackup.operationInProgress": "กำลังมี {op} อยู่ ยกเลิกก่อน",
+  "err.aiChat.confirmRequired": "ต้องยืนยันก่อนที่ AI จะทำงานในที่เก็บนี้",
+  "err.aiChat.historySaveFailed": "ไม่สามารถบันทึกแชตลงในประวัติได้",
 };

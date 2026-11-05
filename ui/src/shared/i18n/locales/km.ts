@@ -1590,6 +1590,11 @@ export const km: Record<Key, string> = {
   "aiChat.saveHistory": "រក្សាទុកប្រវត្តិជជែក",
   "aiChat.retention": "រក្សាប្រវត្តិរយៈពេល (ថ្ងៃ)",
   "aiChat.retentionHelp": "ការជជែកដែលចាស់ជាងនេះនឹងត្រូវលុបនៅពេលកម្មវិធីចាប់ផ្តើម។",
+  "aiChat.confirmTitle": "អនុញ្ញាតឱ្យ AI ធ្វើការក្នុងឃ្លាំងនេះឬទេ?",
+  "aiChat.confirmPublic": "{repo} ជាឃ្លាំងសាធារណៈ។ AI នឹងអានឯកសារនៅទីនេះ ហើយដំណើរការពាក្យបញ្ជា git។ អ្វីដែលវាអានត្រូវបានផ្ញើទៅ Anthropic។",
+  "aiChat.confirmShared": "{repo} ត្រូវបានចែករំលែកជាមួយអ្នករួមការងារផ្សេងទៀត {n} នាក់។ AI នឹងអានឯកសារ និងដំណើរការពាក្យបញ្ជា git ដែលអាចប៉ះពាល់ដល់ការងាររបស់ពួកគេ។ អ្វីដែលវាអានត្រូវបានផ្ញើទៅ Anthropic។",
+  "aiChat.confirmUnknown": "មិនអាចដឹងថា {repo} ជាសាធារណៈ ឬចែករំលែកជាមួយអ្នកផ្សេងឬទេ (គ្មានគណនីដែលបានភ្ជាប់ ឬការស្វែងរកបរាជ័យ)។ AI នឹងអានឯកសារ និងដំណើរការពាក្យបញ្ជា git។ អ្វីដែលវាអានត្រូវបានផ្ញើទៅ Anthropic។",
+  "aiChat.confirmScope": "AI អាចដំណើរការតែពាក្យបញ្ជា git ដែលបានអនុញ្ញាត (status, log, diff, add, commit, merge, rebase, fetch, pull, push ដោយគ្មាន force, switch, stash ។ល។)។ វាមិនអាច force push, hard reset, លុបសាខា ឬអាន/កែឯកសារក្រៅឃ្លាំងនេះបានទេ។ បន្តឬទេ?",
   "quick.aiChat": "បើក / បិទការជជែក AI",
   "err.aiChat.badId": "លេខសម្គាល់ការសន្ទនាមិនត្រឹមត្រូវ",
   "err.aiChat.emptyInput": "សូមបញ្ចូលសារ",
@@ -1600,4 +1605,6 @@ export const km: Record<Key, string> = {
   "err.aiBackup.badId": "លេខសម្គាល់ការបម្រុងទុកមិនត្រឹមត្រូវ",
   "err.aiBackup.missing": "ការបម្រុងទុកលែងមានទៀតហើយ",
   "err.aiBackup.operationInProgress": "{op} កំពុងដំណើរការ; សូមបោះបង់វាជាមុន",
+  "err.aiChat.confirmRequired": "ត្រូវការការបញ្ជាក់មុនពេល AI ធ្វើការក្នុងឃ្លាំងនេះ",
+  "err.aiChat.historySaveFailed": "មិនអាចរក្សាទុកការជជែកក្នុងប្រវត្តិបានទេ",
 };

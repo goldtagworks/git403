@@ -1590,6 +1590,11 @@ export const de: Record<Key, string> = {
   "aiChat.saveHistory": "Chatverlauf speichern",
   "aiChat.retention": "Verlauf aufbewahren für (Tage)",
   "aiChat.retentionHelp": "Ältere Chats werden beim Start der App gelöscht.",
+  "aiChat.confirmTitle": "KI in diesem Repository arbeiten lassen?",
+  "aiChat.confirmPublic": "{repo} ist ein öffentliches Repository. Die KI liest hier Dateien und führt git-Befehle aus; was sie liest, wird an Anthropic gesendet.",
+  "aiChat.confirmShared": "{repo} wird mit {n} weiteren Mitwirkenden geteilt. Die KI liest hier Dateien und führt git-Befehle aus, die ihre Arbeit beeinflussen können; was sie liest, wird an Anthropic gesendet.",
+  "aiChat.confirmUnknown": "Es ließ sich nicht feststellen, ob {repo} öffentlich ist oder mit anderen geteilt wird (kein verbundenes Konto oder Abfrage fehlgeschlagen). Die KI liest hier Dateien und führt git-Befehle aus; was sie liest, wird an Anthropic gesendet.",
+  "aiChat.confirmScope": "Die KI darf nur erlaubte git-Befehle ausführen (status, log, diff, add, commit, merge, rebase, fetch, pull, push ohne Force, switch, stash und ähnliche). Sie kann nicht force-pushen, hart zurücksetzen, Branches löschen oder Dateien außerhalb dieses Repositorys lesen und ändern. Fortfahren?",
   "quick.aiChat": "KI-Chat öffnen / schließen",
   "err.aiChat.badId": "Ungültige Unterhaltungs-ID",
   "err.aiChat.emptyInput": "Geben Sie eine Nachricht ein",
@@ -1600,4 +1605,6 @@ export const de: Record<Key, string> = {
   "err.aiBackup.badId": "Ungültige Backup-ID",
   "err.aiBackup.missing": "Das Backup existiert nicht mehr",
   "err.aiBackup.operationInProgress": "Ein {op} läuft gerade; brechen Sie ihn zuerst ab",
+  "err.aiChat.confirmRequired": "Vor der Arbeit der KI in diesem Repository ist eine Bestätigung nötig",
+  "err.aiChat.historySaveFailed": "Der Chat konnte nicht im Verlauf gespeichert werden",
 };
