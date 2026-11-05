@@ -65,11 +65,6 @@ fn is_local_url(u: &str) -> bool {
     u.starts_with(['/', '.', '~', '\\']) || u.starts_with("file://") || (b.len() > 2 && b[1] == b':' && b[0].is_ascii_alphabetic() && (b[2] == b'\\' || b[2] == b'/'))
 }
 
-/// FNV-1a 64비트(Rust 버전에 따라 바뀌지 않는 해시)
-fn fingerprint(urls: &[String]) -> String {
-    format!("{:016x}", urls.join("\n").bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)))
-}
-
 impl Backend {
     /// 저장소의 위험 판정. 원격이 없으면 네트워크를 쓰지 않는다. 원격 URL은 `git remote get-url --all`(가져오기)과 `--push --all`(`pushurl` 포함)이
     /// 돌려주는 값 — git이 `url.<base>.insteadOf`를 적용한 뒤의 실제 주소다.
@@ -91,9 +86,7 @@ impl Backend {
                 }
             }
         }
-        urls.sort();
-        urls.dedup();
-        let fp = fingerprint(&urls.iter().map(|(n, u)| format!("{n}={u}")).collect::<Vec<_>>());
+        let fp = gc_core::ai_tool::remotes_fingerprint(&mut urls);
         // 같은 컴퓨터의 경로(`/x`, `../x`, `file://`)는 호스팅 서비스가 아니므로 로컬 전용으로 본다
         let hosted: Vec<&(String, String)> = urls.iter().filter(|(_, u)| u.is_empty() || !is_local_url(u)).collect();
         let mut all = Vec::new();

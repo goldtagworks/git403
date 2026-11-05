@@ -24,8 +24,8 @@ fn summary(name: &str, command: &str) -> String {
 impl Backend {
     /// claude에 줄 `--mcp-config`: 이 실행 파일을 MCP 서버(`--git403-mcp <저장소>`)로. 서버 환경에는 PATH·git 경로·사용자 git 설정에 필요한 변수만 넣고,
     /// git 자식에게 줄 askpass 환경은 `GIT403_GIT_ENV`로 따로 싣는다(서버가 askpass로 오인되지 않게)
-    fn mcp_config(&self, repo: &std::path::Path) -> String {
-        use crate::mcp::{GIT_BIN, GIT_ENV};
+    fn mcp_config(&self, repo: &std::path::Path, fingerprint: &str) -> String {
+        use crate::mcp::{GIT_BIN, GIT_ENV, REMOTE_FP};
         let exe = std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
         let mut env = serde_json::Map::new();
         for k in ["HOME", "USER", "LOGNAME", "SSH_AUTH_SOCK", "XDG_CONFIG_HOME", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_SSH", "GIT_SSH_COMMAND", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "SYSTEMROOT", "TMPDIR", "TEMP", "TMP", "LANG"] {
@@ -38,6 +38,7 @@ impl Backend {
         }
         env.insert(GIT_BIN.into(), self.git.git_path().to_string_lossy().into_owned().into());
         let git_env: serde_json::Map<String, Value> = self.git.env_pairs().iter().map(|(k, v)| (k.clone(), v.clone().into())).collect();
+        env.insert(REMOTE_FP.into(), fingerprint.into());
         env.insert(GIT_ENV.into(), Value::Object(git_env).to_string().into());
         chat::mcp_config(&exe, &repo.to_string_lossy(), &env)
     }
@@ -81,7 +82,7 @@ impl Backend {
         let id = format!("b{:x}{}", now_ms(), SEQ.fetch_add(1, Ordering::Relaxed));
         let backup = ai_backup::create(&self.git, &repo, &id).await.map_err(|e| e.ipc())?;
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let args = chat::args(&input, session_id.as_deref(), &self.mcp_config(&repo));
+        let args = chat::args(&input, session_id.as_deref(), &self.mcp_config(&repo, &r.fingerprint));
         let spawned = {
             let mut chats = self.ai.chats.lock();
             if chats.contains_key(&conversation) {

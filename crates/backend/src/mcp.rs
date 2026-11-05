@@ -19,6 +19,8 @@ pub const FLAG: &str = "--git403-mcp";
 pub const GIT_ENV: &str = "GIT403_GIT_ENV";
 /// 쓸 git 실행 파일(없으면 `git`)
 pub const GIT_BIN: &str = "GIT403_GIT";
+/// 차례 시작 때 사용자가 확인한 원격 목록 지문(`ai_tool::remotes_fingerprint`). 있으면 fetch·pull·push 직전에 다시 계산해 다르면 거절한다
+pub const REMOTE_FP: &str = "GIT403_REMOTE_FP";
 const TIMEOUT: Duration = Duration::from_secs(300);
 /// 도구 출력 길이 상한(문자)
 const OUT_LIMIT: usize = 20_000;
@@ -121,13 +123,30 @@ fn run_git(repo: &Path, argv: &[String]) -> (String, bool) {
     }
 }
 
-/// `git remote`가 돌려준 이름들 (검증기가 원격 인자를 이 목록과 대조한다)
-fn remote_names(repo: &Path) -> Vec<String> {
+/// 설정된 원격: (이름들, `(이름, URL)` 쌍들). URL은 `git remote get-url --all [--push]`(`insteadOf` 적용 후), 못 읽으면 빈 문자열
+fn remotes(repo: &Path) -> (Vec<String>, Vec<(String, String)>) {
     let (t, err) = run_git(repo, &["remote".into()]);
     if err {
-        return vec![];
+        return (vec![], vec![]);
     }
-    t.lines().map(|l| l.trim().to_owned()).filter(|l| !l.is_empty() && l != "(no output)").collect()
+    let names: Vec<String> = t.lines().map(|l| l.trim().to_owned()).filter(|l| !l.is_empty() && l != "(no output)").collect();
+    let mut pairs = Vec::new();
+    for n in &names {
+        for push in [false, true] {
+            let mut a: Vec<String> = ["remote", "get-url", "--all"].map(String::from).to_vec();
+            if push {
+                a.push("--push".into());
+            }
+            a.push(n.clone());
+            let (u, err) = run_git(repo, &a);
+            if err {
+                pairs.push((n.clone(), String::new()));
+            } else {
+                pairs.extend(u.lines().map(|l| (n.clone(), l.trim().to_owned())).filter(|(_, u)| !u.is_empty()));
+            }
+        }
+    }
+    (names, pairs)
 }
 
 /// 도구 호출 하나 → (출력, 오류 여부). git 실패는 `[git failed]` 표식으로 오며 `handle`이 isError를 켠다
@@ -138,10 +157,20 @@ fn call(repo: &Path, name: &str, a: &Value) -> (String, bool) {
             let args: Option<Vec<String>> = a.get("args").and_then(Value::as_array).map(|v| v.iter().map(|x| x.as_str().map(str::to_owned)).collect::<Option<Vec<_>>>()).and_then(|x| x);
             match args {
                 None => Err("`args` must be an array of strings".into()),
-                Some(args) => ai_tool::validate(&args, repo, &remote_names(repo)).map(|argv| {
-                    let (t, err) = run_git(repo, &argv);
-                    if err { format!("[git failed]\n{t}") } else { t }
-                }),
+                Some(args) => {
+                    // 원격을 쓰는 명령만 원격 목록을 읽는다. 확인 뒤 원격(URL·pushurl)이 바뀌었으면 거절한다
+                    let net = matches!(args.first().map(String::as_str), Some("fetch" | "pull" | "push"));
+                    let (names, mut pairs) = if net { remotes(repo) } else { (vec![], vec![]) };
+                    let changed = net && std::env::var(REMOTE_FP).is_ok_and(|fp| !fp.is_empty() && fp != ai_tool::remotes_fingerprint(&mut pairs));
+                    if changed {
+                        Err("the remote configuration changed after you confirmed it; stop and ask the user to start a new turn".to_string())
+                    } else {
+                        ai_tool::validate(&args, repo, &names).map(|argv| {
+                            let (t, err) = run_git(repo, &argv);
+                            if err { format!("[git failed]\n{t}") } else { t }
+                        })
+                    }
+                }
             }
         }
         "read_file" => sget("path").ok_or_else(|| "`path` is required".to_string()).and_then(|p| ai_tool::read_file(repo, p)),

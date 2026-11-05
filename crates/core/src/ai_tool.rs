@@ -43,6 +43,10 @@ const fn v(long: &'static str, short: Option<char>, val: V) -> Opt {
 const fn ov(long: &'static str, val: V) -> Opt {
     Opt { long, short: None, val, optional: true }
 }
+/// 긴 형태 `--long[=값]`과 짧은 형태 `-X[값]`이 모두 값을 붙여서만 받는 옵션(`--unified=3`·`-U3`)
+const fn sov(long: &'static str, short: char, val: V) -> Opt {
+    Opt { long, short: Some(short), val, optional: true }
+}
 
 #[derive(Clone, Copy, PartialEq)]
 enum Pos {
@@ -64,17 +68,24 @@ struct Spec {
     /// `-20`처럼 숫자만 있는 옵션 허용(log)
     num: bool,
     max_pos: usize,
+    /// `--` 앞은 리비전뿐이다: 사용자가 `--`를 안 줬으면 끝에 `--`를 붙여 git이 위치 인자를 경로로 해석하지 못하게 한다(log·diff·show·reset)
+    auto_dd: bool,
+    /// 경로는 반드시 `--` 뒤에(blame): 없으면 거절
+    need_dd: bool,
 }
 
 fn spec(opts: Vec<Opt>, pos: Pos) -> Spec {
-    Spec { opts, pos, num: false, max_pos: 8 }
+    Spec { opts, pos, num: false, max_pos: 8, auto_dd: false, need_dd: false }
+}
+fn revs_dd(opts: Vec<Opt>) -> Spec {
+    Spec { auto_dd: true, ..spec(opts, Pos::Revs) }
 }
 
 const DATE: V = V::Of(&["iso", "iso-strict", "relative", "short", "local", "default", "human", "unix", "raw"]);
 
 /// 보기 옵션(log·show·diff 공통)
 fn view() -> Vec<Opt> {
-    vec![f("stat"), f("shortstat"), f("numstat"), f("name-only"), f("name-status"), fs("patch", 'p'), fs("no-patch", 's'), f("summary"), f("no-color"), fs("ignore-all-space", 'w'), fs("ignore-space-change", 'b'), v("unified", None, V::Int), v("", Some('U'), V::Int), v("diff-filter", None, V::Letters)]
+    vec![f("stat"), f("shortstat"), f("numstat"), f("name-only"), f("name-status"), fs("patch", 'p'), fs("no-patch", 's'), f("summary"), f("no-color"), fs("ignore-all-space", 'w'), fs("ignore-space-change", 'b'), sov("unified", 'U', V::Int), v("diff-filter", None, V::Letters)]
 }
 fn with(mut a: Vec<Opt>, b: Vec<Opt>) -> Vec<Opt> {
     a.extend(b);
@@ -86,28 +97,29 @@ fn spec_of(sub: &str) -> Option<Spec> {
         "status" => spec(vec![fs("short", 's'), fs("branch", 'b'), f("porcelain"), f("long"), fs("", 'z'), ov("untracked-files", V::Of(&["no", "normal", "all"]))], Pos::Paths),
         "log" => Spec {
             num: true,
+            auto_dd: true,
             ..spec(
                 with(view(), vec![f("oneline"), f("graph"), f("decorate"), f("no-decorate"), f("all"), f("merges"), f("no-merges"), f("first-parent"), f("reverse"), f("follow"), f("left-right"), f("abbrev-commit"), f("relative-date"), v("max-count", Some('n'), V::Int), v("skip", None, V::Int), v("since", None, V::Free), v("after", None, V::Free), v("until", None, V::Free), v("before", None, V::Free), v("author", None, V::Free), v("committer", None, V::Free), v("grep", None, V::Free), fs("regexp-ignore-case", 'i'), v("", Some('S'), V::Free), v("", Some('G'), V::Free), v("format", None, V::Free), v("pretty", None, V::Free), v("date", None, DATE)]),
                 Pos::Revs,
             )
         },
-        "diff" => spec(with(view(), vec![f("cached"), f("staged"), f("check"), f("no-renames"), f("exit-code"), fs("find-renames", 'M'), ov("word-diff", V::Of(&["color", "plain", "porcelain", "none"]))]), Pos::Revs),
-        "show" => spec(with(view(), vec![f("oneline"), f("abbrev-commit"), v("format", None, V::Free), v("pretty", None, V::Free)]), Pos::Revs),
-        "blame" => spec(vec![v("", Some('L'), V::Free), fs("", 'w'), fs("show-email", 'e'), f("line-porcelain"), fs("porcelain", 'p'), fs("", 'M'), fs("", 'C'), v("date", None, DATE), fs("", 's'), fs("show-name", 'f'), fs("show-number", 'n')], Pos::Revs),
+        "diff" => revs_dd(with(view(), vec![f("cached"), f("staged"), f("check"), f("no-renames"), f("exit-code"), fs("find-renames", 'M'), ov("word-diff", V::Of(&["color", "plain", "porcelain", "none"]))])),
+        "show" => revs_dd(with(view(), vec![f("oneline"), f("abbrev-commit"), v("format", None, V::Free), v("pretty", None, V::Free)])),
+        "blame" => Spec { need_dd: true, max_pos: 1, ..spec(vec![v("", Some('L'), V::Free), fs("", 'w'), fs("show-email", 'e'), f("line-porcelain"), fs("porcelain", 'p'), fs("", 'M'), fs("", 'C'), v("date", None, DATE), fs("", 's'), fs("show-name", 'f'), fs("show-number", 'n')], Pos::Revs) },
         "ls-files" => spec(vec![fs("cached", 'c'), fs("modified", 'm'), fs("others", 'o'), fs("deleted", 'd'), fs("stage", 's'), fs("unmerged", 'u'), fs("ignored", 'i'), fs("killed", 'k'), f("exclude-standard"), f("full-name"), fs("", 'z'), f("error-unmatch"), fs("", 't'), f("deduplicate")], Pos::Paths),
         "rev-parse" => spec(vec![f("abbrev-ref"), ov("short", V::Int), f("verify"), fs("quiet", 'q'), f("symbolic-full-name"), f("is-inside-work-tree"), f("is-bare-repository"), f("is-shallow-repository"), f("symbolic")], Pos::Revs),
         "add" => spec(vec![fs("all", 'A'), fs("update", 'u'), fs("intent-to-add", 'N'), fs("verbose", 'v'), fs("dry-run", 'n')], Pos::Paths),
-        "commit" => spec(vec![v("message", Some('m'), V::Free), fs("all", 'a'), f("amend"), f("no-edit"), f("allow-empty"), fs("quiet", 'q'), fs("no-verify", 'n'), fs("signoff", 's'), v("author", None, V::Free), v("date", None, V::Free), v("fixup", None, V::Rev), v("squash", None, V::Rev), f("reset-author"), f("dry-run")], Pos::Paths),
+        "commit" => spec(vec![v("message", Some('m'), V::Free), fs("all", 'a'), f("amend"), f("no-edit"), f("allow-empty"), fs("quiet", 'q'), fs("signoff", 's'), v("author", None, V::Free), v("date", None, V::Free), v("fixup", None, V::Rev), v("squash", None, V::Rev), f("reset-author"), f("dry-run")], Pos::Paths),
         "merge" => spec(vec![f("continue"), f("abort"), f("quit"), f("no-ff"), f("ff"), f("ff-only"), f("squash"), f("commit"), f("no-commit"), f("no-edit"), v("message", Some('m'), V::Free), fs("quiet", 'q'), f("allow-unrelated-histories"), v("", Some('X'), V::Of(&["ours", "theirs"]))], Pos::Revs),
         "rebase" => spec(vec![f("continue"), f("abort"), f("skip"), f("quit"), v("onto", None, V::Rev), f("autostash"), f("no-autostash"), fs("quiet", 'q'), v("empty", None, V::Of(&["drop", "keep"])), v("", Some('X'), V::Of(&["ours", "theirs"]))], Pos::Revs),
         "cherry-pick" => spec(vec![f("continue"), f("abort"), f("skip"), f("quit"), fs("no-commit", 'n'), v("mainline", Some('m'), V::Int), f("no-edit")], Pos::Revs),
         "revert" => spec(vec![f("continue"), f("abort"), f("skip"), f("quit"), fs("no-commit", 'n'), v("mainline", Some('m'), V::Int), f("no-edit")], Pos::Revs),
         "fetch" => spec(vec![f("all"), fs("prune", 'p'), fs("tags", 't'), f("no-tags"), fs("quiet", 'q'), fs("verbose", 'v'), v("depth", None, V::Int), f("unshallow"), f("dry-run")], Pos::Remote),
         "pull" => spec(vec![ov("rebase", V::Of(&["true", "false", "merges"])), f("no-rebase"), f("ff-only"), f("ff"), f("no-ff"), f("autostash"), f("no-autostash"), f("no-edit"), fs("quiet", 'q'), fs("verbose", 'v'), fs("prune", 'p'), f("commit"), f("no-commit"), f("squash"), f("allow-unrelated-histories"), v("", Some('X'), V::Of(&["ours", "theirs"]))], Pos::Remote),
-        "push" => spec(vec![fs("set-upstream", 'u'), f("tags"), f("follow-tags"), fs("dry-run", 'n'), fs("quiet", 'q'), fs("verbose", 'v'), f("no-verify"), f("all"), f("atomic")], Pos::Remote),
+        "push" => spec(vec![fs("set-upstream", 'u'), fs("dry-run", 'n'), fs("quiet", 'q'), fs("verbose", 'v'), f("atomic")], Pos::Remote),
         "switch" => Spec { max_pos: 2, ..spec(vec![v("create", Some('c'), V::Rev), fs("detach", 'd'), fs("merge", 'm'), fs("quiet", 'q'), f("no-track")], Pos::Revs) },
-        "reset" => spec(vec![f("soft"), f("mixed"), fs("quiet", 'q')], Pos::Revs),
-        "rm" => spec(vec![f("cached"), fs("recursive", 'r'), fs("quiet", 'q'), fs("dry-run", 'n'), f("ignore-unmatch")], Pos::Paths),
+        "reset" => Spec { max_pos: 1, ..revs_dd(vec![f("soft"), f("mixed"), fs("quiet", 'q')]) },
+        "rm" => spec(vec![f("cached"), fs("", 'r'), fs("quiet", 'q'), fs("dry-run", 'n'), f("ignore-unmatch")], Pos::Paths),
         "mv" => spec(vec![fs("dry-run", 'n')], Pos::Paths),
         "branch" => Spec { max_pos: 0, ..spec(vec![fs("all", 'a'), fs("remotes", 'r'), fs("verbose", 'v'), f("list"), f("show-current")], Pos::None) },
         "tag" => spec(vec![fs("list", 'l')], Pos::Revs),
@@ -208,27 +220,62 @@ pub fn resolve(repo: &Path, p: &str) -> Res<PathBuf> {
             _ => return bad(format!("path outside the repository: {p:?}")),
         }
     }
-    // 심볼릭 링크를 따라 밖으로 나가지 않는지: 있는 가장 긴 조상을 정규화해 본다
+    // 경로의 어느 성분이든(마지막 포함) 심볼릭 링크면 거절한다: 커밋된 `g -> .git`처럼 이름 검사를 우회해 `.git`·밖으로 들어가는 길을 없앤다.
+    // (조상 성분을 하나씩 `symlink_metadata`로 본다 — 아직 없는 뒷부분은 건너뛴다)
+    let mut cur = root.clone();
+    for c in norm.components() {
+        cur.push(c);
+        match cur.symlink_metadata() {
+            Ok(m) if m.file_type().is_symlink() => return bad(format!("symbolic links are not allowed: {p:?}")),
+            Ok(_) => {}
+            Err(_) => break,
+        }
+    }
+    // 방어 한 겹 더: 실제(정규화된) 위치가 저장소 안이고 그 상대 경로에도 금지 이름이 없어야 한다(대소문자 무시 파일 시스템의 실제 철자 포함)
     let mut probe = root.join(&norm);
-    while !probe.exists() && probe.symlink_metadata().is_err() {
+    while probe.symlink_metadata().is_err() {
         if !probe.pop() {
             break;
         }
     }
     let real = probe.canonicalize().map_err(|e| e.to_string())?;
-    if !real.starts_with(&root) {
-        return bad(format!("path outside the repository: {p:?}"));
+    let Ok(real_rel) = real.strip_prefix(&root) else { return bad(format!("path outside the repository: {p:?}")) };
+    if real_rel.components().any(|c| matches!(c, Component::Normal(n) if forbidden_name(&n.to_string_lossy()))) {
+        return bad(format!("not allowed: {p:?}"));
     }
     Ok(norm)
 }
 
-fn refspec_ok(s: &str) -> Res<()> {
+/// 브랜치·태그 이름(또는 `refs/heads/…`·`refs/tags/…`). `refs/`의 다른 이름(백업 `refs/git403/`·`refs/stash`·`refs/remotes` 등)·`+`·`:`·글롭·따옴표·공백은 불가
+fn branch_name_ok(s: &str, allow_expr: bool) -> Res<()> {
     rev_ok(s)?;
-    // 따옴표는 셸이 없으니 그냥 글자지만, 따옴표로 감싼 `'+main'`·`":main"` 같은 우회 모양은 처음부터 막는다
-    if s.starts_with(':') || s.contains(['\n', '\'', '"']) {
-        return bad(format!("refspec not allowed: {s:?}"));
+    let chars = |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '/' | '-') || (allow_expr && matches!(c, '@' | '{' | '}' | '^' | '~'));
+    if !s.chars().all(chars) || s.ends_with('/') || s.contains("//") {
+        return bad(format!("not a plain branch or tag name: {s:?}"));
+    }
+    if s.starts_with("refs/") && !(s.starts_with("refs/heads/") || s.starts_with("refs/tags/")) {
+        return bad(format!("only refs/heads/ and refs/tags/ may be named: {s:?}"));
     }
     Ok(())
+}
+
+/// fetch·pull 인자: 원격 브랜치 이름만(`src:dst` 불가 — 로컬 ref를 덮어쓸 수 있다)
+fn fetch_ref_ok(s: &str) -> Res<()> {
+    branch_name_ok(s, false)
+}
+
+/// push 인자: `<src>` 또는 `<src>:<dst>`. src는 리비전 표현, dst는 브랜치·태그 이름. 강제(`+`)·삭제(`:dst`)·글롭 불가
+fn push_ref_ok(s: &str) -> Res<()> {
+    match s.split_once(':') {
+        None => branch_name_ok(s, true),
+        Some((src, dst)) => {
+            if src.is_empty() || dst.is_empty() {
+                return bad(format!("refspec not allowed (deleting or empty side): {s:?}"));
+            }
+            branch_name_ok(src, true)?;
+            branch_name_ok(dst, false)
+        }
+    }
 }
 
 fn path_arg(repo: &Path, s: &str) -> Res<String> {
@@ -282,6 +329,8 @@ fn parse_spec(sp: &Spec, sub: &str, args: &[String], repo: &Path, remotes: &[Str
                     let _ = val;
                     out.push(a.clone());
                 }
+                // 값이 선택인지 필수인지 git 안에서 옵션마다 달라(`--pretty`는 선택값이라 다음 인자를 옵션으로 읽는다) 자유 문자열 값은 `=` 형태만 받는다
+                (V::Free, None) => return bad(format!("write free-text values as --{name}=<value> (one argument)")),
                 (val, None) => {
                     let Some(x) = args.get(i) else { return bad(format!("option --{name} needs a value")) };
                     i += 1;
@@ -303,7 +352,9 @@ fn parse_spec(sp: &Spec, sub: &str, args: &[String], repo: &Path, remotes: &[Str
                     continue;
                 }
                 let attached = &body[k + c.len_utf8()..];
-                if attached.is_empty() {
+                if attached.is_empty() && o.optional {
+                    break; // 짧은 선택값 옵션(`-U`·`-M`)은 붙인 값(`-U3`)만 받고 다음 인자를 먹지 않는다
+                } else if attached.is_empty() {
                     let Some(x) = args.get(i) else { return bad(format!("option -{c} needs a value")) };
                     i += 1;
                     check(o.val, &format!("-{c}"), x)?;
@@ -339,8 +390,10 @@ fn parse_spec(sp: &Spec, sub: &str, args: &[String], repo: &Path, remotes: &[Str
                     if !remotes.iter().any(|r| r == p.as_str()) {
                         return bad(format!("{p:?} is not a configured remote name (URLs and paths are not allowed). Configured: {}", remotes.join(", ")));
                     }
+                } else if sub == "push" {
+                    push_ref_ok(p)?;
                 } else {
-                    refspec_ok(p)?;
+                    fetch_ref_ok(p)?;
                 }
             }
             Pos::StashRef => {
@@ -350,6 +403,13 @@ fn parse_spec(sp: &Spec, sub: &str, args: &[String], repo: &Path, remotes: &[Str
                 }
             }
         }
+    }
+    let has_dd = out.iter().any(|a| a == "--");
+    if sp.need_dd && !has_dd {
+        return bad(format!("{sub} needs the path after `--`, e.g. [\"{sub}\", \"--\", \"<path>\"]"));
+    }
+    if sp.auto_dd && !has_dd {
+        out.push("--".into());
     }
     if sp.pos == Pos::Remote && pos.len() > 1 && out.iter().any(|a| a == "--all") {
         return bad("--all cannot be combined with refspecs");
@@ -363,12 +423,25 @@ fn parse_spec(sp: &Spec, sub: &str, args: &[String], repo: &Path, remotes: &[Str
     Ok(out)
 }
 
+fn stash_spec(name: &str) -> Spec {
+    match name {
+        "push" => spec(vec![v("message", Some('m'), V::Free), fs("include-untracked", 'u'), fs("keep-index", 'k'), fs("quiet", 'q')], Pos::Paths),
+        "list" => spec(vec![f("oneline"), f("stat")], Pos::None),
+        "show" => spec(vec![fs("patch", 'p'), f("stat"), f("name-only")], Pos::StashRef),
+        _ => spec(vec![f("index"), fs("quiet", 'q')], Pos::StashRef),
+    }
+}
+
 /// 도구 입력(`git` 뒤 인자 배열)을 검사해 실제로 실행할 git 인자(안전 설정 `-c` 포함, `git` 자신은 제외)를 만든다.
 /// `repo`는 저장소 폴더, `remotes`는 `git remote`가 돌려준 이름들.
 pub fn validate(args: &[String], repo: &Path, remotes: &[String]) -> Res<Vec<String>> {
     let Some(sub) = args.first() else { return bad("no git subcommand") };
     if args.iter().any(|a| a.contains('\0')) {
         return bad("NUL in argument");
+    }
+    // 앱의 백업 ref(`refs/git403/ai-backup/…`)는 이름을 언급하는 것도 막는다
+    if args.iter().any(|a| a.to_ascii_lowercase().contains("git403")) {
+        return bad("references under refs/git403/ are reserved");
     }
     let rest = &args[1..];
     let body: Vec<String> = match sub.as_str() {
@@ -378,12 +451,7 @@ pub fn validate(args: &[String], repo: &Path, remotes: &[String]) -> Res<Vec<Str
                 Some(s) if matches!(s.as_str(), "push" | "list" | "show" | "apply") => (s.as_str(), &rest[1..]),
                 Some(s) => return bad(format!("stash subcommand not allowed: {s} (allowed: push, list, show, apply)")),
             };
-            let sp = match name {
-                "push" => spec(vec![v("message", Some('m'), V::Free), fs("include-untracked", 'u'), fs("keep-index", 'k'), fs("quiet", 'q')], Pos::Paths),
-                "list" => spec(vec![f("oneline"), f("stat")], Pos::None),
-                "show" => spec(vec![fs("patch", 'p'), f("stat"), f("name-only")], Pos::StashRef),
-                _ => spec(vec![f("index"), fs("quiet", 'q')], Pos::StashRef),
-            };
+            let sp = stash_spec(name);
             // stash는 하위 이름마다 표가 달라 직접 파싱한다
             let mut out = parse_spec(&sp, "stash", rest, repo, remotes)?;
             out.insert(0, name.to_string());
@@ -429,9 +497,18 @@ pub fn validate(args: &[String], repo: &Path, remotes: &[String]) -> Res<Vec<Str
     Ok(full)
 }
 
+/// 원격 목록 지문: `(이름, URL)` 쌍(가져오기·보내기 URL, `insteadOf` 적용 후)을 정렬·중복 제거해 FNV-1a 64비트로 줄인다.
+/// 앱(`ai_risk`)이 차례 시작 때 확인한 값과 MCP 서버가 push·fetch·pull 직전에 다시 계산한 값이 같아야 한다.
+pub fn remotes_fingerprint(pairs: &mut Vec<(String, String)>) -> String {
+    pairs.sort();
+    pairs.dedup();
+    let text = pairs.iter().map(|(n, u)| format!("{n}={u}")).collect::<Vec<_>>().join("\n");
+    format!("{:016x}", text.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)))
+}
+
 /// 도구 설명용 한 줄 요약(모델이 볼 안내)
 pub fn describe() -> String {
-    format!("Run git in the current repository (no shell: pass the arguments as an array WITHOUT the leading `git`, e.g. [\"commit\",\"-m\",\"msg\"]). Allowed subcommands: {}. Only a safe subset of each subcommand's options is accepted (no force/delete/hard-reset/exec options, no global options like -c or -C); remotes must be configured remote names, never URLs or paths. Rejected calls explain why.", SUBCOMMANDS.join(", "))
+    format!("Run git in the current repository (no shell: pass the arguments as an array WITHOUT the leading `git`, e.g. [\"commit\",\"-m\",\"msg\"]). Allowed subcommands: {}. Only a safe subset of each subcommand's options is accepted (no force/delete/hard-reset/exec options, no global options like -c or -C); remotes must be configured remote names, never URLs or paths. Put paths after `--` (for log, diff, show, reset, blame); write free-text option values as --opt=value (e.g. --author=kim, --format=%h); push/fetch/pull take a configured remote name and plain branch/tag names (src[:dst] only for push). Rejected calls explain why.", SUBCOMMANDS.join(", "))
 }
 
 const READ_LIMIT: u64 = 256 * 1024;
@@ -531,14 +608,14 @@ mod tests {
     fn everyday_commands_are_allowed() {
         let (_d, r) = repo();
         for a in [
-            &["status"][..], &["status", "-sb"], &["status", "--porcelain"], &["log"], &["log", "--oneline", "-20"], &["log", "--graph", "--oneline", "--all"], &["log", "-n5", "--format=%h %s"], &["log", "--author=kim", "--since=2 weeks ago", "--grep=fix", "-i"], &["log", "-S", "needle", "--", "src"], &["log", "main..feature"], &["log", "HEAD~3..HEAD", "--stat"],
-            &["diff"], &["diff", "--cached", "--stat"], &["diff", "HEAD~1", "HEAD", "--", "src/a.rs"], &["diff", "-U5", "-w", "main...feature"], &["diff", "--diff-filter=AM", "--name-only"], &["show", "HEAD"], &["show", "HEAD:src/a.rs"], &["show", "--stat", "--format=%an", "abc1234"], &["blame", "-L", "1,5", "src/a.rs"], &["blame", "-w", "-M", "main", "--", "src/a.rs"],
+            &["status"][..], &["status", "-sb"], &["status", "--porcelain"], &["log"], &["log", "--oneline", "-20"], &["log", "--graph", "--oneline", "--all"], &["log", "-n5", "--format=%h %s"], &["log", "--pretty=oneline", "-1"], &["log", "--author=kim", "--since=2 weeks ago", "--grep=fix", "-i"], &["log", "-S", "needle", "--", "src"], &["log", "main..feature"], &["log", "HEAD~3..HEAD", "--stat"],
+            &["diff"], &["diff", "--cached", "--stat"], &["diff", "HEAD~1", "HEAD", "--", "src/a.rs"], &["diff", "-U5", "-w", "main...feature"], &["diff", "--diff-filter=AM", "--name-only"], &["show", "HEAD"], &["show", "HEAD:src/a.rs"], &["show", "--stat", "--format=%an", "abc1234"], &["blame", "-L", "1,5", "--", "src/a.rs"], &["blame", "-w", "-M", "main", "--", "src/a.rs"],
             &["ls-files"], &["ls-files", "-o", "--exclude-standard"], &["rev-parse", "HEAD"], &["rev-parse", "--abbrev-ref", "HEAD"], &["rev-parse", "--short=7", "HEAD"], &["rev-parse", "--is-inside-work-tree"],
             &["add", "-A"], &["add", "src/a.rs", "README.md"], &["add", "-u"], &["add", "."], &["commit", "-m", "fix: 수정 <a@b.c> !"], &["commit", "-am", "msg"], &["commit", "--amend", "--no-edit"], &["commit", "-m", "-starts-with-dash"], &["commit", "-m", "a", "-m", "b", "--allow-empty"], &["commit", "--fixup", "abc123"],
             &["merge", "feature"], &["merge", "--no-ff", "-m", "merge", "feature"], &["merge", "--abort"], &["merge", "--continue"], &["merge", "-X", "theirs", "feature"], &["rebase", "main"], &["rebase", "--onto", "main", "old", "topic"], &["rebase", "--continue"], &["rebase", "--abort"], &["rebase", "--skip"], &["rebase", "--autostash", "main"],
             &["cherry-pick", "abc123"], &["cherry-pick", "-n", "abc", "def"], &["cherry-pick", "-m", "1", "abc"], &["cherry-pick", "--abort"], &["revert", "abc123"], &["revert", "--no-edit", "abc"],
-            &["fetch"], &["fetch", "origin"], &["fetch", "--all", "--prune"], &["fetch", "origin", "main"], &["fetch", "-p", "upstream"], &["pull"], &["pull", "--rebase"], &["pull", "--rebase=merges", "origin", "main"], &["pull", "--ff-only", "origin"], &["push"], &["push", "origin"], &["push", "origin", "main"], &["push", "-u", "origin", "feat"], &["push", "origin", "HEAD:refs/heads/x"], &["push", "origin", "main:main"], &["push", "--tags", "origin"], &["push", "--follow-tags"], &["push", "-n", "origin", "main"],
-            &["switch", "main"], &["switch", "-c", "feat/x"], &["switch", "--create", "x", "origin/main"], &["switch", "-"], &["switch", "-d", "abc123"], &["switch", "-m", "other"], &["reset"], &["reset", "HEAD", "--", "src/a.rs"], &["reset", "--soft", "HEAD~1"], &["reset", "--mixed", "HEAD~2"], &["reset", "-q", "src/a.rs"],
+            &["fetch"], &["fetch", "origin"], &["fetch", "--all", "--prune"], &["fetch", "origin", "main"], &["fetch", "-p", "upstream"], &["pull"], &["pull", "--rebase"], &["pull", "--rebase=merges", "origin", "main"], &["pull", "--ff-only", "origin"], &["push"], &["push", "origin"], &["push", "origin", "main"], &["push", "-u", "origin", "feat"], &["push", "origin", "HEAD:refs/heads/x"], &["push", "origin", "main:main"], &["push", "-n", "origin", "main"],
+            &["switch", "main"], &["switch", "-c", "feat/x"], &["switch", "--create", "x", "origin/main"], &["switch", "-"], &["switch", "-d", "abc123"], &["switch", "-m", "other"], &["reset"], &["reset", "HEAD", "--", "src/a.rs"], &["reset", "--soft", "HEAD~1"], &["reset", "--mixed", "HEAD~2"], &["reset", "-q", "--", "src/a.rs"],
             &["stash"], &["stash", "push", "-m", "wip", "-u"], &["stash", "list"], &["stash", "show", "-p", "stash@{1}"], &["stash", "apply"], &["stash", "apply", "--index", "stash@{0}"], &["rm", "--cached", "src/a.rs"], &["rm", "-r", "src"], &["mv", "src/a.rs", "src/b.rs"],
             &["branch"], &["branch", "-a"], &["branch", "-vv"], &["branch", "--show-current"], &["tag"], &["tag", "-l", "v*"], &["remote"], &["reflog"], &["reflog", "show", "-n", "5", "main"], &["config", "--get", "user.name"], &["config", "--get", "user.email"],
         ] {
@@ -576,6 +653,13 @@ mod tests {
             vec!["add", "--", "../x"], vec!["add", "--", "/etc/passwd"], vec!["add", "--", ".git/config"], vec!["commit", "-m", "x", "--", "../y"], vec!["rm", "--", ".git/HEAD"], vec!["mv", "a", "../b"], vec!["mv", "a"], vec!["mv", "a", ".git/x"], vec!["reset", "--", ".git/x"], vec!["stash", "push", "--", "../x"], vec!["ls-files", "../x"], vec!["status", "/etc"],
             vec!["show", "HEAD:.git/config"], vec!["show", ".git/config"], vec!["log", "--", ".git/HEAD"], vec!["show", "-x"], vec!["log", "-x"], vec!["log", "--no-such"], vec!["log", "--oneline=3"], vec!["log", "-n"], vec!["log", "-nx"], vec!["log", "-n", "x"], vec!["log", "-n", "-1"], vec!["log", "--max-count=abc"], vec!["log", "--date=format:%s"], vec!["log", "--diff-filter=1"], vec!["status", "--untracked-files=bad"], vec!["diff", "--word-diff=bad"],
             vec!["log", "\0"], vec!["log", "a\0b"], vec!["push", "origin", "a\0"], vec!["switch", "--create", "-x"], vec!["switch", "-c"], vec!["switch", "-c", "../x"], vec!["switch", "a", "b", "c"], vec!["merge", "-s", "ours", "x"], vec!["merge", "-X", "x"], vec!["merge", "-Xours=1", "x"], vec!["cherry-pick", "-x", "abc"], vec!["revert", "-m", "x", "abc"], vec!["fetch", "--depth=x"], vec!["rev-parse", "--git-dir"], vec!["rev-parse", "--show-toplevel"], vec!["rev-parse", "--git-path", "x"], vec!["rev-parse", "--resolve-git-dir=/x"], vec!["rev-parse", "--show-cdup"], vec!["rev-parse", "/etc/passwd"], vec!["rev-parse", "--short=x"],
+            // 3차 리뷰: 선택값 옵션 뒤 인자(`--pretty <x>`는 git이 다음을 옵션으로 읽음), 경로는 `--` 뒤만, refspec, 백업 ref, 검사 훅 우회, 범위 확대
+            vec!["log", "--pretty", "--output=/tmp/x", "-1"], vec!["log", "--format", "--output=/tmp/x"], vec!["show", "--pretty", "--output=/tmp/x"], vec!["log", "--author", "kim"], vec!["log", "--since", "1 day ago"], vec!["log", "--grep", "x"], vec!["commit", "--author", "a <b@c>"], vec!["commit", "--date", "now"], vec!["merge", "--message", "m", "x"], vec!["log", "--pretty"],
+            vec!["blame", "a.txt"], vec!["blame", "HEAD", "a.txt"], vec!["blame", "-L1,2", "a.txt"], vec!["blame", "a", "b", "--", "c"], vec!["blame", "--", "../x"],
+            vec!["fetch", "origin", "main:refs/git403/ai-backup/x"], vec!["fetch", "origin", "main:main"], vec!["fetch", "origin", "+main"], vec!["fetch", "origin", "refs/*:refs/*"], vec!["pull", "origin", "main:main"], vec!["fetch", "origin", "refs/stash"], vec!["fetch", "origin", "refs/remotes/o/x"], vec!["fetch", "origin", "a b"],
+            vec!["push", "origin", "main:refs/git403/ai-backup/x"], vec!["push", "origin", "HEAD:refs/stash"], vec!["push", "origin", "main:*"], vec!["push", "origin", "*:*"], vec!["push", "origin", "refs/*:refs/*"], vec!["push", "origin", "main:"], vec!["push", "origin", "HEAD:HEAD:x"], vec!["push", "origin", "refs/git403/ai-backup/x"], vec!["show", "refs/git403/ai-backup/x"], vec!["log", "REFS/GIT403/ai-backup/x"], vec!["reset", "--soft", "refs/git403/x"],
+            vec!["push", "--no-verify"], vec!["commit", "-n", "-m", "x"], vec!["commit", "--no-verify", "-m", "x"], vec!["push", "--all"], vec!["push", "--tags"], vec!["push", "--follow-tags"], vec!["push", "origin", "--tags"],
+            vec!["reset", "a", "b"],
         ];
         let leaked: Vec<_> = attacks.iter().filter(|a| ok(&r, a)).collect();
         assert!(leaked.is_empty(), "거절돼야 함: {leaked:?}");
@@ -640,5 +724,142 @@ mod tests {
         assert_eq!(std::fs::read_to_string(outside.path().join("o.txt")).unwrap(), "orig");
         std::os::unix::fs::symlink(outside.path().join("o.txt"), r.join("fl")).unwrap();
         assert!(edit_file(&r, "fl", "orig", "PWNED", false).is_err());
+    }
+
+    /// 3차 리뷰 치명1: 커밋된 심볼릭 링크(`g -> .git`)로 이름 검사를 우회해 `.git`을 읽고 쓰던 길
+    #[test]
+    fn any_symlink_component_is_rejected_even_when_it_points_inside_the_repo() {
+        let (_d, r) = repo();
+        let outside = tempfile::tempdir().unwrap();
+        std::fs::write(outside.path().join("secret"), "s").unwrap();
+        std::fs::write(r.join(".git/config"), "[core]\n").unwrap();
+        std::os::unix::fs::symlink(".git", r.join("g")).unwrap();
+        std::os::unix::fs::symlink(".", r.join("x")).unwrap();
+        std::os::unix::fs::symlink("../.git", r.join("src/x")).unwrap();
+        std::os::unix::fs::symlink(outside.path(), r.join("link")).unwrap();
+        std::os::unix::fs::symlink("src", r.join("inner")).unwrap(); // 저장소 안 폴더를 가리키는 링크도 거절
+        for p in ["g", "g/config", "x", "x/src/a.rs", "x/x/x/.git/config", "src/x", "src/x/config", "link", "link/secret", "inner", "inner/a.rs"] {
+            assert!(resolve(&r, p).is_err(), "resolve {p}");
+            assert!(read_file(&r, p).is_err(), "read {p}");
+            assert!(edit_file(&r, p, "", "x", false).is_err() && edit_file(&r, p, "a", "b", false).is_err(), "edit {p}");
+            assert!(!ok(&r, &["add", p]) && !ok(&r, &["add", "--", p]) && !ok(&r, &["diff", "--", p]) && !ok(&r, &["blame", "--", p]) && !ok(&r, &["log", "--", p]) && !ok(&r, &["rm", p]) && !ok(&r, &["status", p]), "git {p}");
+        }
+        assert_eq!(std::fs::read_to_string(r.join(".git/config")).unwrap(), "[core]\n", ".git/config는 그대로");
+        assert!(!r.join("link/new").exists() && !outside.path().join("new").exists());
+        // 링크가 아닌 정상 경로는 그대로
+        assert!(resolve(&r, "src/a.rs").is_ok() && read_file(&r, "src/a.rs").is_ok());
+    }
+
+    fn git_ver() -> bool {
+        std::process::Command::new("git").arg("--version").output().is_ok()
+    }
+
+    /// 실제 git으로 옵션 표를 대조한다(차등 시험). 옵션마다:
+    ///  - 존재: 그 옵션을 git이 모르는 옵션이라고 하지 않는다(표의 오타·없는 옵션 방지)
+    ///  - 값 방식: 뒤에 `--zz-marker`를 두었을 때 git이 그걸 *옵션으로 해석*하는지(= 값을 안 받음)가 표의 모델과 같다.
+    ///    값 필수(분리 가능) 옵션은 마커를 값으로 삼켜 불평이 없어야 하고, 플래그·선택값 옵션은 마커를 옵션으로 읽어 "unknown option"이 나와야 한다.
+    ///    긴 자유 문자열 값은 `=` 형태만 허용하므로(`--pretty <x>`처럼 git이 선택값으로 보는 경우가 있다) 분리 형태 기대는 검사하지 않는다.
+    #[test]
+    fn option_table_matches_real_git_option_parsing() {
+        if !git_ver() {
+            return;
+        }
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().canonicalize().unwrap();
+        let g = |a: &[&str]| std::process::Command::new("git").current_dir(&p).env("GIT_EDITOR", "true").env("GIT_TERMINAL_PROMPT", "0").env("GIT_PAGER", "cat").args(["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]).args(a).stdin(std::process::Stdio::null()).output().unwrap();
+        g(&["init", "-q", "-b", "main"]);
+        std::fs::write(p.join("a.txt"), "1\n").unwrap();
+        g(&["add", "."]);
+        g(&["commit", "-qm", "a"]);
+        // stash list·show·apply가 인자를 실제로 해석하도록 스태시 항목을 하나 만들어 둔다
+        std::fs::write(p.join("a.txt"), "2\n").unwrap();
+        g(&["stash", "push", "-q"]);
+        const MARK: &str = "zz-marker";
+        // git은 모르는 옵션을 `unknown option`·`unrecognized argument`·`invalid option`으로 알리거나, 오류 줄 없이 사용법(종료 코드 129)만 낸다.
+        // 값 오류(`requires a value`·`expects …`·`not an integer`)도 129를 쓰므로 그 문구는 값으로 삼킨 것으로 본다.
+        let marker_is_option = |o: &std::process::Output| {
+            let t = (String::from_utf8_lossy(&o.stderr) + String::from_utf8_lossy(&o.stdout)).to_lowercase();
+            if ["requires a value", "expects", "needs a value", "not an integer", "not a valid", "needs an argument"].iter().any(|m| t.contains(m)) || t.contains(&format!("=--{MARK}")) {
+                return false;
+            }
+            o.status.code() == Some(129) || ["unknown option", "unrecognized argument", "invalid option", "unknown switch"].iter().any(|m| t.contains(m))
+        };
+        let mut specs: Vec<(String, Vec<String>, Spec)> = Vec::new(); // (이름, git 앞 인자, 표)
+        for sub in SUBCOMMANDS {
+            if let Some(sp) = spec_of(sub) {
+                specs.push((sub.to_string(), vec![sub.to_string()], sp));
+            }
+        }
+        for name in ["push", "list", "show", "apply"] {
+            specs.push((format!("stash {name}"), vec!["stash".into(), name.into()], stash_spec(name)));
+        }
+        let (mut checked, mut mismatches) = (0, Vec::<String>::new());
+        for (name, pre, sp) in &specs {
+            // rev-parse는 모르는 옵션을 그대로 돌려주는 명령이라 이 검사에 맞지 않는다(우리 표는 정확한 이름만 받는다)
+            if name == "rev-parse" {
+                continue;
+            }
+            // 경로가 필요한 검사(`--follow`)가 옵션 검사보다 먼저 실패하지 않게 경로를 뒤에 둔다
+            let tail: &[&str] = if matches!(name.as_str(), "log" | "diff" | "show" | "blame") { &["--", "a.txt"] } else { &[] };
+            for o in &sp.opts {
+                let toks: Vec<(String, bool)> = [(!o.long.is_empty()).then(|| (format!("--{}", o.long), true)), o.short.map(|c| (format!("-{c}"), false))].into_iter().flatten().collect();
+                for (tok, is_long) in toks {
+                    let takes_next = !matches!(o.val, V::No) && !o.optional;
+                    let free_long = is_long && matches!(o.val, V::Free);
+                    // 존재: 값이 필요한 긴 자유 문자열 옵션은 `=` 형태로 확인한다
+                    let exist_tok = if free_long { format!("{tok}=x") } else { tok.clone() };
+                    let mut a: Vec<String> = pre.clone();
+                    a.push(exist_tok.clone());
+                    if takes_next && !free_long {
+                        a.push("x".into());
+                    }
+                    a.extend(tail.iter().map(|t| t.to_string()));
+                    let out = g(&a.iter().map(String::as_str).collect::<Vec<_>>());
+                    let e = (String::from_utf8_lossy(&out.stderr) + String::from_utf8_lossy(&out.stdout)).to_lowercase();
+                    let n = tok.trim_start_matches('-').to_lowercase();
+                    let self_unknown = e.lines().any(|l| (l.contains("unknown option") || l.contains("unrecognized argument") || l.contains("invalid option") || l.contains("unknown switch")) && (l.contains(&format!("`{n}'")) || l.contains(&format!("--{n}")) || l.contains(&format!(": {exist_tok}"))));
+                    if self_unknown {
+                        mismatches.push(format!("{name} {exist_tok}: git이 모르는 옵션 — {}", e.lines().next().unwrap_or_default()));
+                        continue;
+                    }
+                    if free_long {
+                        continue; // `=` 형태만 허용하므로 분리 형태의 값 방식은 검사하지 않는다
+                    }
+                    // `blame -L <범위>`는 값을 분리해서 받는다(`-L 1,1 --zz`는 마커를 옵션으로 읽고, `-L --zz`는 범위 오류로 사용법만 낸다 — 두 출력이 구분되지 않아 직접 확인한 대로 건너뛴다)
+                    if name == "blame" && tok == "-L" {
+                        continue;
+                    }
+                    // 값 방식: 뒤에 마커를 둔다
+                    let mut a: Vec<String> = pre.clone();
+                    a.extend([tok.clone(), format!("--{MARK}")]);
+                    a.extend(tail.iter().map(|t| t.to_string()));
+                    let out = g(&a.iter().map(String::as_str).collect::<Vec<_>>());
+                    let is_opt = marker_is_option(&out);
+                    if is_opt == takes_next {
+                        let head = (String::from_utf8_lossy(&out.stderr) + String::from_utf8_lossy(&out.stdout)).lines().next().unwrap_or_default().to_string();
+                        mismatches.push(format!("{name} {tok}: 표는 값 {} 인데 git은 다음 인자를 {}로 해석 (rc={:?}: {head})", if takes_next { "필수(분리 가능)" } else { "없음/선택" }, if is_opt { "옵션" } else { "값" }, out.status.code()));
+                    }
+                    checked += 1;
+                }
+            }
+        }
+        assert!(mismatches.is_empty(), "옵션 표가 실제 git과 다르다:\n{}", mismatches.join("\n"));
+        assert!(checked > 150, "대조한 옵션 수가 너무 적다: {checked}");
+    }
+
+    /// 허용된 긴 옵션이 줄임말을 받아들이는지는 git 쪽 사실이므로, 우리 검증기는 줄임말을 항상 거절하는지만 본다(표의 모든 긴 옵션)
+    #[test]
+    fn every_long_option_in_the_table_rejects_abbreviations() {
+        let (_d, r) = repo();
+        for sub in SUBCOMMANDS {
+            let Some(sp) = spec_of(sub) else { continue };
+            for o in sp.opts.iter().filter(|o| o.long.len() > 3) {
+                let ab = format!("--{}", &o.long[..o.long.len() - 1]);
+                if sp.opts.iter().any(|x| x.long == &ab[2..]) {
+                    continue;
+                }
+                assert!(!ok(&r, &[sub, &ab]) && !ok(&r, &[sub, &format!("{ab}=1")]), "{sub} {ab}");
+            }
+        }
     }
 }
