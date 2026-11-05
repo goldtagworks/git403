@@ -419,3 +419,25 @@ test("AI 답의 링크는 실제 주소를 숨기지 않는다(호스트를 덧�
   await expect(a.nth(3)).toHaveText("🖼 스크린샷 (cdn.evil.example)");
   await expect(a.nth(3)).toHaveAttribute("title", "https://cdn.evil.example/a.png");
 });
+
+test("샌드박스가 없는 플랫폼은 깨끗한 로컬 저장소도 경고 문단과 함께 매 대화 확인한다", async ({ page }) => {
+  await open(page, { __risk: { level: "none", sandbox: "none" } });
+  await toggle(page);
+  await send(page, "상태 알려줘");
+  await done(page);
+  const asks = await confirmAsks(page);
+  expect(asks).toHaveLength(1);
+  expect(asks[0]).toContain("OS 샌드박스 안에서 실행할 수 없습니다");
+  expect(asks[0]).toContain("신뢰하는 저장소에서만 계속하세요");
+  await send(page, "이어서");
+  await expect.poll(async () => (await callsOf(page, "ai_chat_start")).length).toBe(2);
+  expect(await confirmAsks(page)).toHaveLength(1); // 이어 가기는 다시 묻지 않는다
+});
+
+test("샌드박스가 있으면(macOS·Linux) 추가 경고 없이 로컬 저장소는 확인 없이 진행한다", async ({ page }) => {
+  await open(page, { __risk: { level: "none", sandbox: "seatbelt" } });
+  await toggle(page);
+  await send(page, "상태 알려줘");
+  await done(page);
+  expect(await confirmAsks(page)).toHaveLength(0);
+});

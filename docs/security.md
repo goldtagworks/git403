@@ -14,6 +14,25 @@
 
 실제 인자·허용 표는 `docs/reuse.md` "AI 채팅" 절. 규칙의 원본은 코드(`ai_tool.rs`의 옵션 표, `ai_config.rs`의 설정 허용 목록)이고, 문서와 다르면 버그다. **위협 모델**: 저장소는 공격자가 만들었을 수 있다(클론한 `.git` 설정·서브모듈·`.claude`·훅·심볼릭 링크·`.gitattributes`). AI는 그 안에서 프롬프트 주입을 당할 수 있다.
 
+### 0. 다층 방어 (한 층이 뚫려도 다음 층이 막는다)
+| 층 | 코드 | 역할 | 이 층이 막지 못하는 것 |
+|---|---|---|---|
+| 1 도구 제한 | `chat::args`·MCP 서버 | AI에게 셸·내장 도구 없음, `git`·`read_file`·`edit_file`만 | 도구 자체의 허용 범위 안의 오용 |
+| 2 인자 검증 | `ai_tool::validate`·`resolve`·`write_protected` | 허용한 하위 명령·옵션·인자만(줄임말·묶음·값 방식까지 git과 대조), 경로는 저장소 안·심볼릭 링크 없음, 쓰기 금지 목록 | git이 설정·저장소 내용으로 프로그램을 실행하는 길(textconv·filter·훅…) |
+| 3 저장소 설정 판정 | `ai_config::check` + 지문 매 호출 대조 | 저장소 쪽 git 설정(상위·서브모듈·include·worktree)을 하위 키 허용 목록으로 판정, 위험한 구조(밖을 가리키는 worktree·commondir·로컬 경로 원격 등)는 거절, 목록 밖은 사용자 확인 | 판정 목록에 없는 새 경로·판정 시점과 실행 시점 사이의 변화(지문이 대부분 잡는다) |
+| 4 실행 전후 비교 | `mcp::run_guarded`·`preflight` | 작업 트리를 바꾸는 명령이 보호 경로(CI·에디터·훅·에이전트 설정)를 바꾸면 효과를 되돌림 | 보호 경로 밖 파일을 통한 지연 실행(빌드 스크립트 등 — 사용자가 diff로 본다) |
+| 5 **OS 샌드박스** | `sandbox.rs` | **위 층이 전부 뚫려도**: git 프로세스와 자식은 저장소·전용 임시 폴더 밖에 쓸 수 없고, 홈·임의 경로를 읽을 수 없고, 셸을 실행할 수 없고(LFS 저장소 예외), 원격 명령이 아니면 네트워크가 없다 | 저장소 **안**의 파일을 덮어쓰는 것(백업·되돌리기가 맡는다), 원격 명령 중 허용한 호스트 포트로의 통신 |
+| 6 백업·되돌리기 | `ai_backup` | 작업 전 HEAD·브랜치·작업 트리(+ignored) 스냅숏, 지문 무결성 | — |
+| 7 사용자 확인 | `ai_risk`·UI | 공개·협업자·판정 불가·설정 검토·**샌드박스 없음**은 대화 첫 실행 전 확인(백엔드가 강제) | 사용자가 승낙한 위험 |
+
+**샌드박스 플랫폼별**(`sandbox::Mode::detect`, 앱이 정해 MCP 서버에 `GIT403_SANDBOX`로 전달 — 서버는 없거나 알 수 없는 값이면, 또는 약속한 방식이 이 컴퓨터에서 안 돌면 **git을 실행하지 않는다(fail-closed)**):
+- **macOS — `sandbox-exec`(Seatbelt), `deny default`**. 쓰기: 저장소(작업 트리+.git)·서버 전용 임시 폴더(`$TMPDIR/git403-mcp-<pid>`, 0700)·`/dev/null`. 읽기: 저장소·임시·시스템(`/usr`·`/System`·`/Library`·`/private/etc`·`/dev`…)·git 설치 경로(`<exec-path>/../..`)·Homebrew·사용자 git 설정(`~/.gitconfig`·`~/.config/git`·`~/.ssh/config`·`known_hosts*`) — **홈 전체 읽기 없음**. 실행: git **실제 바이너리**(`/usr/bin/git`은 xcrun 셔임이라 `<exec-path>/../../bin/git`로 직접)·`exec-path` 도우미·ssh·git-lfs·앱 askpass 실행 파일·전역 설정의 절대 경로 credential helper — **`/bin/sh` 등 셸은 막는다**(필터·textconv·alias·`!` helper·셸 훅 불가). 원격 명령(fetch·pull·push)에만 네트워크(tcp 443·22·DNS, ssh-agent 소켓, askpass 로컬 포트)와 ssh 키(`~/.ssh/id_*`)·키체인(`~/Library/Keychains`)·`known_hosts` 쓰기를 연다. 호스트 이름 단위 제한은 Seatbelt가 지원하지 않아(포트 단위만) 확인된 원격 호스트로만 제한하지는 못한다 — 대신 네트워크는 원격 명령에만, 그 명령의 원격 이름은 검증기가 설정된 이름만 허용한다.
+- **셸이 막혀서 달라진 것**: ① 편집기는 `GIT_EDITOR=:`(`true`도 셸로 실행되어 막힘). ② `!` credential helper(예: `!gh auth git-credential`)와 `core.sshCommand`/`GIT_SSH_COMMAND`는 셸이 필요해 샌드박스 안에서 동작하지 않는다 — https 인증은 앱 askpass 창, ssh는 ssh-agent·키 파일을 쓴다. ③ **LFS**: 표준 git-lfs 필터(`filter.lfs.process`)가 셸(`sh -c`)로 실행되므로, 저장소가 표준 LFS 필터를 쓰면 그 저장소에서만 `/bin/sh`·`bash`·`zsh` 실행을 연다(쓰기·읽기·네트워크 제한은 그대로 — 시험으로 LFS add·commit이 동작하고 셸을 닫으면 실패함을 확인).
+- **Linux — `bwrap`(bubblewrap)이 실제로 돌면** 같은 정책: 시스템 읽기 전용 바인드, 저장소만 쓰기, 전용 임시 폴더를 `/tmp`로, 원격 명령에만 `--share-net`, 사용자 git 설정·(원격 명령에) ssh 키·agent 소켓 읽기 전용. **셸 실행은 막지 못한다**(파일시스템·네트워크 제한만). **이 환경에서는 시험하지 못했고 인자 구성만 단위 시험한다.** bubblewrap이 없거나 사용자 네임스페이스가 막혀 있으면 샌드박스 없음으로 본다.
+- **Windows·샌드박스 없음**: 샌드박스를 쓸 수 없으므로 **AI 채팅은 매 대화(깨끗한 로컬 저장소도) 확인창 + 위험 문구**(`aiChat.confirmNoSandbox`)를 요구한다(백엔드가 강제, `Risk.sandbox: "none"`). 이때 앱의 검사(층 1~4)만 남는다.
+- **샌드박스 시험**(`cargo test -p gc-backend sandbox`, macOS는 실제 Seatbelt): 정상 흐름(status·diff·add·commit·switch·stash·merge/rebase 충돌 해결·`rebase --continue`·cherry-pick·revert·mv·rm·reset·log·show·blame·branch·config)이 샌드박스 안에서 된다; **검증기·설정 판정을 거치지 않은** 이전 RCE 재현(textconv·filter·훅·`!` alias(셸 실행), 대상 저장소 `core.alternateRefsCommand`, `core.worktree`로 밖에 쓰기, `commondir`로 다른 저장소 쓰기)이 흔적(밖·저장소 안 표식)을 남기지 못한다(각 공격은 샌드박스 없는 대조군에서 실제로 표식을 만드는 것까지 확인); 읽기 제한(저장소 밖 파일 읽기 실패); 원격 명령이 아니면 네트워크 차단·원격 명령에서 https·ssh 실행; LFS. 통합: `ai_mcp` 시험은 서버를 실제 Seatbelt로 띄워 정상 편집→커밋까지 확인하고, 방식이 없거나 잘못되면 git을 거절한다. 실제 claude 회귀(`--ignored live`)도 MCP 서버가 Seatbelt 안에서 돈다.
+- 알려진 한계: 키체인·ssh 키는 원격 명령 중 git/ssh가 읽는다(셸이 막혀 있어 AI가 임의 프로그램으로 읽을 수는 없다). 앱 askpass 인증 경로는 프로파일에 허용했지만 이 시험 환경에서 실제 인증 흐름으로는 확인하지 못했다. credential-osxkeychain의 실제 저장·조회도 시험 환경에 자격 증명이 없어 확인하지 못했다.
+
 ### 1. AI가 쓰는 도구
 - **AI에게 셸도 `Bash`도 주지 않는다.** 문자열 패턴(`Bash(git *)` 허용 + 금지 목록)은 폐기했다(`-nx`·옵션 묶음·줄임말·로컬 경로 원격·`--contents`·따옴표로 계속 우회됨). `claude`는 `--tools ""`로 내장 도구가 전부 없고, 앱 자신이 MCP stdio 서버(같은 실행 파일의 `--git403-mcp <저장소>`)로 `git{args[]}`(셸 없음)·`read_file`·`edit_file`만 준다. 저장소는 서버 시작 인자로 고정되고 도구는 경로를 받지 않는다.
 - **저장소·사용자 설정을 읽지 않는다**: `--restricted`(user·project·local 설정 파일 무시), `--strict-mcp-config`(우리 서버만), `--disable-slash-commands`. `--safe-mode`는 MCP까지 꺼서 쓰지 않는다(남는 건 사용자가 설치한 플러그인의 훅뿐). 로그인(OAuth)은 유지.
@@ -23,7 +42,7 @@
 - 하위 명령별 옵션 표: 긴 옵션은 정확한 이름 또는 `--opt=값`(줄임말 불허), 짧은 옵션 묶음은 글자 단위 분해 검사, 값 검사. **값 방식(없음/선택/필수)은 옵션마다 실제 git과 같아야 한다** — git은 선택값 옵션(`--pretty`·`--unified`…) 뒤 인자를 옵션으로 읽으므로 긴 자유 문자열 값은 `--opt=값` 한 인자만, 선택값은 붙인 값만 받는다. 표는 설치된 git과의 **차등 시험**(`option_table_matches_real_git_option_parsing`)으로 지킨다. 표에 없는 하위 명령·옵션은 거절한다.
 - 위치 인자: log·diff·show·reset은 `--` 앞=리비전뿐(없으면 앱이 `--`를 붙임)·경로는 `--` 뒤, blame은 `-- <경로>` 필수, 리비전은 `-`·`+`·절대 경로·`~`·`..`·`.git`/`.claude` 성분 불가, **경로는 정규화 후 저장소 안만이고 성분 중 심볼릭 링크가 하나라도 있으면 거절**, 원격은 `git remote`에 설정된 이름만(fetch·pull·push는 이름을 항상 명시 — 인자 없는 호출은 설정이 가리키는 URL·경로로 갈 수 있다), fetch·pull은 원격 브랜치 이름만(`src:dst` 불가), push는 브랜치/태그 이름 `src[:dst]`(`+`·삭제·`refs/git403` 불가, `--all`·`--tags`·`--no-verify` 없음). 전역 옵션(`-c`·`-C`·`--git-dir`…)·alias·`config` 쓰기·`--list`·`remote -v`·rebase `-x/--exec`·force/delete/mirror·`reset --hard`·`commit -F/-t/--no-verify`·`blame --contents`·`diff --no-index/--output` 등은 없다.
 - **앱이 모든 git 호출에 붙이는 옵션**(코드 `ai_tool::prefix`·`validate`와 같다): `--no-pager --work-tree=<저장소 폴더>`(`core.worktree`가 밖을 가리켜도 작업 트리를 이 폴더로 고정), `-c protocol.ext.allow=never core.fsmonitor=false core.pager=cat core.quotepath=false submodule.recurse=false diff.ignoreSubmodules=all status.submoduleSummary=false fetch.prune=false fetch.pruneTags=false push.default=nothing push.recurseSubmodules=no core.hooksPath=<null 장치>`, 원격 명령은 `-c remote.<r>.prune=false remote.<r>.mirror=false remote.<r>.pruneTags=false`. 하위 명령 뒤: diff·log·show·`stash show`에 `--no-ext-diff --no-textconv`, blame에 `--no-textconv`, fetch·pull·push에 `--no-recurse-submodules`, merge·switch에 `--no-overwrite-ignore`. **AI 차례의 모든 git 호출은 훅을 실행하지 않는다**(pre-commit 등; 사용자의 직접 작업에는 영향 없음).
-- git 실행 환경: 셸 없음, `GIT_TERMINAL_PROMPT=0`·`GIT_EDITOR=true`·`GIT_PAGER=cat`, `GIT_DIR` 등 저장소 밖을 가리키는 변수 제거.
+- git 실행 환경: 셸 없음, `GIT_TERMINAL_PROMPT=0`·`GIT_EDITOR=:`·`GIT_SEQUENCE_EDITOR=:`(`true`는 git이 셸로 실행하므로 샌드박스에서 `rebase --continue`가 깨진다)·`GIT_PAGER=cat`, `GIT_DIR` 등 저장소 밖을 가리키는 변수 제거.
 
 ### 3. 저장소 쪽 git 설정은 허용 목록으로 판정한다 (`ai_config::check`)
 - **판정 대상**: 상위 local·worktree 설정(include 포함), 공통 git 폴더의 `modules/**/config`(서브모듈), `worktrees/*/config.worktree`, **흡수되지 않은 서브모듈**(인덱스 gitlink 경로의 `.git` 디렉터리 config), `include.path`·`includeIf.<조건>.path`가 가리키는 파일 전부(**지금 조건이 안 맞아 git이 안 읽는 includeIf 대상도** 조건과 무관하게 읽어 판정, 중첩 깊이 5), 그리고 `rev-parse`의 최상위·git 폴더.
@@ -57,6 +76,7 @@
 
 변경 이력
 - 2026-11-05: AI 채팅 보안 리뷰(금지 목록 `-c` 우회·도구 경로 무제한·저장소 설정 신뢰) 뒤 작성
+- 2026-11-05: OS 샌드박스 방어층(macOS Seatbelt·Linux bubblewrap·Windows는 확인+경고)과 "다층 방어" 절
 - 2026-11-05: 6차 리뷰 — 하위 키 단위 설정 허용 목록·include 대상 판정·로컬 경로 원격 거절·git 폴더 구조 검사·gc/maintenance/file 프로토콜 끔·실행 전후 비교로 보호 경로 변경 되돌림
 - 2026-11-05: 5차 리뷰 — 저장소 설정 허용 목록 판정(서브모듈 포함)·`--work-tree` 고정·지문 매 호출 대조·백업 무결성·ignored 스냅숏·보호 경로 확대와 git 작업이 들여오는 변경 검사·CSP
 - 2026-11-05: 4차 리뷰 — AI 차례 훅 끔·ext-diff/textconv 끔·실행형 저장소 설정 확인·백업 범위(브랜치·작업 트리)·지속형 설정 쓰기 금지·fail-closed 원격 지문

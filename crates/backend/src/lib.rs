@@ -27,6 +27,8 @@ mod ai_history;
 mod ai_risk;
 #[cfg(feature = "cli")]
 pub mod mcp;
+#[cfg(feature = "cli")]
+pub mod sandbox;
 pub mod askpass;
 mod config;
 mod conventions;

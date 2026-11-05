@@ -1595,6 +1595,7 @@ export const zhTW: Record<Key, string> = {
   "aiChat.confirmShared": "{repo} 與另外 {n} 位協作者共用。AI 會讀取檔案並執行可能影響他們工作的 git 指令，讀取的內容會傳送給 Anthropic。",
   "aiChat.confirmUnknown": "無法確定 {repo} 是公開儲存庫還是與他人共用（沒有已連結的帳號，或查詢失敗）。AI 會讀取檔案並執行 git 指令，讀取的內容會傳送給 Anthropic。",
   "aiChat.confirmScope": "AI 只能執行允許的 git 指令（status、log、diff、add、commit、merge、rebase、fetch、pull、不帶 force 的 push、switch、stash 等）。AI 工作期間不會執行 git 掛鉤。它不能使用本機路徑的遠端、強制推送、hard reset、刪除分支、修改 CI、編輯器、代理或掛鉤的設定檔，也不能讀取或修改此儲存庫以外的檔案。要繼續嗎？",
+  "aiChat.confirmNoSandbox": "這台電腦無法在作業系統沙箱中執行 AI 的 git 指令（Windows，或沒有 bubblewrap 的 Linux）。沒有沙箱時，只有應用程式自身的檢查在限制惡意儲存庫或被誤導的 AI 能做的事，例如執行程式或修改此儲存庫以外的檔案。請僅對信任的儲存庫繼續。",
   "aiChat.confirmExec": "此儲存庫的 git 設定（包含子模組）中有應用程式不視為安全的設定（{keys}），其中有些會讓 git 執行程式。AI 工作期間掛鉤、外部 diff 和 textconv 會被關閉，但篩選器、合併驅動程式、憑證輔助程式等設定仍會執行。",
   "aiChat.undoBranchesAsk": "是否也將其他本機分支還原到此工作之前的位置？（AI 建立的分支會保留。）",
   "aiChat.undoWipAsk": "是否也將未提交的修改還原到此工作之前的狀態？之後改動過的檔案會被當時的快照覆蓋。",

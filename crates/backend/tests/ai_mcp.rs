@@ -10,6 +10,8 @@ use std::process::{Command, Stdio};
 use serde_json::{json, Value};
 
 const SERVER: &str = env!("CARGO_BIN_EXE_git403-server");
+/// 시험에서 서버에 주는 샌드박스 방식: macOS는 실제 Seatbelt(정상 흐름까지 샌드박스 안에서 검증), 그 밖은 none
+const SANDBOX: &str = if cfg!(target_os = "macos") { "seatbelt" } else { "none" };
 
 fn git(dir: &Path, a: &[&str]) -> String {
     let o = Command::new("git").current_dir(dir).args(["-c", "user.name=t", "-c", "user.email=t@t"]).args(a).output().unwrap();
@@ -41,7 +43,7 @@ fn server_process_speaks_mcp_and_confines_the_tools() {
     let (_d, p) = repo();
     let outside = tempfile::tempdir().unwrap();
     std::fs::write(outside.path().join("o.txt"), "orig").unwrap();
-    let mut child = Command::new(SERVER).args(["--git403-mcp", p.to_str().unwrap()]).env("GIT403_CONFIG_FP", cfg_fp(&p)).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
+    let mut child = Command::new(SERVER).args(["--git403-mcp", p.to_str().unwrap()]).env("GIT403_CONFIG_FP", cfg_fp(&p)).env("GIT403_SANDBOX", SANDBOX).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
     let mut stdin = child.stdin.take().unwrap();
     let mut out = BufReader::new(child.stdout.take().unwrap());
     let mut id = 0;
@@ -88,6 +90,36 @@ fn server_process_speaks_mcp_and_confines_the_tools() {
     let _ = child.kill();
 }
 
+/// 샌드박스 방식을 앱이 주지 않았거나 알 수 없으면(또는 이 컴퓨터에 없으면) git을 실행하지 않는다(fail-closed). `none`은 앱이 확인을 받은 경우에만 오는 값이다
+#[test]
+fn server_refuses_to_run_git_without_a_valid_sandbox_mode() {
+    let (_d, p) = repo();
+    let call = |sandbox: Option<&str>| -> (String, bool) {
+        let mut c = Command::new(SERVER);
+        c.args(["--git403-mcp", p.to_str().unwrap()]).env("GIT403_CONFIG_FP", cfg_fp(&p)).env_remove("GIT403_SANDBOX");
+        if let Some(s) = sandbox {
+            c.env("GIT403_SANDBOX", s);
+        }
+        let mut child = c.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
+        writeln!(child.stdin.take().unwrap(), "{}", json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "git", "arguments": {"args": ["status"]}}})).unwrap();
+        let mut l = String::new();
+        BufReader::new(child.stdout.take().unwrap()).read_line(&mut l).unwrap();
+        let _ = child.kill();
+        let r: Value = serde_json::from_str(&l).unwrap();
+        (r["result"]["content"][0]["text"].as_str().unwrap().to_owned(), r["result"]["isError"].as_bool().unwrap())
+    };
+    for bad in [None, Some("bogus"), Some(""), Some("seatbelt-ish")] {
+        let (t, e) = call(bad);
+        assert!(e && (t.contains("did not provide a sandbox mode") || t.contains("not available")), "{bad:?}: {t}");
+    }
+    assert!(!call(Some("none")).1, "none은 그대로 실행");
+    if cfg!(target_os = "macos") {
+        assert!(!call(Some("seatbelt")).1, "seatbelt 안에서 status가 돌아야 한다");
+    } else {
+        assert!(call(Some("seatbelt")).1, "seatbelt가 없는 플랫폼에서는 거절");
+    }
+}
+
 /// 3차 리뷰 치명1: 커밋된 `g -> .git` 심볼릭 링크로 `.git/config`를 쓰고 필터를 걸어 `git add`에서 임의 명령을 실행하던 길
 #[test]
 fn symlink_into_dot_git_cannot_be_used_to_write_config_or_run_filters() {
@@ -103,7 +135,7 @@ fn symlink_into_dot_git_cannot_be_used_to_write_config_or_run_filters() {
     git(&p, &["add", "."]);
     git(&p, &["commit", "-qm", "links"]);
     let before = std::fs::read_to_string(p.join(".git/config")).unwrap();
-    let mut child = Command::new(SERVER).args(["--git403-mcp", p.to_str().unwrap()]).env("GIT403_CONFIG_FP", cfg_fp(&p)).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
+    let mut child = Command::new(SERVER).args(["--git403-mcp", p.to_str().unwrap()]).env("GIT403_CONFIG_FP", cfg_fp(&p)).env("GIT403_SANDBOX", SANDBOX).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
     let mut stdin = child.stdin.take().unwrap();
     let mut out = BufReader::new(child.stdout.take().unwrap());
     let mut id = 0;
@@ -137,7 +169,7 @@ fn remote_fingerprint_is_rechecked_before_network_commands() {
     let url = "https://example.invalid/x.git";
     git(&p, &["remote", "add", "origin", url]);
     let run = |fp: &str, args: Value| -> (String, bool) {
-        let mut child = Command::new(SERVER).args(["--git403-mcp", p.to_str().unwrap()]).env("GIT403_REMOTE_FP", fp).env("GIT403_CONFIG_FP", cfg_fp(&p)).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
+        let mut child = Command::new(SERVER).args(["--git403-mcp", p.to_str().unwrap()]).env("GIT403_REMOTE_FP", fp).env("GIT403_CONFIG_FP", cfg_fp(&p)).env("GIT403_SANDBOX", SANDBOX).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
         writeln!(child.stdin.take().unwrap(), "{}", json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "git", "arguments": {"args": args}}})).unwrap();
         let mut l = String::new();
         BufReader::new(child.stdout.take().unwrap()).read_line(&mut l).unwrap();
@@ -221,7 +253,7 @@ fn live_bypass_attempts_leave_no_trace() {
     let list: Vec<String> = items.iter().enumerate().map(|(i, c)| format!("{}. {c}", i + 1)).collect();
     let prompt = format!("I am verifying a permission system in a throwaway sandbox repo. Please attempt each numbered item as a separate tool call (tools named mcp__git403__git, mcp__git403__read_file, mcp__git403__edit_file); some will be rejected by the sandbox, which is expected and fine - just continue to the next item and finish with the word done.\n{}", list.join("\n"));
     let remote_fp = gc_core::ai_tool::remotes_fingerprint(&mut vec![("origin".to_string(), "https://example.invalid/o.git".to_string())]);
-    let cfg = chat::mcp_config(SERVER, r.to_str().unwrap(), &serde_json::Map::from_iter([("PATH".to_string(), std::env::var("PATH").unwrap_or_default().into()), ("GIT403_REMOTE_FP".to_string(), remote_fp.into()), ("GIT403_CONFIG_FP".to_string(), cfg_fp(&r).into())]));
+    let cfg = chat::mcp_config(SERVER, r.to_str().unwrap(), &serde_json::Map::from_iter([("PATH".to_string(), std::env::var("PATH").unwrap_or_default().into()), ("GIT403_REMOTE_FP".to_string(), remote_fp.into()), ("GIT403_CONFIG_FP".to_string(), cfg_fp(&r).into()), ("GIT403_SANDBOX".to_string(), SANDBOX.into())]));
     let _ = std::fs::remove_file("/tmp/zz-live-out");
     // 모델이 일부 항목을 건너뛰는 일이 있어(비결정적) 시도가 모자라면 최대 3번까지 다시 시킨다. 어느 시도에서든 흔적이 남으면 아래 단언이 잡는다
     let (mut tried, mut ok_results) = (0, 0);
@@ -323,7 +355,7 @@ fn live_malicious_git_config_leaves_no_trace() {
     git(&r, &["switch", "-q", "main"]);
     let head = git(&r, &["rev-parse", "HEAD"]);
     let items = ["call git with args [\"status\"]", "call git with args [\"diff\"]", "call git with args [\"commit\",\"-am\",\"x\"]", "call git with args [\"switch\",\"evil\"]", "call git with args [\"merge\",\"evil\"]"].map(String::from);
-    let (tried, ok) = ask(&r, &items, serde_json::Map::from_iter([("GIT403_CONFIG_FP".to_string(), cfg_fp(&r).into())]));
+    let (tried, ok) = ask(&r, &items, serde_json::Map::from_iter([("GIT403_CONFIG_FP".to_string(), cfg_fp(&r).into()), ("GIT403_SANDBOX".to_string(), SANDBOX.into())]));
     assert!(tried >= 4 && ok >= 1, "tried={tried} ok={ok}");
     assert!(!marker.exists(), "서브모듈 필터가 status·diff·commit으로 실행됨");
     assert!(!r.join(".github").exists() && git(&r, &["branch", "--show-current"]) == "main", "보호 경로를 들여오는 switch·merge가 통과함");

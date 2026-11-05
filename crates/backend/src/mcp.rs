@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 use gc_core::ai_tool;
 use serde_json::{json, Value};
 
+use crate::sandbox::{self, GitInfo, Mode, Policy};
 use crate::settings_io::redact;
 
 /// 명령줄 첫 인자
@@ -24,6 +25,9 @@ pub const GIT_BIN: &str = "GIT403_GIT";
 pub const REMOTE_FP: &str = "GIT403_REMOTE_FP";
 /// 차례 시작 때 사용자가 확인한 저장소 git 설정 지문(`gc_core::ai_config::check`). git 도구 호출마다 다시 계산해 다르면 거절한다
 pub const CONFIG_FP: &str = "GIT403_CONFIG_FP";
+
+/// 샌드박스 방식(`sandbox::Mode::name`): 앱이 정한다. 없거나 알 수 없으면 git을 실행하지 않는다(fail-closed). `none`은 앱이 확인창·경고를 거친 경우에만 온다.
+pub const SANDBOX_ENV: &str = "GIT403_SANDBOX";
 
 /// 도구 호출이 대조할 "확인한 값"들(앱이 환경으로 넘긴다). 없으면 해당 명령은 거절한다(fail-closed)
 #[derive(Clone, Default)]
@@ -52,6 +56,8 @@ pub fn helper_main() -> bool {
     }
     let repo = a.next().map(PathBuf::from).unwrap_or_default();
     serve(&repo, std::io::stdin().lock(), std::io::stdout().lock());
+    // 전용 임시 폴더 정리(정상 종료일 때)
+    let _ = std::fs::remove_dir_all(private_tmp());
     std::process::exit(0)
 }
 
@@ -70,12 +76,71 @@ fn tools() -> Value {
     ])
 }
 
-/// git 자식: 보정된 환경(askpass 등) + 편집기·pager·프롬프트 차단, 저장소 밖을 가리키는 git 환경 변수 제거
+/// 이 서버의 샌드박스 설정(한 번만): 방식과 git 설치 정보
+fn sandbox_cfg() -> &'static Result<(Mode, GitInfo), String> {
+    static CFG: std::sync::OnceLock<Result<(Mode, GitInfo), String>> = std::sync::OnceLock::new();
+    CFG.get_or_init(|| {
+        let git = std::env::var(GIT_BIN).unwrap_or_else(|_| "git".into());
+        let info = sandbox::git_info(&git).ok_or_else(|| "cannot locate the git installation".to_string())?;
+        let mode = match std::env::var(SANDBOX_ENV) {
+            Ok(n) => Mode::from_name(&n).ok_or_else(|| format!("sandbox mode {n:?} is not available on this computer; git is disabled"))?,
+            // 시험 빌드는 기본 `none`(샌드박스 시험은 방식을 직접 준다). 실제 서버는 앱이 정해 주지 않으면 실행하지 않는다
+            Err(_) if cfg!(test) => Mode::None,
+            Err(_) => return Err("the app did not provide a sandbox mode; git is disabled".into()),
+        };
+        Ok((mode, info))
+    })
+}
+
+/// 이 서버 전용 임시 폴더(샌드박스의 유일한 임시 쓰기 공간)
+fn private_tmp() -> PathBuf {
+    static TMP: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    TMP.get_or_init(|| {
+        let d = std::env::temp_dir().join(format!("git403-mcp-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&d);
+        #[cfg(unix)]
+        let _ = std::fs::set_permissions(&d, std::os::unix::fs::PermissionsExt::from_mode(0o700));
+        d.canonicalize().unwrap_or(d)
+    })
+    .clone()
+}
+
+/// git 자식 정책(원격 명령이면 `net`). askpass·credential helper·LFS 여부는 한 번만 구한다
+fn policy(repo: &Path, net: bool) -> Policy {
+    static STATIC: std::sync::OnceLock<(Option<PathBuf>, Option<u16>, Vec<PathBuf>)> = std::sync::OnceLock::new();
+    let git_env: Option<serde_json::Map<String, Value>> = std::env::var(GIT_ENV).ok().and_then(|s| serde_json::from_str(&s).ok());
+    let (exe, port, helpers) = STATIC.get_or_init(|| {
+        let exe = git_env.as_ref().and_then(|m| m.get("GIT_ASKPASS")).and_then(Value::as_str).map(PathBuf::from);
+        let port = git_env.as_ref().and_then(|m| m.get(crate::askpass::PORT_ENV)).and_then(Value::as_str).and_then(|p| p.parse().ok());
+        let git = std::env::var(GIT_BIN).unwrap_or_else(|_| "git".into());
+        let cfg = |a: &[&str]| Command::new(&git).args(a).stdin(Stdio::null()).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
+        // 전역 설정의 credential helper 중 절대 경로(`!` 셸 helper는 셸이 필요해 제외)
+        let helpers = cfg(&["config", "--global", "--get-all", "credential.helper"]).lines().map(str::trim).filter(|l| l.starts_with('/')).filter_map(|l| l.split_whitespace().next()).map(PathBuf::from).collect();
+        (exe, port, helpers)
+    });
+    // 표준 git-lfs 필터를 쓰는 저장소는 git-lfs가 셸로 실행되므로 셸을 연다
+    let git = std::env::var(GIT_BIN).unwrap_or_else(|_| "git".into());
+    let lfs_standard = Command::new(&git).args(["config", "--get", "filter.lfs.process"]).current_dir(repo).stdin(Stdio::null()).output().is_ok_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "git-lfs filter-process");
+    Policy { repo: repo.canonicalize().unwrap_or_else(|_| repo.to_path_buf()), tmp: private_tmp(), net, allow_sh: lfs_standard, askpass_exe: exe.clone(), askpass_port: *port, ssh_sock: std::env::var_os("SSH_AUTH_SOCK").map(PathBuf::from), helpers: helpers.clone() }
+}
+
+/// git 자식: **샌드박스 안에서**(설정된 방식, 실패하면 실행하지 않는다) + 보정된 환경(askpass 등) + 편집기·pager·프롬프트 차단, 저장소 밖을 가리키는 git 환경 변수 제거
 fn run_git(repo: &Path, argv: &[String]) -> (String, bool) {
-    let bin = std::env::var(GIT_BIN).unwrap_or_else(|_| "git".into());
-    let mut c = Command::new(bin);
-    c.args(argv).current_dir(repo).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    for k in ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_NAMESPACE"] {
+    run_git_with(repo, argv, false)
+}
+
+fn run_git_with(repo: &Path, argv: &[String], net: bool) -> (String, bool) {
+    let (mode, info) = match sandbox_cfg() {
+        Ok(x) => x,
+        Err(e) => return (e.clone(), true),
+    };
+    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
+    let mut c = match sandbox::command(mode, info, &policy(repo, net), argv, &home) {
+        Ok(c) => c,
+        Err(e) => return (format!("sandbox error: {e}"), true),
+    };
+    c.current_dir(repo).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    for k in ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_NAMESPACE", "GIT_ALTERNATE_OBJECT_DIRECTORIES"] {
         c.env_remove(k);
     }
     if let Some(Value::Object(m)) = std::env::var(GIT_ENV).ok().and_then(|s| serde_json::from_str(&s).ok()) {
@@ -85,12 +150,13 @@ fn run_git(repo: &Path, argv: &[String]) -> (String, bool) {
             }
         }
     }
-    c.env("GIT_TERMINAL_PROMPT", "0").env("GIT_EDITOR", "true").env("GIT_MERGE_AUTOEDIT", "no").env("GIT_PAGER", "cat").env("LC_ALL", "C");
+    // 편집기는 `:`(아무것도 안 함): `true`는 git이 셸로 실행하므로 샌드박스(셸 금지)에서 `rebase --continue` 등이 깨진다
+    c.env("GIT_TERMINAL_PROMPT", "0").env("GIT_EDITOR", ":").env("GIT_SEQUENCE_EDITOR", ":").env("GIT_MERGE_AUTOEDIT", "no").env("GIT_PAGER", "cat").env("LC_ALL", "C").env("TMPDIR", private_tmp());
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut c, 0);
     let mut child = match c.spawn() {
         Ok(ch) => ch,
-        Err(e) => return (format!("failed to run git: {e}"), true),
+        Err(e) => return (format!("failed to run git (sandbox {}): {e}", mode.name()), true),
     };
     let over = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let (rx_out, rx_err) = (pump(child.stdout.take().expect("piped"), over.clone()), pump(child.stderr.take().expect("piped"), over.clone()));
@@ -285,11 +351,12 @@ fn abort_in_progress(repo: &Path) {
 
 /// 작업 트리를 바꿀 수 있는 명령을 실행하고, 보호 경로가 달라졌으면 그 명령의 효과를 되돌린다(HEAD·브랜치 원위치 + 보호 경로 파일 원복). 되돌림까지 확인하지 못하면 그 사실을 오류에 담는다.
 fn run_guarded(repo: &Path, argv: &[String], cmd: &str, tree_changing: bool) -> Result<(String, bool), String> {
+    let net = matches!(cmd, "fetch" | "pull" | "push");
     if !tree_changing {
-        return Ok(run_git(repo, argv));
+        return Ok(run_git_with(repo, argv, net));
     }
     let before = snapshot(repo);
-    let out = run_git(repo, argv);
+    let out = run_git_with(repo, argv, net);
     let after = snapshot(repo);
     let changed: Vec<String> = before.protected.keys().chain(after.protected.keys()).filter(|p| before.protected.get(*p) != after.protected.get(*p)).cloned().collect::<std::collections::BTreeSet<_>>().into_iter().collect();
     if changed.is_empty() {

@@ -1595,6 +1595,7 @@ export const ja: Record<Key, string> = {
   "aiChat.confirmShared": "{repo} は他の共同作業者 {n} 人と共有されています。AI はファイルを読み、その人たちの作業に影響しうる git コマンドを実行します。読み取った内容は Anthropic に送信されます。",
   "aiChat.confirmUnknown": "{repo} が公開か他の人と共有かを確認できませんでした（連携アカウントなし、または取得に失敗）。AI はファイルを読み、git コマンドを実行します。読み取った内容は Anthropic に送信されます。",
   "aiChat.confirmScope": "AI は許可された git コマンド（status、log、diff、add、commit、merge、rebase、fetch、pull、force なしの push、switch、stash など）だけを実行できます。AI の作業中は git フックは実行されません。ローカルパスのリモートの利用、強制 push、hard reset、ブランチ削除、CI・エディター・エージェント・フックの設定ファイルの変更、このリポジトリ外のファイルの読み取り・編集はできません。続行しますか？",
+  "aiChat.confirmNoSandbox": "このコンピューターでは、AI の git コマンドを OS のサンドボックス内で実行できません（Windows、または bubblewrap のない Linux）。サンドボックスがないと、悪意のあるリポジトリやだまされた AI がプログラムを実行したりこのリポジトリ外のファイルを変更したりするのを防ぐのは、アプリ自身の検査だけです。信頼できるリポジトリでのみ続行してください。",
   "aiChat.confirmExec": "このリポジトリの git 設定（サブモジュール含む）に、アプリが安全と見なさない項目があります（{keys}）。その中には git にプログラムを実行させるものもあります。AI の作業中はフック・外部 diff・textconv は無効になりますが、フィルター・マージドライバー・認証ヘルパーなどの設定は実行されます。",
   "aiChat.undoBranchesAsk": "この作業の前の他のローカルブランチの位置にも戻しますか？（AI が作ったブランチは残します。）",
   "aiChat.undoWipAsk": "コミットせずに変更していたファイルも、この作業の前の状態に戻しますか？その後に変更したファイルは、そのときの内容で上書きされます。",

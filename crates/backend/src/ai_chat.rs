@@ -24,8 +24,8 @@ fn summary(name: &str, command: &str) -> String {
 impl Backend {
     /// claude에 줄 `--mcp-config`: 이 실행 파일을 MCP 서버(`--git403-mcp <저장소>`)로. 서버 환경에는 PATH·git 경로·사용자 git 설정에 필요한 변수만 넣고,
     /// git 자식에게 줄 askpass 환경은 `GIT403_GIT_ENV`로 따로 싣는다(서버가 askpass로 오인되지 않게)
-    fn mcp_config(&self, repo: &std::path::Path, fingerprint: &str, config_fp: &str) -> String {
-        use crate::mcp::{CONFIG_FP, GIT_BIN, GIT_ENV, REMOTE_FP};
+    fn mcp_config(&self, repo: &std::path::Path, fingerprint: &str, config_fp: &str, sandbox: &str) -> String {
+        use crate::mcp::{CONFIG_FP, GIT_BIN, GIT_ENV, REMOTE_FP, SANDBOX_ENV};
         let exe = std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
         let mut env = serde_json::Map::new();
         for k in ["HOME", "USER", "LOGNAME", "SSH_AUTH_SOCK", "XDG_CONFIG_HOME", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_SSH", "GIT_SSH_COMMAND", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "SYSTEMROOT", "TMPDIR", "TEMP", "TMP", "LANG"] {
@@ -40,6 +40,7 @@ impl Backend {
         let git_env: serde_json::Map<String, Value> = self.git.env_pairs().iter().map(|(k, v)| (k.clone(), v.clone().into())).collect();
         env.insert(REMOTE_FP.into(), fingerprint.into());
         env.insert(CONFIG_FP.into(), config_fp.into());
+        env.insert(SANDBOX_ENV.into(), sandbox.into());
         env.insert(GIT_ENV.into(), Value::Object(git_env).to_string().into());
         chat::mcp_config(&exe, &repo.to_string_lossy(), &env)
     }
@@ -72,9 +73,9 @@ impl Backend {
             // 확인으로도 허용할 수 없는 저장소 설정(밖을 가리키는 worktree·mirror·비기본 refspec…)
             return Err(gc_i18n::coded!("aiChat.configRefused", "AI cannot work in this repository because of its git configuration: {reasons}", reasons = r.refuse.join("; ")).json());
         }
-        let key = format!("{conversation}\0{}\0{}\0{}", repo.display(), r.fingerprint, r.config_fp);
+        let key = format!("{conversation}\0{}\0{}\0{}\0{}", repo.display(), r.fingerprint, r.config_fp, r.sandbox);
         if !self.ai.confirmed.lock().contains(&key) {
-            if (r.level != crate::ai_risk::Level::None || !r.config.is_empty()) && !confirmed {
+            if (r.level != crate::ai_risk::Level::None || !r.config.is_empty() || r.sandbox == "none") && !confirmed {
                 return Err(gc_i18n::coded!("aiChat.confirmRequired", "Confirmation is required before AI can work on this repository ({level}, collaborators: {collaborators}, settings outside the safe list: {config})", level = serde_json::to_value(r.level).ok().and_then(|v| v.as_str().map(String::from)).unwrap_or_default(), collaborators = r.collaborators.unwrap_or(0), config = r.config.len()).json());
             }
             self.ai.confirmed.lock().insert(key);
@@ -87,7 +88,7 @@ impl Backend {
         let id = format!("b{:x}{}", now_ms(), SEQ.fetch_add(1, Ordering::Relaxed));
         let backup = ai_backup::create(&self.git, &repo, &id).await.map_err(|e| e.ipc())?;
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let args = chat::args(&input, session_id.as_deref(), &self.mcp_config(&repo, &r.fingerprint, &r.config_fp));
+        let args = chat::args(&input, session_id.as_deref(), &self.mcp_config(&repo, &r.fingerprint, &r.config_fp, r.sandbox));
         let spawned = {
             let mut chats = self.ai.chats.lock();
             if chats.contains_key(&conversation) {
@@ -289,6 +290,15 @@ mod tests {
         (b, rec, rp, bin, vec![cfg, repo])
     }
 
+    /// 이 컴퓨터가 쓰는 샌드박스 방식 이름
+    fn sb() -> &'static str {
+        crate::sandbox::Mode::detect().name()
+    }
+    /// 샌드박스가 없는 플랫폼은 로컬 전용 저장소도 매 대화 확인이 필요하다
+    fn needs_sandbox_confirm() -> bool {
+        sb() == "none"
+    }
+
     const OK: &str = r#"cat <<'EOF'
 {"type":"system","subtype":"init","session_id":"s1"}
 not json noise
@@ -461,7 +471,7 @@ EOF"#;
         let (b, rec, repo, bin, _keep) = setup(OK).await;
         // 로컬 전용(원격 없음): 확인 없이 진행
         assert_eq!(b.ai_chat_risk(&repo).await.unwrap().level, crate::ai_risk::Level::None);
-        b.ai_chat_start(&prog(&bin), repo.clone(), "local".into(), "a".into(), None, false).await.unwrap();
+        b.ai_chat_start(&prog(&bin), repo.clone(), "local".into(), "a".into(), None, needs_sandbox_confirm()).await.unwrap(); // 샌드박스가 있으면 확인 없이 진행(없는 플랫폼은 확인 필요)
         rec.last("local").await;
         // 판정 불가(GitHub가 아닌 원격·해석 못 하는 원격) = 위험: confirmed 없이는 거절, 프로세스도 안 뜬다
         // 같은 컴퓨터의 경로·file:// 원격은 로컬 전용이 아니라 **거절**(대상 저장소 설정이 push·fetch 때 실행될 수 있다): 확인(`confirmed`)으로도 시작할 수 없다
@@ -479,7 +489,7 @@ EOF"#;
         for url in ["https://gitlab.com/o/r.git", "https://example.com/x/y.git"] {
             git(&repo, &["remote", "remove", "origin"]);
             git(&repo, &["remote", "add", "origin", url]);
-            assert_eq!(b.ai_chat_risk_ipc(repo.clone()).await.unwrap(), json!({"level": "unknown"}), "{url}");
+            assert_eq!(b.ai_chat_risk_ipc(repo.clone()).await.unwrap(), json!({"level": "unknown", "sandbox": sb()}), "{url}");
         }
         let _ = std::fs::remove_file(bin.path().join("args"));
         let e = b.ai_chat_start(&prog(&bin), repo.clone(), "risky".into(), "a".into(), None, false).await.unwrap_err();
@@ -552,7 +562,7 @@ EOF"#;
         git(&repo, &["config", "include.path", "extra.cfg"]);
         let r = b.ai_chat_risk(&repo).await.unwrap();
         assert_eq!((r.level, r.config.clone()), (crate::ai_risk::Level::None, vec!["core.sshcommand".to_string(), "diff.evil.textconv".to_string(), "include.path".to_string()]));
-        assert_eq!(b.ai_chat_risk_ipc(repo.clone()).await.unwrap(), json!({"level": "none", "config": ["core.sshcommand", "diff.evil.textconv", "include.path"]}));
+        assert_eq!(b.ai_chat_risk_ipc(repo.clone()).await.unwrap(), json!({"level": "none", "config": ["core.sshcommand", "diff.evil.textconv", "include.path"], "sandbox": sb()}));
         let e = b.ai_chat_start(&prog(&bin), repo.clone(), "ex".into(), "a".into(), None, false).await.unwrap_err();
         assert!(e.contains("aiChat.confirmRequired") && e.contains("\"config\":\"3\""), "{e}");
         b.ai_chat_start(&prog(&bin), repo.clone(), "ex".into(), "a".into(), None, true).await.unwrap();
@@ -578,5 +588,35 @@ EOF"#;
         b.ai_backup_restore(repo.clone(), id, Some("main".into()), false, true, true, None).await.unwrap();
         assert_eq!(git(&repo, &["rev-parse", "dev"]), dev0);
         assert_eq!(std::fs::read_to_string(repo.join("w.txt")).unwrap(), "mine\n");
+    }
+
+    /// 샌드박스가 없는 플랫폼(Windows·bubblewrap 없는 Linux)은 로컬 전용·깨끗한 저장소도 매 대화 확인이 필요하다 — 백엔드가 강제한다
+    #[tokio::test]
+    async fn without_a_sandbox_every_conversation_needs_confirmation() {
+        let (b, rec, repo, bin, _keep) = setup(OK).await;
+        crate::sandbox::tests_force_none::set(true);
+        let r = b.ai_chat_risk(&repo).await.unwrap();
+        assert_eq!((r.level, r.sandbox, r.config.is_empty(), r.refuse.is_empty()), (crate::ai_risk::Level::None, "none", true, true));
+        assert_eq!(b.ai_chat_risk_ipc(repo.clone()).await.unwrap(), json!({"level": "none", "sandbox": "none"}));
+        let e = b.ai_chat_start(&prog(&bin), repo.clone(), "ns".into(), "a".into(), None, false).await.unwrap_err();
+        assert!(e.contains("aiChat.confirmRequired"), "{e}");
+        assert!(rec.kinds("ns").is_empty());
+        b.ai_chat_start(&prog(&bin), repo.clone(), "ns".into(), "a".into(), None, true).await.unwrap();
+        rec.last("ns").await;
+        // 서버에는 none이 전달된다(앱이 확인을 받은 경우에만)
+        let args = std::fs::read_to_string(bin.path().join("args")).unwrap();
+        assert!(args.contains("\"GIT403_SANDBOX\":\"none\""), "{args}");
+        // 같은 대화의 다음 차례는 다시 묻지 않는다
+        b.ai_chat_start(&prog(&bin), repo.clone(), "ns".into(), "b".into(), Some("s1".into()), false).await.unwrap();
+        crate::sandbox::tests_force_none::set(false);
+    }
+
+    #[tokio::test]
+    async fn the_detected_sandbox_mode_is_passed_to_the_server() {
+        let (b, rec, repo, bin, _keep) = setup(OK).await;
+        b.ai_chat_start(&prog(&bin), repo.clone(), "sm".into(), "a".into(), None, true).await.unwrap();
+        rec.last("sm").await;
+        let args = std::fs::read_to_string(bin.path().join("args")).unwrap();
+        assert!(args.contains(&format!("\"GIT403_SANDBOX\":\"{}\"", sb())), "{args}");
     }
 }

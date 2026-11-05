@@ -123,11 +123,13 @@ async function consent() {
 /** 공개·다수 협업자·판정 불가 저장소는 대화 첫 실행 전에 OS 확인창으로 묻는다(거절하면 false). 로컬 전용·본인만 쓰는 private은 묻지 않는다 */
 async function confirmRisk(repo: string, risk: AiRisk) {
   const exec = risk.config ?? [];
-  if (risk.level === "none" && !exec.length) return true;
+  // 샌드박스가 없는 플랫폼은 깨끗한 로컬 저장소도 매 대화 확인(경고 문단 포함)
+  const noSandbox = risk.sandbox === "none";
+  if (risk.level === "none" && !exec.length && !noSandbox) return true;
   const key = risk.level === "public" ? "aiChat.confirmPublic" : risk.level === "shared" ? "aiChat.confirmShared" : "aiChat.confirmUnknown";
   const name = repo.split(/[\\/]/).filter(Boolean).pop() ?? repo;
   // 이유 문단: 공개·협업자·판정 불가(레벨) + 저장소 로컬 git 설정의 실행형 키(훅·ext-diff·textconv는 앱이 끄지만 filter·driver 등은 못 끈다)
-  const reasons = [...(risk.level === "none" ? [] : [t(key, { repo: name, n: risk.collaborators ?? 0 })]), ...(exec.length ? [t("aiChat.confirmExec", { keys: exec.slice(0, 6).join(", ") + (exec.length > 6 ? ", …" : "") })] : [])];
+  const reasons = [...(risk.level === "none" ? [] : [t(key, { repo: name, n: risk.collaborators ?? 0 })]), ...(exec.length ? [t("aiChat.confirmExec", { keys: exec.slice(0, 6).join(", ") + (exec.length > 6 ? ", …" : "") })] : []), ...(noSandbox ? [t("aiChat.confirmNoSandbox")] : [])];
   return ask(`${reasons.join("\n\n")}\n\n${t("aiChat.confirmScope")}`, { title: t("aiChat.confirmTitle"), kind: "warning" });
 }
 

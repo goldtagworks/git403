@@ -653,7 +653,7 @@ function handle(cmd: string, args: any): any {
       if (!chatConfirmed.has(key)) {
         const risk = w.__risk ?? { level: "none" };
         if (risk.refuse?.length) throw JSON.stringify({ code: "aiChat.configRefused", vars: { reasons: risk.refuse.join("; ") }, message: "refused" });
-        if ((risk.level !== "none" || risk.config?.length) && !confirmed) throw JSON.stringify({ code: "aiChat.confirmRequired", vars: { level: risk.level, collaborators: risk.collaborators ?? 0, config: risk.config?.length ?? 0 }, message: "Confirmation is required" });
+        if ((risk.level !== "none" || risk.config?.length || risk.sandbox === "none") && !confirmed) throw JSON.stringify({ code: "aiChat.confirmRequired", vars: { level: risk.level, collaborators: risk.collaborators ?? 0, config: risk.config?.length ?? 0 }, message: "Confirmation is required" });
         chatConfirmed.add(key);
       }
       if (w.__chatFail) throw w.__chatFail;

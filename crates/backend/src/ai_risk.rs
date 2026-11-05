@@ -42,10 +42,12 @@ pub struct Risk {
     /// 판정에 쓴 설정 전체의 지문(UI로는 안 보냄). 확인 키에 넣고 MCP 서버가 도구 호출마다 다시 계산해 대조한다
     #[serde(skip)]
     pub config_fp: String,
+    /// git 실행을 가두는 OS 샌드박스: `seatbelt`(macOS)·`bwrap`(Linux)·`none`(Windows·bubblewrap 없는 Linux). `none`이면 앱의 검사만 남으므로 **매 대화 확인창 + 경고**를 요구한다
+    pub sandbox: &'static str,
 }
 
 const fn risk(level: Level, collaborators: Option<usize>) -> Risk {
-    Risk { level, collaborators, fingerprint: String::new(), config: Vec::new(), refuse: Vec::new(), config_fp: String::new() }
+    Risk { level, collaborators, fingerprint: String::new(), config: Vec::new(), refuse: Vec::new(), config_fp: String::new(), sandbox: "none" }
 }
 
 /// 조회 결과 → 위험. 오류(접근 불가·한도·네트워크·GitHub 아님)는 전부 `unknown`.
@@ -121,7 +123,7 @@ impl Backend {
         let (git, dir) = (self.git.git_path().to_string_lossy().into_owned(), repo.to_path_buf());
         let v = tokio::task::spawn_blocking(move || gc_core::ai_config::check(&dir, &git)).await.map_err(|e| e.to_string())?;
         let red = |l: Vec<String>| l.iter().map(|k| crate::settings_io::redact(k)).collect::<Vec<_>>();
-        Ok(Risk { fingerprint: fp, config: red(v.review), refuse: red(v.refuse), config_fp: v.fingerprint, ..combine(all) })
+        Ok(Risk { fingerprint: fp, config: red(v.review), refuse: red(v.refuse), config_fp: v.fingerprint, sandbox: crate::sandbox::Mode::detect().name(), ..combine(all) })
     }
 }
 
@@ -148,7 +150,7 @@ mod tests {
         assert_eq!(combine([r(Level::None, None), r(Level::Unknown, None)]).level, Level::Unknown);
         assert_eq!(combine([r(Level::Unknown, None), r(Level::Shared, Some(2)), r(Level::Shared, Some(5))]), r(Level::Shared, Some(5)));
         assert_eq!(combine([r(Level::Shared, Some(2)), r(Level::Public, None), r(Level::None, None)]).level, Level::Public);
-        assert_eq!(serde_json::to_value(r(Level::Shared, Some(2))).unwrap(), serde_json::json!({"level": "shared", "collaborators": 2}));
-        assert_eq!(serde_json::to_value(r(Level::None, None)).unwrap(), serde_json::json!({"level": "none"}));
+        assert_eq!(serde_json::to_value(r(Level::Shared, Some(2))).unwrap(), serde_json::json!({"level": "shared", "collaborators": 2, "sandbox": "none"}));
+        assert_eq!(serde_json::to_value(r(Level::None, None)).unwrap(), serde_json::json!({"level": "none", "sandbox": "none"}));
     }
 }
