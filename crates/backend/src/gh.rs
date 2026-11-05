@@ -491,6 +491,32 @@ impl Backend {
         self.gh().token_checked(&b.host, &b.user).await
     }
 
+    /// 읽기 조회(작성자 사진)용 토큰: 연결된 계정 → 없으면 이 원격에 접근되는 gh 계정(활성 계정 먼저, 찾으면 기억).
+    /// 활성 계정이 다른 조직 계정이면 비공개 저장소의 커밋 API가 404만 돌려줘 사진이 안 나온다. 못 찾으면 None.
+    pub(crate) async fn gh_read_token(&self, local: &Path, remote: &RemoteRepo) -> Option<String> {
+        if let Ok(Some(t)) = self.gh_bound_token(Some(local), remote).await {
+            return Some(t);
+        }
+        let gh = self.gh();
+        let key = format!("{}/{}/{}", remote.host, remote.owner, remote.name);
+        let known = self.gh_access.lock().get(&key).cloned();
+        if let Some(t) = match known {
+            Some(u) => gh.token(&remote.host, &u).await,
+            None => None,
+        } {
+            return Some(t);
+        }
+        let mut users: Vec<GhUser> = gh.accounts(Some(&remote.host)).await.ok()?.hosts.into_iter().flat_map(|h| h.accounts).collect();
+        users.sort_by_key(|u| !u.active);
+        for u in users {
+            if gh.can_access(&remote.host, &u.user, remote).await {
+                self.gh_access.lock().insert(key, u.user.clone());
+                return gh.token(&remote.host, &u.user).await;
+            }
+        }
+        None
+    }
+
     /// push/fetch/pull이고 연결된 계정이 있으면 자리를 얻는다(필요하면 전환). 로그 줄은 `tx`로 보낸다.
     /// clone은 저장소가 아직 없으니 `clone_as`(고른 계정)로만: URL(`--` 다음 인자)이 https여야 한다.
     pub(crate) async fn gh_lease_for_job(&self, repo: &Path, args: &[String], clone_as: Option<&str>, tx: &mpsc::UnboundedSender<JobEvent>) -> Res<Option<Lease>> {
@@ -926,6 +952,25 @@ esac
         let (_, l) = collector();
         assert!(Gate::default().acquire(&gh, "github.com", "gold", l).await.is_err());
         assert!(switches(d.path()).is_empty());
+    }
+
+    #[tokio::test]
+    async fn 사진_토큰은_연결_계정_없으면_접근되는_계정을_찾아_기억한다() {
+        let missing = std::env::temp_dir().join("git403-no-such-remote-dir");
+        let (d, repo, be, _log) = job_setup(&missing, None).await;
+        let remote = RemoteRepo { host: "github.com".into(), owner: "o".into(), name: "r".into() };
+        // 활성 alice는 저장소를 못 보고 gold만 본다 → gold 토큰, 전환 없음
+        assert_eq!(be.gh_read_token(repo.path(), &remote).await.as_deref(), Some("tok-gold"));
+        assert!(switches(d.path()).is_empty());
+        assert_eq!(be.gh_access.lock().get("github.com/o/r").map(String::as_str), Some("gold"));
+        // 연결 계정이 있으면 그 계정
+        std::process::Command::new("git").args(["config", "--local", BIND_KEY, "vk"]).current_dir(repo.path()).status().unwrap();
+        assert_eq!(be.gh_read_token(repo.path(), &remote).await.as_deref(), Some("tok-vk"));
+        // 아무도 못 보는 저장소는 None(기존 gh auth token 경로로)
+        let other = RemoteRepo { host: "github.com".into(), owner: "x".into(), name: "y".into() };
+        std::process::Command::new("git").args(["config", "--local", "--unset", BIND_KEY]).current_dir(repo.path()).status().unwrap();
+        std::fs::write(d.path().join("fail_status"), "").unwrap();
+        assert_eq!(be.gh_read_token(repo.path(), &other).await, None);
     }
 
     #[tokio::test]

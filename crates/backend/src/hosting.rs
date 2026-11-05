@@ -127,7 +127,12 @@ impl Hosting {
     }
 
     /// 커밋 작성자 프로필 사진 URL (GitHub 원격만). origin 우선, 없으면 첫 원격. 이메일별 한 건.
-    pub async fn author_avatars(&self, git: &dyn GitBackend, path: Option<&str>, repo: &Path, items: Vec<AvatarQuery>) -> Res<Vec<AvatarResult>> {
+    /// 키체인 토큰이 없으면 `gh_read(원격)`(연결 계정 → 이 저장소에 접근되는 gh 계정), 그것도 없으면 `gh auth token`.
+    pub async fn author_avatars<F, Fut>(&self, git: &dyn GitBackend, path: Option<&str>, repo: &Path, items: Vec<AvatarQuery>, gh_read: F) -> Res<Vec<AvatarResult>>
+    where
+        F: FnOnce(RemoteRepo) -> Fut,
+        Fut: std::future::Future<Output = Option<String>>,
+    {
         let mut remotes = parsed_remotes(git, repo).await?;
         remotes.sort_by_key(|(n, _, _)| n != "origin");
         let remote = remotes.into_iter().next().map(|(_, _, r)| r);
@@ -143,7 +148,16 @@ impl Hosting {
         .await?;
         // 저장된 토큰이 없으면 `gh` 토큰(PR 조회와 같은 규칙). 비공개 저장소도 사진을 찾는다.
         let token = match &host {
-            Some(h) if account.is_some() || h == "github.com" => pick_token(stored, || async { gh_token(h, path).await.ok().flatten() }).await,
+            Some(h) if account.is_some() || h == "github.com" => {
+                let r = remote.clone().expect("host는 원격에서 나온다");
+                pick_token(stored, || async move {
+                    match gh_read(r).await {
+                        Some(t) => Some(t),
+                        None => gh_token(h, path).await.ok().flatten(),
+                    }
+                })
+                .await
+            }
             _ => stored,
         };
         Ok(gc_hosting::author_avatars(&self.avatars, remote.as_ref(), account.as_ref(), token.as_deref(), &items).await)

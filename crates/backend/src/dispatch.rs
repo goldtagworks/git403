@@ -247,7 +247,8 @@ impl Backend {
             "remote_info" => json(self.hosting.remote_info(git, &a.repo()?).await?),
             "author_avatars" => {
                 let (repo, items) = (a.repo()?, a.get::<Vec<gc_hosting::AvatarQuery>>("items")?);
-                json(self.hosting.author_avatars(git, self.path_env(), &repo, items).await?)
+                let r = repo.clone();
+                json(self.hosting.author_avatars(git, self.path_env(), &repo, items, |remote| async move { self.gh_read_token(&r, &remote).await }).await?)
             }
             "pr_create" => {
                 let (account, repo, head, base, title, body, draft) = (
