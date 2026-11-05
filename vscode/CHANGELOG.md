@@ -2,7 +2,9 @@
 
 ## 1.0.6
 
-- Fixed Pull failing with "not something we can merge" / "Cannot rebase onto multiple branches" when pressed repeatedly: operations on the same repository now run one at a time.
+- AI chat (full graph view): open the right-hand column from the toolbar or ⌘J/Ctrl+J and ask in plain words ("pull from origin", "rebase qa onto dev"); Claude Code CLI runs the git work and resolves conflicts. Failed Pull/rebase/merge notifications can hand the error to AI chat.
+- The AI only gets app-checked git and file tools (no shell, no force push or deletes, nothing outside the repository, hooks off, OS sandbox on macOS/Linux). Public, shared or unusually configured repositories ask for confirmation first. Each turn is backed up and can be undone.
+- Fixed Pull failing with "not something we can merge" when pressed twice: only one operation runs per repository at a time.
 
 ## 1.0.5
 
