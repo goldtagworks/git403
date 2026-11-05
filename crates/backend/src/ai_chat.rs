@@ -22,6 +22,26 @@ fn summary(name: &str, command: &str) -> String {
 }
 
 impl Backend {
+    /// claude에 줄 `--mcp-config`: 이 실행 파일을 MCP 서버(`--git403-mcp <저장소>`)로. 서버 환경에는 PATH·git 경로·사용자 git 설정에 필요한 변수만 넣고,
+    /// git 자식에게 줄 askpass 환경은 `GIT403_GIT_ENV`로 따로 싣는다(서버가 askpass로 오인되지 않게)
+    fn mcp_config(&self, repo: &std::path::Path) -> String {
+        use crate::mcp::{GIT_BIN, GIT_ENV};
+        let exe = std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+        let mut env = serde_json::Map::new();
+        for k in ["HOME", "USER", "LOGNAME", "SSH_AUTH_SOCK", "XDG_CONFIG_HOME", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_SSH", "GIT_SSH_COMMAND", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "SYSTEMROOT", "TMPDIR", "TEMP", "TMP", "LANG"] {
+            if let Ok(v) = std::env::var(k) {
+                env.insert(k.into(), v.into());
+            }
+        }
+        if let Some(p) = self.path_env() {
+            env.insert("PATH".into(), p.into());
+        }
+        env.insert(GIT_BIN.into(), self.git.git_path().to_string_lossy().into_owned().into());
+        let git_env: serde_json::Map<String, Value> = self.git.env_pairs().iter().map(|(k, v)| (k.clone(), v.clone().into())).collect();
+        env.insert(GIT_ENV.into(), Value::Object(git_env).to_string().into());
+        chat::mcp_config(&exe, &repo.to_string_lossy(), &env)
+    }
+
     fn chat_root(&self) -> PathBuf {
         self.config_dir.join("ai-chat")
     }
@@ -44,9 +64,10 @@ impl Backend {
             return Err(gc_i18n::coded!("ai.consentRequired", "Consent to use AI is required").json());
         }
         // 위험 확인(공개·다수 협업자·판정 불가)은 대화 첫 실행에만. UI를 믿지 않고 여기서 다시 판정해 확인 없는 요청은 거절한다
-        let key = format!("{conversation}\0{}", repo.display());
+        let r = self.ai_chat_risk(&repo).await?;
+        // 확인 키에 원격 지문을 넣어, 확인한 뒤 원격(URL·pushurl)이 바뀌면 다시 묻는다
+        let key = format!("{conversation}\0{}\0{}", repo.display(), r.fingerprint);
         if !self.ai.confirmed.lock().contains(&key) {
-            let r = self.ai_chat_risk(&repo).await?;
             if r.level != crate::ai_risk::Level::None && !confirmed {
                 return Err(gc_i18n::coded!("aiChat.confirmRequired", "Confirmation is required before AI can work on this repository ({level}, collaborators: {collaborators})", level = serde_json::to_value(r.level).ok().and_then(|v| v.as_str().map(String::from)).unwrap_or_default(), collaborators = r.collaborators.unwrap_or(0)).json());
             }
@@ -60,7 +81,7 @@ impl Backend {
         let id = format!("b{:x}{}", now_ms(), SEQ.fetch_add(1, Ordering::Relaxed));
         let backup = ai_backup::create(&self.git, &repo, &id).await.map_err(|e| e.ipc())?;
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let args = chat::args(&input, session_id.as_deref());
+        let args = chat::args(&input, session_id.as_deref(), &self.mcp_config(&repo));
         let spawned = {
             let mut chats = self.ai.chats.lock();
             if chats.contains_key(&conversation) {
@@ -282,8 +303,14 @@ EOF"#;
         assert_eq!((tool["name"].as_str(), tool["command"].as_str()), (Some("Bash"), Some("git status")));
         // 인자·작업 폴더
         let args = std::fs::read_to_string(bin.path().join("args")).unwrap();
-        assert!(args.starts_with("-p\n상태 알려줘\n--output-format\nstream-json\n--verbose\n--restricted\n--safe-mode\n--tools\n"), "{args}");
-        assert!(args.contains("--allowedTools\nBash(git status)\n") && args.contains("\n--disallowedTools\n") && args.contains("Bash(git push *--for*)") && !args.contains("\nBash(git *)\n") && !args.contains("--resume"));
+        assert!(args.starts_with("-p\n상태 알려줘\n--output-format\nstream-json\n--verbose\n--restricted\n--tools\n\n--strict-mcp-config\n--mcp-config\n{"), "{args}");
+        assert!(args.contains("--allowedTools\nmcp__git403__git\nmcp__git403__read_file\nmcp__git403__edit_file"), "{args}");
+        assert!(!args.contains("Bash") && !args.contains("--resume") && !args.contains("--disallowedTools") && args.contains("--git403-mcp"), "{args}");
+        // MCP 설정: 이 실행 파일을 서버로, 저장소를 인자로, git 자식 환경은 별도 변수로
+        let cfg: Value = serde_json::from_str(args.lines().skip_while(|l| *l != "--mcp-config").nth(1).unwrap()).unwrap();
+        let srv = &cfg["mcpServers"]["git403"];
+        assert_eq!((srv["args"][0].as_str(), srv["args"][1].as_str()), (Some("--git403-mcp"), Some(repo.to_str().unwrap())));
+        assert!(srv["env"]["GIT403_GIT"].is_string() && srv["env"]["GIT403_GIT_ENV"].is_string(), "{srv}");
         assert_eq!(std::fs::read_to_string(bin.path().join("cwd")).unwrap().trim(), repo.to_string_lossy());
         // Done 이벤트가 나갈 때는 이력이 이미 저장돼 있다 + 가림
         let h = b.ai_history_read(repo.clone(), "c1".into()).await.unwrap();
@@ -453,6 +480,37 @@ EOF"#;
         }
         assert_eq!(rec.kinds("risky").iter().filter(|k| *k == "done").count(), 2);
         let e = b.ai_chat_start(&prog(&bin), repo.clone(), "other".into(), "a".into(), None, false).await.unwrap_err();
+        assert!(e.contains("aiChat.confirmRequired"), "{e}");
+    }
+
+    #[tokio::test]
+    async fn risk_looks_at_pushurl_and_insteadof_and_asks_again_when_remotes_change() {
+        let (b, rec, repo, bin, _keep) = setup(OK).await;
+        use crate::ai_risk::Level;
+        git(&repo, &["remote", "add", "origin", "/srv/git/local.git"]);
+        assert_eq!(b.ai_chat_risk(&repo).await.unwrap().level, Level::None);
+        // pushurl이 호스팅 주소면 거기로 보내므로 불명(로컬로 오판하지 않는다)
+        git(&repo, &["remote", "set-url", "--push", "origin", "https://gitlab.com/o/r.git"]);
+        assert_eq!(b.ai_chat_risk(&repo).await.unwrap().level, Level::Unknown);
+        git(&repo, &["config", "--unset", "remote.origin.pushurl"]);
+        assert_eq!(b.ai_chat_risk(&repo).await.unwrap().level, Level::None);
+        // insteadOf: 로컬처럼 보이는 URL이 호스팅 주소로 치환되면 치환 뒤 값으로 판정
+        git(&repo, &["config", "url.https://gitlab.com/.insteadOf", "/srv/git/"]);
+        assert_eq!(b.ai_chat_risk(&repo).await.unwrap().level, Level::Unknown);
+        git(&repo, &["config", "--unset", "url.https://gitlab.com/.insteadOf"]);
+        // 확인한 뒤 원격이 바뀌면 같은 대화도 다시 확인을 요구한다
+        git(&repo, &["remote", "set-url", "origin", "https://gitlab.com/o/r.git"]);
+        b.ai_chat_start(&prog(&bin), repo.clone(), "fp".into(), "a".into(), None, true).await.unwrap();
+        rec.last("fp").await;
+        b.ai_chat_start(&prog(&bin), repo.clone(), "fp".into(), "b".into(), Some("s1".into()), false).await.unwrap();
+        for _ in 0..300 {
+            if rec.kinds("fp").iter().filter(|k| *k == "done").count() == 2 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+        git(&repo, &["remote", "set-url", "origin", "https://gitlab.com/o/other.git"]);
+        let e = b.ai_chat_start(&prog(&bin), repo.clone(), "fp".into(), "c".into(), Some("s1".into()), false).await.unwrap_err();
         assert!(e.contains("aiChat.confirmRequired"), "{e}");
     }
 }

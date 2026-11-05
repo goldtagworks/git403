@@ -6,5 +6,9 @@ fn main() {
     if git403_lib::askpass_helper() {
         return;
     }
+    // AI 채팅: claude가 이 실행 파일을 MCP 서버(`--git403-mcp <저장소>`)로 띄운 경우
+    if git403_lib::mcp_helper() {
+        return;
+    }
     git403_lib::run()
 }

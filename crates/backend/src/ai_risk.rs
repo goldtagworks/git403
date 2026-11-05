@@ -22,17 +22,20 @@ pub enum Level {
     Unknown,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Risk {
     pub level: Level,
     /// `shared`일 때: 본인 외 협업자 수
     #[serde(skip_serializing_if = "Option::is_none")]
     pub collaborators: Option<usize>,
+    /// 판정에 쓴 원격 URL(가져오기·보내기, `insteadOf` 적용 후)의 지문. 확인 키에 넣어 원격이 바뀌면 다시 묻는다. UI로는 보내지 않는다
+    #[serde(skip)]
+    pub fingerprint: String,
 }
 
 const fn risk(level: Level, collaborators: Option<usize>) -> Risk {
-    Risk { level, collaborators }
+    Risk { level, collaborators, fingerprint: String::new() }
 }
 
 /// 조회 결과 → 위험. 오류(접근 불가·한도·네트워크·GitHub 아님)는 전부 `unknown`.
@@ -62,35 +65,62 @@ fn is_local_url(u: &str) -> bool {
     u.starts_with(['/', '.', '~', '\\']) || u.starts_with("file://") || (b.len() > 2 && b[1] == b':' && b[0].is_ascii_alphabetic() && (b[2] == b'\\' || b[2] == b'/'))
 }
 
+/// FNV-1a 64비트(Rust 버전에 따라 바뀌지 않는 해시)
+fn fingerprint(urls: &[String]) -> String {
+    format!("{:016x}", urls.join("\n").bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)))
+}
+
 impl Backend {
-    /// 저장소의 위험 판정. 원격이 없으면 네트워크를 쓰지 않는다.
+    /// 저장소의 위험 판정. 원격이 없으면 네트워크를 쓰지 않는다. 원격 URL은 `git remote get-url --all`(가져오기)과 `--push --all`(`pushurl` 포함)이
+    /// 돌려주는 값 — git이 `url.<base>.insteadOf`를 적용한 뒤의 실제 주소다.
     pub(crate) async fn ai_chat_risk(&self, repo: &Path) -> Res<Risk> {
-        // 원격 URL 중 같은 컴퓨터 안의 경로(`/x`, `../x`, `file://`)는 호스팅 서비스가 아니므로 로컬 전용으로 본다
-        let urls = self.backend.run(repo, &["config", "--get-regexp", r"^remote\..*\.url$"], &[1]).await.map_err(err)?;
-        let remote_urls = String::from_utf8_lossy(&urls).lines().filter_map(|l| l.split_once(' ').map(|(_, u)| u.trim().to_owned())).filter(|u| !is_local_url(u)).count();
-        if remote_urls == 0 {
-            return Ok(risk(Level::None, None));
-        }
-        // 해석할 수 없는 원격이 하나라도 있으면(알 수 없는 URL 형식) 불명
-        let Ok(infos) = self.hosting.remote_info(&*self.backend, repo).await else { return Ok(risk(Level::Unknown, None)) };
-        let mut all = Vec::new();
-        if infos.len() < remote_urls {
-            all.push(risk(Level::Unknown, None));
-        }
-        for info in infos {
-            if info.provider != Some(Provider::GitHub) {
-                all.push(risk(Level::Unknown, None));
-                continue;
+        let names = self.backend.run(repo, &["remote"], &[]).await.map_err(err)?;
+        let names: Vec<String> = String::from_utf8_lossy(&names).lines().map(|l| l.trim().to_owned()).filter(|l| !l.is_empty()).collect();
+        let mut urls = Vec::new();
+        for n in &names {
+            for push in [false, true] {
+                let mut a = vec!["remote", "get-url", "--all"];
+                if push {
+                    a.push("--push");
+                }
+                a.push(n.as_str());
+                // 실패(원격 설정 이상)는 해석 못 하는 원격으로 취급한다
+                match self.backend.run(repo, &a, &[]).await {
+                    Ok(o) => urls.extend(String::from_utf8_lossy(&o).lines().map(|l| (n.clone(), l.trim().to_owned())).filter(|(_, u)| !u.is_empty())),
+                    Err(_) => urls.push((n.clone(), String::new())),
+                }
             }
-            // 토큰: 저장소에 연결한 gh 계정 → 앱 계정 → `gh auth token`. 없으면 토큰 없이(공개 저장소만 읽힌다)
-            let bound = self.gh_read_token(repo, &info.repo).await;
-            let (account, token) = match self.hosting.pr_auth(info.account.clone(), &info.repo, self.path_env(), bound).await {
-                Ok((a, t)) => (a, Some(t)),
-                Err(_) => (Account { provider: Provider::GitHub, host: info.repo.host.clone(), username: String::new() }, None),
-            };
-            all.push(classify(gc_hosting::repo_exposure(&account, token.as_deref(), &info.repo).await));
         }
-        Ok(combine(all))
+        urls.sort();
+        urls.dedup();
+        let fp = fingerprint(&urls.iter().map(|(n, u)| format!("{n}={u}")).collect::<Vec<_>>());
+        // 같은 컴퓨터의 경로(`/x`, `../x`, `file://`)는 호스팅 서비스가 아니므로 로컬 전용으로 본다
+        let hosted: Vec<&(String, String)> = urls.iter().filter(|(_, u)| u.is_empty() || !is_local_url(u)).collect();
+        let mut all = Vec::new();
+        if !hosted.is_empty() {
+            let accts = self.hosting.accounts();
+            let accounts = crate::util::off(move || accts.list().map_err(|e| e.ipc())).await.unwrap_or_default();
+            for (name, url) in hosted {
+                // 해석할 수 없는 원격(알 수 없는 URL 형식·빈 값)은 불명
+                let Some(parsed) = gc_hosting::parse_remote(url) else {
+                    all.push(risk(Level::Unknown, None));
+                    continue;
+                };
+                let info = crate::hosting::info_for(&accounts, name.clone(), url.clone(), parsed);
+                if info.provider != Some(Provider::GitHub) {
+                    all.push(risk(Level::Unknown, None));
+                    continue;
+                }
+                // 토큰: 저장소에 연결한 gh 계정 → 앱 계정 → `gh auth token`. 없으면 토큰 없이(공개 저장소만 읽힌다)
+                let bound = self.gh_read_token(repo, &info.repo).await;
+                let (account, token) = match self.hosting.pr_auth(info.account.clone(), &info.repo, self.path_env(), bound).await {
+                    Ok((a, t)) => (a, Some(t)),
+                    Err(_) => (Account { provider: Provider::GitHub, host: info.repo.host.clone(), username: String::new() }, None),
+                };
+                all.push(classify(gc_hosting::repo_exposure(&account, token.as_deref(), &info.repo).await));
+            }
+        }
+        Ok(Risk { fingerprint: fp, ..combine(all) })
     }
 }
 

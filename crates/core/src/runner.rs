@@ -35,6 +35,11 @@ impl GitRunner {
         self
     }
 
+    /// 모든 git 프로세스에 넣는 환경 변수(askpass 등). AI 채팅의 MCP 서버가 자기 git 자식에게 같은 환경을 주려고 읽는다.
+    pub fn env_pairs(&self) -> &[(String, String)] {
+        &self.envs
+    }
+
     /// 이 실행기가 쓰는 git 실행 파일 경로 (`rebase`의 `exec` 줄처럼 git이 다시 git을 부를 때 쓴다).
     pub fn git_path(&self) -> &Path {
         &self.git

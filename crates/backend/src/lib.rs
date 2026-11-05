@@ -25,6 +25,8 @@ mod ai_chat;
 mod ai_history;
 #[cfg(feature = "cli")]
 mod ai_risk;
+#[cfg(feature = "cli")]
+pub mod mcp;
 pub mod askpass;
 mod config;
 mod conventions;

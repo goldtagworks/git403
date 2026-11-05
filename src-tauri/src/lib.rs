@@ -11,6 +11,15 @@ pub fn askpass_helper() -> bool {
     askpass::helper_main()
 }
 
+/// AI 채팅용 MCP 서버 모드(`--git403-mcp`)로 띄워졌으면 서버를 돌리고 true
+pub fn mcp_helper() -> bool {
+    // Android(순수 gix 백엔드)에는 AI 채팅이 없다
+    #[cfg(not(target_os = "android"))]
+    return gc_backend::mcp::helper_main();
+    #[cfg(target_os = "android")]
+    false
+}
+
 /// 백엔드 이벤트를 웹뷰로 보낸다.
 struct TauriEmit(AppHandle);
 

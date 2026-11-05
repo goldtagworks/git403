@@ -116,14 +116,7 @@ impl Hosting {
         let remotes = parsed_remotes(git, repo).await?;
         let accts = self.accounts();
         let accounts = off(move || accts.list().map_err(|e| e.ipc())).await?;
-        Ok(remotes
-            .into_iter()
-            .map(|(remote, url, r)| {
-                let provider = gc_hosting::detect_provider(&r.host, &accounts);
-                let account = provider.and_then(|p| accounts.iter().find(|a| a.provider == p && a.on_host(&r.host)).cloned());
-                RemoteInfo { remote, url, provider, web_url: r.web_url(), repo: r, account }
-            })
-            .collect())
+        Ok(remotes.into_iter().map(|(remote, url, r)| info_for(&accounts, remote, url, r)).collect())
     }
 
     /// 커밋 작성자 프로필 사진 URL (GitHub 원격만). origin 우선, 없으면 첫 원격. 이메일별 한 건.
@@ -162,6 +155,13 @@ impl Hosting {
         };
         Ok(gc_hosting::author_avatars(&self.avatars, remote.as_ref(), account.as_ref(), token.as_deref(), &items).await)
     }
+}
+
+/// 해석된 원격 하나 → 서비스 추정·웹 URL·매칭 계정
+pub(crate) fn info_for(accounts: &[Account], remote: String, url: String, r: RemoteRepo) -> RemoteInfo {
+    let provider = gc_hosting::detect_provider(&r.host, accounts);
+    let account = provider.and_then(|p| accounts.iter().find(|a| a.provider == p && a.on_host(&r.host)).cloned());
+    RemoteInfo { remote, url, provider, web_url: r.web_url(), repo: r, account }
 }
 
 /// `remote.<name>.url` 설정 → (이름, URL, 해석 결과). 해석 불가한 원격은 뺀다.

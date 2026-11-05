@@ -1,0 +1,262 @@
+//! AI 채팅용 MCP stdio 서버 (docs/security.md "AI 채팅"). claude가 이 실행 파일을 `--git403-mcp <저장소>`로 띄우고(askpass helper와 같은 방식),
+//! AI에게는 도구 세 개만 보인다: `git`(인자 배열, 셸 없음)·`read_file`·`edit_file`. 저장소는 시작 인자로 고정되고 도구는 경로를 받지 않는다.
+//! 모든 호출은 `gc_core::ai_tool` 검증기를 거치고, git 출력은 모델에 넘기기 전에 `settings_io::redact`로 가린다.
+//! 프로토콜: 줄 단위 JSON-RPC 2.0 (initialize·ping·tools/list·tools/call). stderr에는 로그만.
+
+use std::io::{BufRead, Read, Write};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
+
+use gc_core::ai_tool;
+use serde_json::{json, Value};
+
+use crate::settings_io::redact;
+
+/// 명령줄 첫 인자
+pub const FLAG: &str = "--git403-mcp";
+/// git 자식에 줄 환경(askpass 등)을 JSON 객체로 담은 환경 변수. 서버 자신의 환경에는 넣지 않는다(서버가 askpass로 오인되지 않게)
+pub const GIT_ENV: &str = "GIT403_GIT_ENV";
+/// 쓸 git 실행 파일(없으면 `git`)
+pub const GIT_BIN: &str = "GIT403_GIT";
+const TIMEOUT: Duration = Duration::from_secs(300);
+/// 도구 출력 길이 상한(문자)
+const OUT_LIMIT: usize = 20_000;
+
+/// `main`이 맨 먼저 부른다: MCP 모드면 서버를 돌리고(끝나면 프로세스 종료) true. 아니면 false.
+pub fn helper_main() -> bool {
+    let mut a = std::env::args().skip(1);
+    if a.next().as_deref() != Some(FLAG) {
+        return false;
+    }
+    let repo = a.next().map(PathBuf::from).unwrap_or_default();
+    serve(&repo, std::io::stdin().lock(), std::io::stdout().lock());
+    std::process::exit(0)
+}
+
+fn clip(s: String) -> String {
+    match s.char_indices().nth(OUT_LIMIT) {
+        Some((i, _)) => format!("{}\n… (output truncated)", &s[..i]),
+        None => s,
+    }
+}
+
+fn tools() -> Value {
+    json!([
+        {"name": "git", "description": ai_tool::describe(), "inputSchema": {"type": "object", "properties": {"args": {"type": "array", "items": {"type": "string"}, "description": "git arguments without the leading `git`"}}, "required": ["args"]}},
+        {"name": "read_file", "description": "Read a text file inside the repository (relative path, up to 256KB). `.git` and `.claude` are not readable.", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}},
+        {"name": "edit_file", "description": "Edit a text file inside the repository by replacing `old_string` with `new_string` (must match exactly once unless replace_all). With an empty `old_string`, create a new file. `.git` and `.claude` cannot be written.", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "old_string": {"type": "string"}, "new_string": {"type": "string"}, "replace_all": {"type": "boolean"}}, "required": ["path", "old_string", "new_string"]}}
+    ])
+}
+
+/// git 자식: 보정된 환경(askpass 등) + 편집기·pager·프롬프트 차단, 저장소 밖을 가리키는 git 환경 변수 제거
+fn run_git(repo: &Path, argv: &[String]) -> (String, bool) {
+    let bin = std::env::var(GIT_BIN).unwrap_or_else(|_| "git".into());
+    let mut c = Command::new(bin);
+    c.args(argv).current_dir(repo).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    for k in ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_NAMESPACE"] {
+        c.env_remove(k);
+    }
+    if let Some(Value::Object(m)) = std::env::var(GIT_ENV).ok().and_then(|s| serde_json::from_str(&s).ok()) {
+        for (k, v) in m {
+            if let Some(v) = v.as_str() {
+                c.env(k, v);
+            }
+        }
+    }
+    c.env("GIT_TERMINAL_PROMPT", "0").env("GIT_EDITOR", "true").env("GIT_MERGE_AUTOEDIT", "no").env("GIT_PAGER", "cat").env("LC_ALL", "C");
+    #[cfg(unix)]
+    std::os::unix::process::CommandExt::process_group(&mut c, 0);
+    let mut child = match c.spawn() {
+        Ok(ch) => ch,
+        Err(e) => return (format!("failed to run git: {e}"), true),
+    };
+    let (mut so, mut se) = (child.stdout.take().expect("piped"), child.stderr.take().expect("piped"));
+    let t_out = std::thread::spawn(move || {
+        let mut b = Vec::new();
+        let _ = so.read_to_end(&mut b);
+        b
+    });
+    let t_err = std::thread::spawn(move || {
+        let mut b = Vec::new();
+        let _ = se.read_to_end(&mut b);
+        b
+    });
+    let start = Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(s)) => break Some(s),
+            Ok(None) if start.elapsed() > TIMEOUT => {
+                #[cfg(unix)]
+                // SAFETY: process_group(0)으로 띄웠으므로 pgid == pid.
+                unsafe {
+                    libc::killpg(child.id() as libc::pid_t, libc::SIGKILL);
+                }
+                let _ = child.kill();
+                let _ = child.wait();
+                break None;
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
+            Err(_) => break None,
+        }
+    };
+    let (out, err) = (t_out.join().unwrap_or_default(), t_err.join().unwrap_or_default());
+    let mut text = String::from_utf8_lossy(&out).into_owned();
+    let err = String::from_utf8_lossy(&err);
+    if !err.trim().is_empty() {
+        if !text.is_empty() && !text.ends_with('\n') {
+            text.push('\n');
+        }
+        text.push_str(&err);
+    }
+    match status {
+        Some(s) => {
+            let ok = s.success();
+            if text.trim().is_empty() {
+                text = if ok { "(no output)".into() } else { format!("git exited with code {}", s.code().unwrap_or(-1)) };
+            }
+            (text, !ok)
+        }
+        None => (format!("{text}\n(timed out after {}s and was killed)", TIMEOUT.as_secs()), true),
+    }
+}
+
+/// `git remote`가 돌려준 이름들 (검증기가 원격 인자를 이 목록과 대조한다)
+fn remote_names(repo: &Path) -> Vec<String> {
+    let (t, err) = run_git(repo, &["remote".into()]);
+    if err {
+        return vec![];
+    }
+    t.lines().map(|l| l.trim().to_owned()).filter(|l| !l.is_empty() && l != "(no output)").collect()
+}
+
+/// 도구 호출 하나 → (출력, 오류 여부). git 실패는 `[git failed]` 표식으로 오며 `handle`이 isError를 켠다
+fn call(repo: &Path, name: &str, a: &Value) -> (String, bool) {
+    let sget = |k: &str| a.get(k).and_then(Value::as_str);
+    let res: Result<String, String> = match name {
+        "git" => {
+            let args: Option<Vec<String>> = a.get("args").and_then(Value::as_array).map(|v| v.iter().map(|x| x.as_str().map(str::to_owned)).collect::<Option<Vec<_>>>()).and_then(|x| x);
+            match args {
+                None => Err("`args` must be an array of strings".into()),
+                Some(args) => ai_tool::validate(&args, repo, &remote_names(repo)).map(|argv| {
+                    let (t, err) = run_git(repo, &argv);
+                    if err { format!("[git failed]\n{t}") } else { t }
+                }),
+            }
+        }
+        "read_file" => sget("path").ok_or_else(|| "`path` is required".to_string()).and_then(|p| ai_tool::read_file(repo, p)),
+        "edit_file" => match (sget("path"), sget("old_string"), sget("new_string")) {
+            (Some(p), Some(o), Some(n)) => ai_tool::edit_file(repo, p, o, n, a.get("replace_all").and_then(Value::as_bool).unwrap_or(false)).map(|n| format!("edited {n} place(s)")),
+            _ => Err("`path`, `old_string` and `new_string` are required".into()),
+        },
+        _ => Err(format!("unknown tool: {name}")),
+    };
+    match res {
+        Ok(t) => (redact(&clip(t)), false),
+        Err(e) => (format!("rejected: {e}"), true),
+    }
+}
+
+/// 요청 한 줄 처리. 응답이 없는 알림이면 None
+pub fn handle(repo: &Path, line: &str) -> Option<Value> {
+    let m: Value = serde_json::from_str(line).ok()?;
+    let id = m.get("id").cloned()?; // id 없는 것(notifications/*)은 응답하지 않는다
+    let ok = |r: Value| json!({"jsonrpc": "2.0", "id": id, "result": r});
+    Some(match m["method"].as_str().unwrap_or_default() {
+        "initialize" => ok(json!({"protocolVersion": m["params"]["protocolVersion"].as_str().unwrap_or("2024-11-05"), "capabilities": {"tools": {}}, "serverInfo": {"name": "git403", "version": env!("CARGO_PKG_VERSION")}})),
+        "ping" => ok(json!({})),
+        "tools/list" => ok(json!({"tools": tools()})),
+        "tools/call" => {
+            let p = &m["params"];
+            let (text, mut is_err) = call(repo, p["name"].as_str().unwrap_or_default(), &p["arguments"]);
+            is_err |= text.starts_with("[git failed]");
+            ok(json!({"content": [{"type": "text", "text": text}], "isError": is_err}))
+        }
+        other => json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32601, "message": format!("method not found: {other}")}}),
+    })
+}
+
+fn serve(repo: &Path, input: impl BufRead, mut out: impl Write) {
+    let repo = repo.canonicalize().unwrap_or_else(|_| repo.to_path_buf());
+    for line in input.lines().map_while(Result::ok) {
+        if let Some(r) = handle(&repo, &line) {
+            if writeln!(out, "{r}").and_then(|()| out.flush()).is_err() {
+                return;
+            }
+        }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    fn repo() -> (tempfile::TempDir, PathBuf) {
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().canonicalize().unwrap();
+        let g = |a: &[&str]| assert!(Command::new("git").current_dir(&p).args(["-c", "user.name=t", "-c", "user.email=t@t"]).args(a).output().unwrap().status.success());
+        g(&["init", "-q", "-b", "main"]);
+        std::fs::write(p.join("a.txt"), "1\n").unwrap();
+        g(&["add", "."]);
+        g(&["commit", "-qm", "a"]);
+        (d, p)
+    }
+    fn tool(repo: &Path, name: &str, args: Value) -> (String, bool) {
+        let r = handle(repo, &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args}}).to_string()).unwrap();
+        (r["result"]["content"][0]["text"].as_str().unwrap().to_owned(), r["result"]["isError"].as_bool().unwrap())
+    }
+
+    #[test]
+    fn protocol_handshake_lists_three_tools_and_ignores_notifications() {
+        let (_d, p) = repo();
+        let init = handle(&p, r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26"}}"#).unwrap();
+        assert_eq!((init["result"]["protocolVersion"].as_str(), init["result"]["serverInfo"]["name"].as_str()), (Some("2025-03-26"), Some("git403")));
+        assert!(handle(&p, r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#).is_none());
+        let l = handle(&p, r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#).unwrap();
+        let names: Vec<_> = l["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
+        assert_eq!(names, ["git", "read_file", "edit_file"]);
+        assert!(handle(&p, r#"{"jsonrpc":"2.0","id":3,"method":"nope"}"#).unwrap()["error"]["code"] == -32601);
+        assert!(handle(&p, "not json").is_none());
+    }
+
+    #[test]
+    fn git_tool_runs_validated_commands_and_explains_rejections() {
+        let (_d, p) = repo();
+        let (t, e) = tool(&p, "git", json!({"args": ["log", "--oneline"]}));
+        assert!(!e && t.contains(" a"), "{t}");
+        let (t, e) = tool(&p, "git", json!({"args": ["status", "--porcelain"]}));
+        assert!(!e && t == "(no output)", "{t}");
+        std::fs::write(p.join("b.txt"), "x").unwrap();
+        assert!(!tool(&p, "git", json!({"args": ["add", "b.txt"]})).1);
+        assert!(!tool(&p, "git", json!({"args": ["commit", "-m", "b"]})).1);
+        assert!(tool(&p, "git", json!({"args": ["reset", "--hard"]})).0.starts_with("rejected:"));
+        let (t, e) = tool(&p, "git", json!({"args": ["switch", "nope"]}));
+        assert!(e && t.starts_with("[git failed]"), "git 실패는 isError: {t}");
+        assert!(tool(&p, "git", json!({"args": "log"})).1 && tool(&p, "git", json!({"args": [1]})).1 && tool(&p, "git", json!({})).1);
+        // 원격은 설정된 이름만: URL·경로는 거절, 설정된 이름은 통과(여기선 실패해도 검증은 통과해 git이 실행된다)
+        assert!(tool(&p, "git", json!({"args": ["push", "/tmp/x"]})).0.starts_with("rejected:"));
+        std::process::Command::new("git").current_dir(&p).args(["remote", "add", "origin", "/nonexistent/x.git"]).output().unwrap();
+        assert!(tool(&p, "git", json!({"args": ["push", "/nonexistent/x.git"]})).0.starts_with("rejected:"));
+        let (t, e) = tool(&p, "git", json!({"args": ["push", "origin", "main"]}));
+        assert!(e && t.starts_with("[git failed]"), "검증은 통과하고 git이 실패: {t}");
+    }
+
+    #[test]
+    fn output_is_redacted_and_files_are_confined() {
+        let (_d, p) = repo();
+        std::process::Command::new("git").current_dir(&p).args(["remote", "add", "origin", "https://bob:s3cret@example.com/o/r.git"]).output().unwrap();
+        // 자격 증명이 든 URL은 `git remote`·`config`로 새지 않게(출력 가림)
+        let (t, _) = tool(&p, "git", json!({"args": ["fetch", "origin"]}));
+        assert!(!t.contains("s3cret") && !t.contains("bob:"), "{t}");
+        std::fs::write(p.join("n.txt"), "token=ghp_abcdefghijklmnopqrstuvwxyz0123 ok").unwrap();
+        assert_eq!(tool(&p, "read_file", json!({"path": "n.txt"})).0, "token=*** ok");
+        for bad in [".git/config", ".GIT/config", "../x", "/etc/passwd"] {
+            let (t, e) = tool(&p, "read_file", json!({"path": bad}));
+            assert!(e && t.starts_with("rejected:"), "{bad}: {t}");
+            assert!(tool(&p, "edit_file", json!({"path": bad, "old_string": "", "new_string": "x"})).1, "{bad}");
+        }
+        assert!(!tool(&p, "edit_file", json!({"path": "a.txt", "old_string": "1", "new_string": "2"})).1);
+        assert_eq!(std::fs::read_to_string(p.join("a.txt")).unwrap(), "2\n");
+        assert!(tool(&p, "nope", json!({})).1);
+    }
+}

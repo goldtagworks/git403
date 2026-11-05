@@ -17,7 +17,7 @@ import type { AiBackup } from "../../shared/api/types";
 // 맨 오른쪽 독립 AI 채팅 열 (detailLayout과 무관). 상태·이벤트는 shared/model/aichat.ts(외부 스토어),
 // 여기는 화면만: 열림은 `useChatOpen`, 대화는 `useChat`을 구독하고 입력 글자는 `ChatInput` 안에만 둔다(타이핑이 목록을 다시 그리지 않게).
 
-const FILE_TOOLS = ["Read", "Edit", "Write", "MultiEdit", "NotebookEdit"];
+const FILE_TOOLS = ["read_file", "edit_file", "Read", "Edit", "Write", "MultiEdit", "NotebookEdit"];
 /** 저장소 안 파일의 상대 경로 (밖이면 null) */
 const relPath = (repo: string, p: string) => {
   const a = p.replace(/\\/g, "/"), r = repo.replace(/\\/g, "/").replace(/\/+$/, "") + "/";

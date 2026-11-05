@@ -30,5 +30,5 @@ ignore = "0.4"
 [dev-dependencies]
 tempfile = "3"
 
-[target.'cfg(unix)'.dev-dependencies]
+[target.'cfg(unix)'.dependencies]
 libc = "0.2"

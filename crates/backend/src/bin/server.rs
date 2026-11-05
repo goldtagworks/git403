@@ -35,6 +35,11 @@ fn config_dir() -> PathBuf {
 
 #[tokio::main]
 async fn main() {
+    // AI 채팅: claude가 이 실행 파일을 MCP 서버(`--git403-mcp <저장소>`)로 띄운 경우
+    #[cfg(feature = "cli")]
+    if gc_backend::mcp::helper_main() {
+        return;
+    }
     // git·ssh가 인증 입력을 위해 이 실행 파일을 askpass로 부른 경우
     if askpass::helper_main() {
         return;
