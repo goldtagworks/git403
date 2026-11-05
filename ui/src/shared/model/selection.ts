@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from "react";
 
 // 선택한 커밋을 사이드바 항목에 알린다. 바뀐 항목만 다시 그리고 Sidebar 전체는 다시 그리지 않는다.
-// 사이드바에서 직접 누른 항목이 그 커밋을 가리키면 그 항목만, 아니면 그 커밋을 가리키는 ref 모두 강조.
+// 사이드바에서 직접 누른 항목이 그 커밋을 가리키면 그 항목만, 아니면 그 커밋을 가리키는 대표 ref 하나만 강조
+// (HEAD → 보이는 순서상 첫 항목: 로컬·원격·태그). 여럿을 함께 칠하면 포커스가 두 개로 보인다.
 let sel: { sha: string | null; key: string | null; keySha: string | null; lit: boolean } = { sha: null, key: null, keySha: null, lit: false };
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
@@ -20,6 +21,12 @@ const subscribe = (l: () => void) => (listeners.add(l), () => listeners.delete(l
 export function useFocusRef() {
   return useSyncExternalStore(subscribe, () => (sel.lit && sel.keySha && sel.sha === sel.keySha ? sel.keySha : null));
 }
+/** 커밋 → 대표 항목 key. 사이드바가 보이는 트리를 만들 때 정한다 */
+let primary = new Map<string, string>();
+export function setPrimary(next: Map<string, string>) {
+  primary = next;
+  emit();
+}
 export function useActive(key: string, target: string) {
-  return useSyncExternalStore(subscribe, () => sel.sha === target && (sel.keySha !== sel.sha || sel.key === key));
+  return useSyncExternalStore(subscribe, () => sel.sha === target && (sel.keySha === sel.sha ? sel.key === key : primary.get(target) === key));
 }

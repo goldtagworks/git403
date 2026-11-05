@@ -9,7 +9,7 @@ import { isHiddenNode, isHiddenRef, nodePath, refPath, useHiddenNode, useHiddenR
 import { contextMenu, type MenuEntry } from "../../shared/ui/menu";
 import { FLOW_OPS, ops, store, stored } from "../../shared/model/ops";
 import { atCommit, stashMenu } from "../../shared/model/menus";
-import { pick, useActive } from "../../shared/model/selection";
+import { pick, setPrimary, useActive } from "../../shared/model/selection";
 import { PrSection } from "../../features/hosting/PrSection";
 import type { Ref, RefKind, Submodule, Worktree } from "../../shared/api/types";
 import { isMobile } from "../../shared/lib/platform";
@@ -386,6 +386,13 @@ export const Sidebar = memo(function Sidebar({ repo, refs, submodules, worktrees
   );
   const trees = useMemo(() => SECTIONS.map(({ kind }, i) => buildTree(shownKind[i], kind)), [shownKind]);
   const none = !!needle && shownKind.every((rs) => rs.length === 0);
+  // 그래프에서 고른 커밋을 가리키는 ref가 여럿이면 대표 하나만 강조: HEAD, 아니면 보이는 순서상 첫 항목
+  useEffect(() => {
+    const m = new Map<string, string>();
+    const all = shownKind.flat();
+    for (const r of [...all.filter((r) => r.head), ...all]) if (!m.has(r.target)) m.set(r.target, `${r.kind}/${r.name}`);
+    setPrimary(m);
+  }, [shownKind]);
 
   return (
     <nav className="sidebar" ref={navRef} onPointerDown={onGrip} onPointerMove={onGripHover} onPointerLeave={onGripHover} onDoubleClick={onGripReset}>

@@ -38,6 +38,9 @@ test("사이드바에서 브랜치를 고르면 커밋 상세와 diff가 보인�
   await page.locator(".commits").getByText("README 정리").click();
   await expect(page.locator(".sidebar [aria-current]")).toHaveText(["main"]);
   await expect(page.locator(".sidebar [aria-current]")).toHaveCount(1);
+  // 로컬·원격 둘이 같은 커밋을 가리켜도 대표(로컬) 하나만 강조한다 (포커스가 두 개로 보이지 않게)
+  await page.locator(".commits").getByText("그래프 곡선 렌더링").click();
+  await expect(page.locator(".sidebar [aria-current]")).toHaveText(["graph"]);
   await page.locator(".commits").getByText("진행률 이벤트 분리").click();
   await expect(page.locator(".sidebar [aria-current]")).toHaveCount(0);
   await branches.getByRole("button", { name: "pull-lock", exact: true }).click();
