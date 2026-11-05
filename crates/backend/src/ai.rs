@@ -25,6 +25,8 @@ pub(crate) struct Ai {
     /// 설정 파일 (`ai.json`)
     path: PathBuf,
     tasks: Mutex<Tasks>,
+    /// 진행 중인 AI 채팅 (대화 id → 프로세스 핸들)
+    pub(crate) chats: Mutex<HashMap<String, gc_core::JobHandle>>,
 }
 
 fn cancelled() -> String {
@@ -33,7 +35,7 @@ fn cancelled() -> String {
 
 impl Ai {
     pub fn new(config_dir: &Path) -> Self {
-        Self { path: config_dir.join("ai.json"), tasks: Default::default() }
+        Self { path: config_dir.join("ai.json"), tasks: Default::default(), chats: Default::default() }
     }
 
     pub async fn settings(&self) -> Res<gc_ai::Settings> {
@@ -46,6 +48,19 @@ impl Ai {
     pub async fn set_settings(&self, provider: Option<gc_ai::Provider>, model: Option<String>, method: Option<gc_ai::Method>, consent: Option<bool>, select: bool, conventions: Option<bool>) -> Res<()> {
         let path = self.path.clone();
         off(move || set_settings_sync(&path, provider, model, method, consent, select, conventions)).await
+    }
+
+    /// 채팅 이력 저장 여부·보관 일수 중 준 것만 바꾼다
+    #[cfg(feature = "cli")]
+    pub async fn set_chat_settings(&self, save: Option<bool>, retention_days: Option<u32>) -> Res<()> {
+        let path = self.path.clone();
+        off(move || {
+            let mut s = gc_ai::Settings::load(&path).map_err(|e| e.ipc())?;
+            s.chat_save = save.unwrap_or(s.chat_save);
+            s.chat_retention_days = retention_days.unwrap_or(s.chat_retention_days);
+            s.save(&path).map_err(|e| e.ipc())
+        })
+        .await
     }
 
     /// 키를 다룰 공급자 (생략 = 선택된 공급자)
@@ -119,6 +134,9 @@ impl Ai {
             h.abort();
         }
         t.cancelled.clear();
+        for (_, h) in self.chats.lock().drain() {
+            h.kill_now();
+        }
     }
 }
 

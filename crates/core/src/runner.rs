@@ -186,6 +186,20 @@ impl GitRunner {
         run_job(cmd, events)
     }
 
+    /// `spawn`과 같은 이벤트·취소·프로세스 그룹 규칙으로 git이 아닌 프로그램을 `repo`에서 실행한다 (AI 채팅의 `claude`).
+    /// 보정 PATH·askpass 환경은 그대로 상속하고 stdin은 닫는다. 프로그램이 없으면 `Error::Spawn(NotFound)`.
+    pub fn spawn_program(
+        &self,
+        program: &str,
+        repo: &Path,
+        args: &[String],
+        events: mpsc::UnboundedSender<JobEvent>,
+    ) -> Result<(JobHandle, tokio::task::JoinHandle<Result<()>>)> {
+        let mut cmd = Command::new(program);
+        cmd.args(args);
+        run_job(self.configure(cmd, repo), events)
+    }
+
     /// `spawn`과 같은 이벤트·취소 규칙으로 셸 명령을 실행한다 (사용자 정의 명령).
     pub fn spawn_shell(
         &self,

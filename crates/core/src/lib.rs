@@ -3,6 +3,8 @@
 //! 모든 git 작업은 별도 프로세스 + tokio 비동기로 돌아가므로
 //! 호출 측(UI)은 절대 블로킹되지 않는다. 진행 상황은 이벤트 채널로 받는다.
 
+#[cfg(feature = "cli")]
+pub mod ai_backup;
 pub mod backend;
 pub mod blame;
 pub mod blob;

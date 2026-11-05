@@ -68,15 +68,86 @@ struct Doc {
 
 // ---- 검사 ----
 
+/// 토큰처럼 보이는 단어인가: 접두사 + 충분히 긴 영숫자
+fn is_secret_word(w: &str) -> bool {
+    TOKEN_PREFIXES.iter().any(|(p, n)| w.starts_with(p) && w.len() >= p.len() + n)
+}
+
+fn is_word_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_' || c == '-'
+}
+
 /// 토큰처럼 보이는 단어(접두사 + 충분히 긴 영숫자)가 값·키 어디에든 있는가
 fn has_secret(v: &Value) -> bool {
-    let word = |s: &str| s.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-')).any(|w| TOKEN_PREFIXES.iter().any(|(p, n)| w.starts_with(p) && w.len() >= p.len() + n));
+    let word = |s: &str| s.split(|c: char| !is_word_char(c)).any(is_secret_word);
     match v {
         Value::String(s) => word(s),
         Value::Array(a) => a.iter().any(has_secret),
         Value::Object(m) => m.iter().any(|(k, v)| word(k) || has_secret(v)),
         _ => false,
     }
+}
+
+/// 저장 전 자격 증명 가림: 토큰처럼 보이는 단어와 URL의 `사용자:비밀번호@`는 `***`로, `password=값`·`token: 값` 꼴은 값을 `***`로 바꾼다.
+#[cfg(feature = "cli")]
+pub(crate) fn redact(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    // URL userinfo: `scheme://user:pass@host` → `scheme://***@host` (공백·`/`이 오기 전에 `@`가 있을 때만)
+    while let Some(i) = rest.find("://") {
+        let (head, tail) = rest.split_at(i + 3);
+        out.push_str(head);
+        let end = tail.find(|c: char| c.is_whitespace() || c == '/').unwrap_or(tail.len());
+        match tail[..end].rfind('@') {
+            Some(at) => {
+                out.push_str("***");
+                rest = &tail[at..];
+            }
+            None => rest = tail,
+        }
+    }
+    out.push_str(rest);
+    // 단어 단위: 토큰 모양, 그리고 비밀 이름 뒤에 `=`·`:`로 이어지는 값
+    const NAMES: [&str; 6] = ["token", "secret", "password", "passwd", "apikey", "api_key"];
+    let (mut res, mut word, mut mask_next) = (String::with_capacity(out.len()), String::new(), false);
+    let flush = |res: &mut String, word: &mut String, mask_next: &mut bool| {
+        if word.is_empty() {
+            return;
+        }
+        if is_secret_word(word) || *mask_next {
+            res.push_str("***");
+        } else {
+            res.push_str(word);
+        }
+        *mask_next = false;
+        word.clear();
+    };
+    let mut chars = out.chars().peekable();
+    while let Some(c) = chars.next() {
+        if is_word_char(c) {
+            word.push(c);
+            continue;
+        }
+        let name = NAMES.iter().any(|n| word.to_ascii_lowercase().ends_with(n));
+        flush(&mut res, &mut word, &mut mask_next);
+        res.push(c);
+        // `이름=` / `이름: ` 바로 뒤 단어를 가린다 (`이름` 단어를 방금 비웠으므로 직전 값으로 판단)
+        if (c == '=' || c == ':') && name {
+            mask_next = true;
+            while let Some(&n) = chars.peek() {
+                if n == ' ' || n == '"' || n == '\'' {
+                    res.push(n);
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+        } else if !c.is_whitespace() && c != '"' && c != '\'' {
+            mask_next = false;
+        }
+    }
+    flush(&mut res, &mut word, &mut mask_next);
+    res
 }
 
 fn secret_error() -> String {
@@ -465,6 +536,17 @@ fn utc_now() -> (String, String) {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn redact_hides_tokens_url_userinfo_and_named_values() {
+        let r = redact("git push https://bob:ghp_abcdefghijklmnopqrstuvwxyz0123@github.com/o/r.git 그리고 sk-ant-abcdefghijklmnopqrstuvwxyz 사용");
+        assert_eq!(r, "git push https://***@github.com/o/r.git 그리고 *** 사용");
+        assert_eq!(redact("PASSWORD=hunter2 token: \"abc123\" api_key=x"), "PASSWORD=*** token: \"***\" api_key=***");
+        assert_eq!(redact("ssh://git@host/x와 https://example.com/a@b"), "ssh://***@host/x와 https://example.com/a@b");
+        let plain = "git status 한글 sk-short ghp_ 짧음";
+        assert_eq!(redact(plain), plain);
+        assert_eq!(redact(""), "");
+    }
     use super::*;
     use crate::NullEmit;
     use gc_core::GitRunner;

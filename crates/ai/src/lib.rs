@@ -4,6 +4,7 @@
 mod api;
 mod api_google;
 mod api_openai;
+pub mod chat;
 mod cli;
 mod cli_other;
 mod pr_review;
@@ -125,11 +126,15 @@ pub struct Settings {
     pub xai: ProviderSettings,
     /// 커밋·PR 작업에 저장소 규칙(CLAUDE.md·스킬 등)을 붙인다. 기본 켬(저장소별은 `git config git403.aiConventions false`)
     pub conventions: bool,
+    /// AI 채팅 이력을 저장할지(기본 켬)
+    pub chat_save: bool,
+    /// 채팅 이력 보관 일수(기본 90). 지난 대화는 정리한다
+    pub chat_retention_days: u32,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { provider: Provider::default(), anthropic: Default::default(), openai: Default::default(), google: Default::default(), xai: Default::default(), conventions: true }
+        Self { provider: Provider::default(), anthropic: Default::default(), openai: Default::default(), google: Default::default(), xai: Default::default(), conventions: true, chat_save: true, chat_retention_days: 90 }
     }
 }
 

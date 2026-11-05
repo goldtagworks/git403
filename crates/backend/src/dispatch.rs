@@ -365,6 +365,40 @@ impl Backend {
                 self.ai.cancel(a.get("token")?);
                 Ok(Value::Null)
             }
+            // ---- AI 채팅 (이벤트 `ai-chat`) ----
+            #[cfg(feature = "cli")]
+            "ai_chat_start" => {
+                let (repo, conversation, input, session) = (a.repo()?, a.get::<String>("conversation")?, a.get::<String>("input")?, a.get::<Option<String>>("sessionId")?);
+                self.ai_chat_start(gc_ai::Provider::Anthropic.program(), repo, conversation, input, session).await
+            }
+            #[cfg(feature = "cli")]
+            "ai_chat_cancel" => {
+                self.ai_chat_cancel(&a.get::<String>("conversation")?);
+                Ok(Value::Null)
+            }
+            #[cfg(feature = "cli")]
+            "ai_backup_restore" => {
+                let (repo, id, branch) = (a.repo()?, a.get::<String>("id")?, a.get::<Option<String>>("branch")?);
+                self.ai_backup_restore(repo, id, branch, a.get::<Option<bool>>("abortOngoing")?.unwrap_or(false)).await
+            }
+            #[cfg(feature = "cli")]
+            "ai_history_list" => self.ai_history_list(a.repo()?).await,
+            #[cfg(feature = "cli")]
+            "ai_history_read" => {
+                let (repo, conversation) = (a.repo()?, a.get::<String>("conversation")?);
+                self.ai_history_read(repo, conversation).await
+            }
+            #[cfg(feature = "cli")]
+            "ai_history_clear" => self.ai_history_clear(a.repo()?).await,
+            #[cfg(feature = "cli")]
+            "ai_history_prune" => self.ai_history_prune().await,
+            #[cfg(feature = "cli")]
+            "ai_chat_settings" => self.ai_chat_settings().await,
+            #[cfg(feature = "cli")]
+            "ai_chat_settings_set" => {
+                let (save, days) = (a.get::<Option<bool>>("save")?, a.get::<Option<u32>>("retentionDays")?);
+                self.ai_chat_settings_set(save, days).await
+            }
             // ---- 외부 앱 ----
             "open_in" => {
                 let (repo, what, app, path) = (a.repo()?, a.get::<String>("what")?, a.get::<Option<String>>("app")?, a.get::<Option<String>>("path")?);

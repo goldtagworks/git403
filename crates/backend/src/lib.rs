@@ -19,6 +19,10 @@ use serde_json::Value;
 compile_error!("gc-backend에는 feature `cli`(기본, git 실행 파일) 또는 `gix`(순수 Rust) 중 하나가 필요하다");
 
 mod ai;
+#[cfg(feature = "cli")]
+mod ai_chat;
+#[cfg(feature = "cli")]
+mod ai_history;
 pub mod askpass;
 mod config;
 mod conventions;
@@ -153,6 +157,13 @@ impl Backend {
     pub fn start(&self) {
         let emit = self.emit.clone();
         self.askpass.serve(move |req| emit.emit("askpass", serde_json::to_value(req).unwrap_or(Value::Null)));
+        // 보관 기간이 지난 AI 채팅 이력 정리 (시작을 막지 않는다)
+        #[cfg(feature = "cli")]
+        let me = self.clone();
+        #[cfg(feature = "cli")]
+        tokio::spawn(async move {
+            let _ = me.ai_history_prune().await;
+        });
         // GUI로 실행하면 로그인 셸의 PATH(homebrew·nvm 등)가 없다. 시작을 막지 않게 백그라운드에서 물어 GitRunner에 채운다.
         #[cfg(all(unix, feature = "cli"))]
         {
