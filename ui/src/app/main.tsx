@@ -113,6 +113,7 @@ function App() {
   const pendingRef = useRef<string | null>(null);
   // 작업 번호 → 정보. job-done이 start_job 응답보다 먼저 오면 결과를 early에 두었다가 등록 때 처리한다.
   const jobs = useRef(new Map<number, { name: string; repo: string; onDone?: () => void; remote?: boolean; quiet?: boolean; note?: ReturnType<typeof jobNote>; args?: string[]; shell?: string }>());
+  const starting = useRef(new Map<string, string>()); // 시작 요청 중인 사용자 작업(저장소 → 이름). startJob 응답 전 두 번째 요청을 막는다
   const ignored = useRef(new Set<number>()); // 사용자 작업에 밀려 취소한 자동 작업 (완료 이벤트 무시)
   const toHead = useRef(false); // Pull 성공 뒤 다음 재조회에서 선택을 HEAD(받은 최신 커밋)로 옮긴다
   const quietFailed = useRef(false); // 자동 작업이 연속 실패 중인지 (안내는 한 번만)
@@ -361,9 +362,15 @@ function App() {
           setJob(null);
         }
       }
+      const repo = opts?.repo ?? repoRef.current;
+      // 같은 저장소의 사용자 작업은 한 번에 하나만 — 둘이 동시에 돌면 FETCH_HEAD·index를 같이 써서 깨진다(Pull 두 번 → "not something we can merge")
+      if (!opts?.quiet) {
+        const busy = starting.current.get(repo) ?? [...jobs.current.values()].find((j) => !j.quiet && j.repo === repo)?.name;
+        if (busy) return void toast(t("app.jobRunning", { name: busy }), { kind: "info" });
+        starting.current.set(repo, name);
+      }
       if (!opts?.quiet) setMessage(t("app.jobRunning", { name }));
       try {
-        const repo = opts?.repo ?? repoRef.current;
         const id = opts?.shell ? await api.startShell(repo, opts.shell) : await api.startJob(repo, args, opts?.quiet, opts?.ghUser);
         jobs.current.set(id, { name, repo, onDone: opts?.onDone, remote: opts?.remote, quiet: opts?.quiet, args, shell: opts?.shell, note: opts?.track ? jobNote(name, repo, opts.track) : undefined });
         if (early.current.has(id)) {
@@ -373,6 +380,8 @@ function App() {
         } else setJob({ id, name, quiet: opts?.quiet });
       } catch (e) {
         toastError(String(e));
+      } finally {
+        if (!opts?.quiet) starting.current.delete(repo);
       }
     };
     ctx.open = (p) => loadAll(p);
