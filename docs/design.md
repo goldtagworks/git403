@@ -100,6 +100,11 @@ UI를 만들거나 고칠 때 이 문서를 따른다. 참고한 스킬:
 - Iconify **Solar** 세트만 쓴다(얇고 일정한 선 굵기). 앱이 오프라인에서도 동작해야 하므로 CDN 대신 패키지로 번들한다.
 - Lucide 두꺼운 선, FontAwesome, Material Icons는 쓰지 않는다.
 
+## 앱 아이콘
+
+- 원본은 `src-tauri/icons/git403.icon`(Icon Composer, macOS 26 Liquid Glass). 평면 단색 레이어 3장(줄기·청록 가지·코랄 커밋)만 두고 유리·그림자·틴트는 시스템에 맡긴다. 라이트(흰 바탕·검은 줄기)/다크(남색 바탕·흰 줄기) 변형 포함.
+- 갱신: `ictool src-tauri/icons/git403.icon --export-image --platform macOS --rendition Default --width 1024 --height 1024 --scale 1 --output-file mac.png` → `pnpm tauri icon mac.png`. iOS·Android는 같은 도형을 꽉 찬 사각 PNG로 그려 `pnpm tauri icon <png> -o tmp` 후 `ios/`·`android/`(와 `gen/android` mipmap)만 복사. `ui/public/icon.png`(스플래시)·`vscode/media/icon.png`(256)도 mac 렌더로 교체.
+
 ## 모바일·터치 (Android 폰·태블릿)
 
 `html[data-mobile]`(`shared/lib/platform.ts`)일 때만 적용하고 데스크탑 규칙은 건드리지 않는다. **좁은 화면에 많은 걸 보여주지 않는다**: 데스크탑 레이아웃을 줄여 넣지 않고 모바일 전용 화면(`widgets/mobile`)을 쓴다. 판정·구현은 docs/reuse.md "모바일 UI".
