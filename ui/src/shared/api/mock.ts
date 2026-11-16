@@ -65,9 +65,11 @@ const refFull = (r: Ref) => ({ local: "refs/heads/", remote: "refs/remotes/", ta
 const spike: Commit = { id: sha("s1"), parents: [sha("m3")], author: "김개발", email: "dev@demo.dev", time: 1_760_000_000 + 3600, subject: "스파이크 실험", body: "" };
 const spikeRef: Ref = { kind: "local", name: "wip/spike", target: sha("s1"), head: false, message: null, ahead: 0, behind: 0 };
 const multiRef: Ref = { kind: "tag", name: "v0.2.0-rc", target: sha("m3"), head: false, message: null, ahead: 0, behind: 0 };
+// E2E: window.__sameTag = true 면 브랜치 hotfix/pull-lock과 같은 이름의 태그가 다른 커밋(c3)에 생긴다 (짧은 이름은 git처럼 태그가 먼저 풀린다)
+const sameTag: Ref = { kind: "tag", name: "hotfix/pull-lock", target: sha("c3"), head: false, message: null, ahead: 0, behind: 0 };
 // E2E: window.__commitAdds = true 면 `commit`이 그래프 맨 위에 새 커밋을 만들고 HEAD가 그걸 가리킨다(모바일 커밋 화면 — 목록 맨 위에 새 커밋)
 let made: Commit | null = null;
-const allRefs = () => [...refs.map((r) => (made && r.kind === "local" && r.head ? { ...r, target: made.id } : r)), ...((window as any).__spike ? [spikeRef] : []), ...((window as any).__multiRef ? [multiRef] : [])];
+const allRefs = () => [...refs.map((r) => (made && r.kind === "local" && r.head ? { ...r, target: made.id } : r)), ...((window as any).__spike ? [spikeRef] : []), ...((window as any).__multiRef ? [multiRef] : []), ...((window as any).__sameTag ? [sameTag] : [])];
 const baseView = (): GraphView =>
   made ? { commits: [made, ...commits], layout: { ...view.layout, rows: [{ lane: 0, color: 0, edges: [{ from: 0, to: 0, color: 0 }] }, ...view.layout.rows] } } : (window as any).__spike ? { commits: [spike, ...commits], layout: { ...view.layout, rows: [{ lane: 1, color: 3, edges: [{ from: 1, to: 0, color: 3 }] }, ...view.layout.rows] } } : view;
 const graphWithout = (hidden: string[]): GraphView => {
@@ -356,6 +358,25 @@ mockIPC(
   { shouldMockEvents: true },
 );
 
+// 브랜치 비교(compare_refs): 목 그래프의 도달 가능 집합으로 계산한다. 이름은 ref 또는 sha 앞부분
+const reach = (id: string) => {
+  const seen = new Set<string>();
+  const stack = [id];
+  while (stack.length) {
+    const top = stack.pop();
+    const c = commits.find((x) => x.id === top);
+    if (c && !seen.has(c.id)) (seen.add(c.id), stack.push(...c.parents));
+  }
+  return seen;
+};
+const resolve = (name: string) => {
+  // 전체 이름(refs/heads/…)은 정확히, 짧은 이름은 git처럼 태그 → 브랜치 순
+  const all = allRefs();
+  const id = (name.startsWith("refs/") ? all.find((r) => refFull(r) === name) : all.find((r) => r.kind === "tag" && r.name === name) ?? all.find((r) => r.name === name))?.target ?? commits.find((c) => c.id.startsWith(name))?.id;
+  if (!id) throw `fatal: bad revision '${name}'`;
+  return id;
+};
+
 function handle(cmd: string, args: any): any {
   {
     if (cmd === "initial_repo") return null;
@@ -434,6 +455,12 @@ function handle(cmd: string, args: any): any {
       const { rev, path } = args as { rev: string | null; path: string };
       gitCalls.push(["file_blob", `${rev ?? "WORKTREE"}:${path}`]);
       return (window as any).__blobs?.[`${rev ?? "WORKTREE"}:${path}`] ?? null;
+    }
+    if (cmd === "compare_refs") {
+      const { a, b } = args as { a: string; b: string };
+      gitCalls.push(["compare_refs", a, b]);
+      const [ra, rb] = [reach(resolve(a)), reach(resolve(b))];
+      return { onlyA: commits.filter((c) => ra.has(c.id) && !rb.has(c.id)), onlyB: commits.filter((c) => rb.has(c.id) && !ra.has(c.id)) };
     }
     if (cmd === "file_diff") return (eolSeen(args), (window as any).__fileDiff ?? diff((args as { path: string }).path));
     if (cmd === "set_locale") return void gitCalls.push(["set_locale", (args as { locale: string }).locale]);
@@ -961,6 +988,12 @@ function handle(cmd: string, args: any): any {
       // mergetool 사전 검사: `ls-files -u` 단계 목록. window.__lsU = "줄\n줄" 로 바꿀 수 있다 (기본: 1·2·3단계 일반 파일)
       if (a[0] === "ls-files" && a[1] === "-u")
         return (window as any).__lsU ?? ["1", "2", "3"].map((n) => `100644 abc${n} ${n}\t${a[3]}`).join("\n") + "\n";
+      // 드래그 체리픽의 "이미 HEAD에 있나" 검사: HEAD..<sha>가 비면 포함. window.__notInHead = [sha 앞부분…]이면 그 커밋은 HEAD에 없는 것으로 본다
+      if (a[0] === "rev-list" && a[1] === "--count" && a[2]?.startsWith("HEAD..")) {
+        const id = commits.find((c) => c.id.startsWith(a[2].slice(6)))?.id ?? "";
+        const out = (window as any).__notInHead?.some((x: string) => id.startsWith(x)) ? 1 : [...reach(id)].filter((x) => !reach(allRefs().find((r) => r.head)!.target).has(x)).length;
+        return `${out}\n`;
+      }
       if (a[0] === "rev-list") return `${(window as any).__behind?.[a[2]] ?? 0}\n`;
       if (a[0] === "rev-parse" && a[1] === "-q") {
         if ((window as any).__tags?.includes(a[3].replace("refs/tags/", ""))) return "abc\n";

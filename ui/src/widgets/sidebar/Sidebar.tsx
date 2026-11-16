@@ -9,7 +9,7 @@ import { isHiddenNode, isHiddenRef, nodePath, refPath, useHiddenNode, useHiddenR
 import { contextMenu, type MenuEntry } from "../../shared/ui/menu";
 import { FLOW_OPS, ops, store, stored } from "../../shared/model/ops";
 import { atCommit, stashMenu } from "../../shared/model/menus";
-import { pick, setPrimary, useActive } from "../../shared/model/selection";
+import { isMulti, pick, refPick, setPrimary, useActive, useRefPicked } from "../../shared/model/selection";
 import { PrSection } from "../../features/hosting/PrSection";
 import type { Ref, RefKind, Submodule, Worktree } from "../../shared/api/types";
 import { isMobile } from "../../shared/lib/platform";
@@ -50,14 +50,20 @@ const canHide = (r: Ref) => r.kind !== "stash" && !r.head;
 const RefItem = memo(function RefItem({ repo, r, nodeKey, label, pad, leafIcon, q, onSelect }: { repo: string; r: Ref; nodeKey: string; label: string; pad: number; leafIcon: IconName; q: string; onSelect: (commit: string) => void }) {
   useLocale();
   const active = useActive(nodeKey, r.target);
+  const multi = useRefPicked(nodeKey);
   const off = useHiddenRef(repo, r);
   return (
     <button
-      className={"item" + (r.head ? " head" : "") + (active ? " picked" : "") + (off ? " off" : "")}
+      className={"item" + (r.head ? " head" : "") + (active ? " picked" : "") + (multi ? " multi" : "") + (off ? " off" : "")}
       aria-current={active || undefined}
+      aria-pressed={multi || undefined}
+      data-drop={r.kind === "stash" ? undefined : r.head ? "head" : "no"}
       style={guides(pad)}
       title={r.message ?? r.name}
-      onClick={() => {
+      onClick={(e) => {
+        // ⌘/Ctrl-클릭: 비교할 브랜치 고르기 (두 개 고르면 우클릭 "비교")
+        if (isMulti(e) && (r.kind === "local" || r.kind === "remote")) return refPick.toggle(nodeKey);
+        refPick.clear();
         pick(nodeKey, r.target);
         onSelect(r.target);
       }}
@@ -80,6 +86,15 @@ const RefItem = memo(function RefItem({ repo, r, nodeKey, label, pad, leafIcon, 
 const hideEntry = (r: Ref, repo: string): MenuEntry[] =>
   canHide(r) ? [{ label: isHiddenRef(repo, r) ? t("sidebar.showInGraph2") : t("sidebar.hideInGraph"), action: () => ops.toggleHidden(refPath(r.kind, r.name)) }] : [];
 
+/** 브랜치 비교 항목: 두 브랜치를 고른 상태에서 그중 하나를 우클릭하면 "A와 B 비교", 아니면 "현재 브랜치와 비교" (앞에 구분선) */
+function compareEntries(r: Ref): MenuEntry[] {
+  if (r.kind !== "local" && r.kind !== "remote") return [];
+  const [a, b] = refPick.items();
+  if (refPick.items().length === 2 && refPick.has(`${r.kind}/${r.name}`)) return [{ separator: true }, { label: t("compare.menuTwo", { a: a.name, b: b.name }), op: "compare_refs", action: () => ops.compare(a, b) }];
+  const h = ops.head();
+  return h && h !== r.name ? [{ separator: true }, { label: t("compare.menuHead", { head: h }), op: "compare_refs", action: () => ops.compare({ full: (r.kind === "local" ? "refs/heads/" : "refs/remotes/") + r.name, name: r.name }, { full: "refs/heads/" + h, name: h }) }] : [];
+}
+
 /** 그룹 순서: 원격 동기화 → 체크아웃·합치기 → 이 커밋 기준 작업 → PR·AI → 이름·삭제 → 복사·숨기기 */
 function refMenu(r: Ref, repo: string): MenuEntry[] {
   switch (r.kind) {
@@ -99,6 +114,7 @@ function refMenu(r: Ref, repo: string): MenuEntry[] {
         { label: t("sidebar.checkout"), op: "switch", action: () => ops.checkout(r.name), disabled: r.head },
         { label: t("sidebar.merge"), op: "merge", action: () => ops.merge(r.name), disabled: r.head },
         { label: t("sidebar.rebase"), op: "rebase", action: () => ops.rebase(r.name), disabled: r.head },
+        ...compareEntries(r),
         { separator: true },
         { label: t("sidebar.newBranch"), op: "branch", action: () => ops.createBranch(r.name) },
         ...atCommit(r.target).slice(1),
@@ -119,6 +135,7 @@ function refMenu(r: Ref, repo: string): MenuEntry[] {
         { label: t("sidebar.checkoutRemote"), op: "switch", action: () => ops.checkoutRemote(r.name) },
         { label: t("sidebar.merge"), op: "merge", action: () => ops.merge(r.name) },
         { label: t("sidebar.rebase"), op: "rebase", action: () => ops.rebase(r.name) },
+        ...compareEntries(r),
         { separator: true },
         { label: t("sidebar.newBranch"), op: "branch", action: () => ops.createBranch(r.name) },
         ...atCommit(r.target).slice(1),
@@ -328,6 +345,7 @@ export const Sidebar = memo(function Sidebar({ repo, refs, submodules, worktrees
   const [q, setQ] = useState("");
   const filterRef = useRef<HTMLInputElement>(null);
   const navRef = useRef<HTMLElement>(null);
+  useEffect(() => refPick.clear(), [repo]); // 비교용 다중 선택은 저장소마다 새로
   // 섹션이 접히고 펼쳐져도(PrSection 등 자식 렌더 포함) 저장한 높이 비율을 다시 입힌다
   useLayoutEffect(() => applyGrow(navRef.current));
   useEffect(() => {

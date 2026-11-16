@@ -16,7 +16,8 @@ import { aiProvider } from "./aiProviders";
 import { WORKTREE, type AiEffort, type AiPart, type AiResults, type AiStatus, type AiTask, type Commit, type HostAccount, type Ref, type RemoteInfo, type Status } from "../api/types";
 import { guide } from "./guide";
 import { aiChat } from "./aichat";
-import { fileWant } from "./selection";
+import { fileWant, type PickRef } from "./selection";
+import { compare } from "./compare";
 
 /** localStorage 읽기·쓰기 (막혀 있으면 기본값) */
 export const stored = <T,>(key: string, fallback: T): T => {
@@ -686,6 +687,25 @@ export const ops = {
     if (!dashed(onto) && (await confirm(t("ops.rebase.confirm", { head: head() ?? "", onto }), "Rebase"))) git(["rebase", "--autostash", onto], t("ops.rebase.done", { onto }));
   },
   cherryPick: async (sha: string) => !dashed(sha) && git(["cherry-pick", ...(await parentFlag(sha)), sha], t("ops.cherry.done", { sha: sha.slice(0, 7) })),
+  /** 여러 커밋을 현재 브랜치에 cherry-pick (드래그 체리픽·비교 목록 메뉴). `list`는 최신순(그래프·비교 목록 순서), git에는 오래된 것부터 넘긴다.
+   *  머지 커밋이 섞였거나 이미 HEAD에 있는 커밋이 있으면 이유를 보이고 막는다. 충돌은 진행 중 작업 배너(continue·skip·abort)가 이어받는다 */
+  cherryPickMany: async (list: Commit[]) => {
+    if (!list.length) return;
+    const op = ctx.status?.operation;
+    if (op) return ctx.error(t("ops.cherry.busy", { op }));
+    const short = (cs: Commit[]) => cs.map((c) => c.id.slice(0, 7)).join(", ");
+    const merges = list.filter((c) => c.parents.length > 1);
+    if (merges.length) return ctx.error(t("ops.cherry.merges", { shas: short(merges) }));
+    if (dashed(...list.map((c) => c.id))) return;
+    // HEAD..<sha>가 비면 이미 HEAD에 포함된 커밋 (조회 실패는 git cherry-pick이 가리게 둔다)
+    const inHead = await Promise.all(list.map((c) => api.git(ctx.repo, ["rev-list", "--count", `HEAD..${c.id}`]).then((n) => n.trim() === "0", () => false)));
+    const had = list.filter((_, i) => inHead[i]);
+    if (had.length) return ctx.error(t("ops.cherry.inHead", { shas: short(had) }));
+    if (!(await confirm(t("ops.cherry.confirmN", { n: list.length, branch: head() ?? "HEAD" }), "cherry-pick"))) return;
+    if (await git(["cherry-pick", ...list.map((c) => c.id).reverse()], t("ops.cherry.doneN", { n: list.length }))) compare.reload();
+  },
+  /** 브랜치 비교 화면 (a에만 있는 커밋 / b에만 있는 커밋). op `compare_refs` */
+  compare: (a: PickRef, b: PickRef) => !dashed(a.full, b.full) && compare.open(a, b),
   revert: async (sha: string) => !dashed(sha) && git(["revert", "--no-edit", ...(await parentFlag(sha)), sha], t("ops.revert.done", { sha: sha.slice(0, 7) })),
   /** mode를 주면(메뉴의 Soft·Mixed·Hard 하위 항목) 방식 선택창 없이 바로 실행 (hard는 확인창 유지) */
   reset: async (sha: string, picked?: "--soft" | "--mixed" | "--hard") => {

@@ -112,14 +112,14 @@ fn check_ref(r: &str) -> Result<&str> {
 }
 
 #[cfg(feature = "cli")]
-/// 브랜치 비교: 두 ref의 서로에게 없는 커밋을 양쪽 방향으로 돌려준다 (각각 `limit`개까지, 최신순).
+/// 브랜치 비교: 두 ref의 서로에게 없는 커밋을 양쪽 방향으로 돌려준다 (각각 `limit`개까지, 최신순, 위상 순서라 날짜가 어긋나도 부모가 자식보다 뒤).
 pub async fn compare_refs(git: &GitRunner, repo: &Path, a: &str, b: &str, limit: usize) -> Result<RefCompare> {
     let (a, b) = (check_ref(a)?, check_ref(b)?);
     let max = format!("--max-count={limit}");
     let one = |range: String| {
         let max = &max;
         async move {
-            let out = git.output(repo, &["log", "--no-show-signature", FORMAT, max, "--end-of-options", &range, "--"]).await?;
+            let out = git.output(repo, &["log", "--no-show-signature", "--topo-order", FORMAT, max, "--end-of-options", &range, "--"]).await?;
             parse(&String::from_utf8_lossy(&out))
         }
     };

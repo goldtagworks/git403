@@ -4,7 +4,7 @@ import { t } from "../i18n/i18n";
 import type { Locale } from "../i18n/i18n";
 import { hiddenPatterns } from "../lib/hidden";
 import { graphLimit, pref } from "../lib/settings";
-import type { GhAccounts, GhProbe, GhRepoAccount, AiProvider, AiEffort, PrReviewComment, ConflictBlobs, AiMethod, AiPart, AiResults, AiBackup, AiRisk, AiSeen, AiChatEntry, AiChatSettings, AiChatSummary, AiStatus, AiTask, BlameLine, ChangedFile, Commit, GraphView, HostAccount, InboxPr, PrDetail, HostProvider, Lfs, Pr, Ref, RemoteInfo, RemoteRepo, SshKey, Stats, StatsRange, Status, Submodule, SettingsApplied, SettingsPreview, SettingsSectionId, Worktree } from "./types";
+import type { GhAccounts, GhProbe, GhRepoAccount, AiProvider, AiEffort, PrReviewComment, ConflictBlobs, AiMethod, AiPart, AiResults, AiBackup, AiRisk, AiSeen, AiChatEntry, AiChatSettings, AiChatSummary, AiStatus, AiTask, BlameLine, ChangedFile, Commit, GraphView, RefCompare, HostAccount, InboxPr, PrDetail, HostProvider, Lfs, Pr, Ref, RemoteInfo, RemoteRepo, SshKey, Stats, StatsRange, Status, Submodule, SettingsApplied, SettingsPreview, SettingsSectionId, Worktree } from "./types";
 
 /** PR 계열 호출에 로컬 저장소 경로(연결된 gh 계정 토큰을 쓰게) */
 const lr = (localRepo?: string) => (localRepo ? { localRepo } : {});
@@ -85,6 +85,8 @@ export const api = {
   rebaseInteractive: (repo: string, base: string, steps: { action: string; sha: string; message?: string }[]) =>
     invoke<void>("rebase_interactive", { repo, base, steps }),
   fileLog: (repo: string, path: string) => invoke<Commit[]>("file_log", { repo, path }),
+  /** 브랜치 비교: 서로에게 없는 커밋 두 목록 (최신순, 각 5000개까지). gix(Android)는 미지원 */
+  compareRefs: (repo: string, a: string, b: string) => invoke<RefCompare>("compare_refs", { repo, a, b }),
   searchContent: (repo: string, text: string) => invoke<string[]>("search_content", { repo, text, hidden: hiddenPatterns(repo) }),
   blame: (repo: string, path: string, rev: string | null) => invoke<BlameLine[]>("blame", { repo, path, rev }),
   /** 저장소 안의 텍스트 파일 끝에 한 줄 덧붙인다 (.gitignore 등) */

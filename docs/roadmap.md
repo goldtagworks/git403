@@ -65,7 +65,7 @@
 | 27 | 다국어 준비 정리: Rust 사용자 문구를 오류 코드(`coded!`)로 바꾸고 UI 사전 `err.*`로 번역, UI 하드코딩 문구 키화 | 완료 |
 | 28 | 다국어 23개: 기존 14(en ko zh-CN zh-TW vi ja tl km uz lo ru th mn ne) + 유럽 9(de fr es pt-BR it pl tr uk nl), 언어마다 `locales/xx.ts` 전량 번역 | 완료 |
 | A | Android 트랙(하위 단계 27a~27g): 코어 백엔드 레이어화(`GitBackend`·`GixBackend`), Tauri Android 빌드, 모바일 화면, gix fetch·브랜치·pull·push·계정 토큰 인증 | 진행 중 (실기기 GitHub push 확인 남음) |
-| 29 | 브랜치 비교(두 브랜치 선택 → 한쪽에만 있는 커밋 두 목록 + diff), 드래그 체리픽(커밋 → 현재 브랜치, 확인 후 `cherry-pick`) | 진행 중 |
+| 29 | 브랜치 비교(두 브랜치 선택 → 한쪽에만 있는 커밋 두 목록 + diff), 드래그 체리픽(커밋 → 현재 브랜치, 확인 후 `cherry-pick`) | 완료 |
 | 30 | jj(Jujutsu) 모드: 저장소별 git/jj 선택(colocate, `.git` 공유). 30a 먼저 `jj-lib` 연동 가능성 확인(gix 버전 호환·앱 용량, CLI 의존 없이). 이후 jj 모드 UI — 스테이징 대신 split/squash, change ID·`@` 표시, operation log·undo, bookmark·익명 브랜치, 충돌 커밋 표시 | 대기 |
 | 31 | UI 네이티브 전환 검토: ① 현재 앱 측정(큰 저장소 기준 RAM — WebContent·WebView2 등 관련 프로세스 합계 —, 시작 시간, 그래프 스크롤, 큰 diff; macOS·Windows·Linux WebKitGTK) ② 같은 화면을 네이티브 시제품(GPUI·Slint 등, Android 가능성 포함)으로 같은 조건 비교 ③ 숫자로 전체 전환·하이브리드(그래프·diff만 네이티브)·유지 결정. VS Code 확장의 웹 UI 재사용 영향도 함께 판단 | 대기 |
 

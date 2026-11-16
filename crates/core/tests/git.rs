@@ -472,6 +472,37 @@ async fn compare_refs_both_directions_and_rejects_options() {
     assert!(gc_core::compare_refs(&runner, d, "main", "nope", 100).await.is_err());
 }
 
+/// 커밋 날짜가 거꾸로여도(자식이 부모보다 과거) 자식이 부모보다 앞에 온다 — UI는 이 목록을 뒤집어 cherry-pick에 넘긴다.
+#[tokio::test]
+async fn compare_refs_is_topological_under_clock_skew() {
+    let tmp = tempfile::tempdir().unwrap();
+    let d = tmp.path();
+    git(d, &["init", "-q", "-b", "main"]);
+    git(d, &["commit", "-q", "--allow-empty", "-m", "base", "--date=2020-01-01T00:00:00"]);
+    let at = |t: &str, args: &[&str]| {
+        let ok = std::process::Command::new("git")
+            .current_dir(d)
+            .env("GIT_COMMITTER_DATE", t)
+            .env("GIT_AUTHOR_DATE", t)
+            .args(args)
+            .status()
+            .unwrap();
+        assert!(ok.success());
+    };
+    // feat: P(2030) ─ C(2025) ─ M ; P ─ Y(2000) ─┘  날짜순이면 C 다음 P(2030)가 Y(2000)보다 먼저 나온다
+    git(d, &["switch", "-q", "-c", "feat"]);
+    at("2030-01-01T00:00:00", &["commit", "-q", "--allow-empty", "-m", "P"]);
+    git(d, &["branch", "side"]);
+    at("2025-01-01T00:00:00", &["commit", "-q", "--allow-empty", "-m", "C"]);
+    git(d, &["switch", "-q", "side"]);
+    at("2000-01-01T00:00:00", &["commit", "-q", "--allow-empty", "-m", "Y"]);
+    git(d, &["switch", "-q", "feat"]);
+    at("2031-01-01T00:00:00", &["merge", "-q", "--no-ff", "-m", "M", "side"]);
+    let c = gc_core::compare_refs(&GitRunner::default(), d, "main", "feat", 100).await.unwrap();
+    let pos = |s: &str| c.only_b.iter().position(|c| c.subject == s).unwrap();
+    assert!(pos("Y") < pos("P") && pos("C") < pos("P"), "{:?}", c.only_b.iter().map(|c| &c.subject).collect::<Vec<_>>());
+}
+
 /// 여러 커밋 cherry-pick: `git` IPC가 넘기는 `cherry-pick <오래된 것> <최신>` 한 번으로 순서대로 적용된다.
 #[tokio::test]
 async fn cherry_pick_many_applies_in_order() {

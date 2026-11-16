@@ -530,6 +530,29 @@ try {
     eq(await js(`await waitFor(() => $(".toolbar"), "툴바"); return ${accent};`), "#2f9a5f", "다시 실행 후 강조색");
   });
 
+  await step("브랜치 비교(진짜 compare_refs): 전체 ref 이름이면 같은 이름 태그가 있어도 브랜치끼리 비교하고 진짜 git log a..b·b..a와 같다, 옵션처럼 보이는 이름은 거절", async () => {
+    git("checkout", "-q", "-b", "cmp-a", "main");
+    git("commit", "-q", "--allow-empty", "-m", "비교 a1");
+    git("commit", "-q", "--allow-empty", "-m", "비교 a2");
+    git("checkout", "-q", "-b", "cmp-b", "main");
+    git("commit", "-q", "--allow-empty", "-m", "비교 b1");
+    git("checkout", "-q", "main");
+    git("tag", "cmp-b", "main"); // 짧은 이름 cmp-b는 태그로 풀린다 (git은 태그를 먼저 본다)
+    const inv = (a, b) => js(`try { return await window.__TAURI_INTERNALS__.invoke("compare_refs", { repo: ${JSON.stringify(repo)}, a: ${JSON.stringify(a)}, b: ${JSON.stringify(b)} }); } catch (e) { return { error: String(e) }; }`);
+    const ids = (r, side) => r[side].map((c) => c.id);
+    const log = (range) => git("log", "--topo-order", "--format=%H", range, "--").split("\n").filter(Boolean);
+    const r = await inv("refs/heads/cmp-a", "refs/heads/cmp-b");
+    eq(ids(r, "onlyA"), log("refs/heads/cmp-b..refs/heads/cmp-a"), "onlyA = log b..a");
+    eq(ids(r, "onlyB"), log("refs/heads/cmp-a..refs/heads/cmp-b"), "onlyB = log a..b");
+    eq([r.onlyA.length, r.onlyB.length], [2, 1], "개수");
+    const short = await inv("cmp-a", "cmp-b"); // 짧은 이름은 태그(main)와 비교돼 onlyB가 비는 것이 옛 오동작
+    eq(short.onlyB?.length, 0, "짧은 이름은 태그로 풀림 (그래서 전체 이름을 쓴다)");
+    const bad = await inv("--output=/tmp/x", "refs/heads/cmp-b");
+    if (!bad.error) throw new Error("옵션처럼 보이는 ref를 거절하지 않음");
+    git("tag", "-d", "cmp-b");
+    git("branch", "-q", "-D", "cmp-a", "cmp-b");
+  });
+
   await step("앱을 끄면 실행 중이던 작업의 자식 프로세스(손자 포함)도 함께 끝난다", async () => {
     const pidFile = join(home, "child.pid");
     // Windows의 start_shell은 cmd /C라 손자 프로세스를 PowerShell로 띄운다 (cmd가 감싸므로 큰따옴표 없이)

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { isMac } from "../lib/platform";
 
 // 선택한 커밋을 사이드바 항목에 알린다. 바뀐 항목만 다시 그리고 Sidebar 전체는 다시 그리지 않는다.
 // 사이드바에서 직접 누른 항목이 그 커밋을 가리키면 그 항목만, 아니면 그 커밋을 가리키는 대표 ref 하나만 강조
@@ -46,3 +47,29 @@ export const fileWant = {
 };
 const onWant = (f: () => void) => (wantSubs.add(f), () => void wantSubs.delete(f));
 export const useFileWant = () => useSyncExternalStore(onWant, () => want);
+
+/** 다중 선택 키: macOS ⌘, 그 밖 Ctrl (사이드바 브랜치·그래프 커밋·비교 목록 공용) */
+export const isMulti = (e: { metaKey: boolean; ctrlKey: boolean }) => (isMac ? e.metaKey : e.ctrlKey);
+
+// 사이드바 브랜치 다중 선택(브랜치 비교용): 항목 key(`local/이름`·`remote/이름`)를 고른 순서대로. 바뀐 항목만 다시 그린다.
+export interface PickRef { full: string; name: string }
+let picks: readonly string[] = [];
+const comparable = (key: string) => key.startsWith("local/") || key.startsWith("remote/");
+export const refPick = {
+  /** ⌘/Ctrl-클릭. 처음이면 지금 고른 항목(비교할 수 있는 ref일 때)을 먼저 담는다 */
+  toggle(key: string) {
+    if (!comparable(key)) return;
+    const base = picks.length || !sel.key || sel.key === key || !comparable(sel.key) ? picks : [sel.key];
+    picks = base.includes(key) ? base.filter((k) => k !== key) : [...base, key];
+    emit();
+  },
+  clear() {
+    if (!picks.length) return;
+    picks = [];
+    emit();
+  },
+  /** 고른 ref: `full`은 비교에 넘기는 전체 이름(`refs/heads/…`·`refs/remotes/…`, 같은 이름 tag와 안 섞인다), `name`은 화면에 보이는 짧은 이름 */
+  items: (): PickRef[] => picks.map((k) => ({ full: (k.startsWith("local/") ? "refs/heads/" : "refs/remotes/") + k.slice(k.indexOf("/") + 1), name: k.slice(k.indexOf("/") + 1) })),
+  has: (key: string) => picks.includes(key),
+};
+export const useRefPicked = (key: string) => useSyncExternalStore(subscribe, () => picks.includes(key));

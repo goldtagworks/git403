@@ -19,7 +19,8 @@ import { bigView } from "../../shared/model/bigview";
 import { token } from "../../shared/lib/theme";
 import { Icon } from "../../shared/ui/Icon";
 import { useSplit } from "../../shared/ui/Splitter";
-import { pick, useFocusRef } from "../../shared/model/selection";
+import { isMulti, pick, useFocusRef } from "../../shared/model/selection";
+import { dnd } from "../../shared/model/dnd";
 import { Avatar, avatarImage, avatarUrl, onAvatarChange, requestAvatars } from "../../shared/ui/avatar";
 
 const LITE = COMPACT || isMobile; // 두 줄 행·열 머리글 없음·브랜치 열 없음: VS Code 사이드바·패널과 모바일(widgets/mobile)이 같이 쓴다
@@ -36,6 +37,7 @@ const PAD = 12;
 const PALETTE_N = 8; // style.css --graph 색 개수. 행 틴트용 --g0..--g7로 내보낸다
 const LINE_W = 2.5;
 const BUCKET = 10; // 스크롤은 이 행 수 단위로만 React 상태에 반영한다 (위아래 오버스캔도 같은 값)
+const NONE: ReadonlySet<string> = new Set(); // 다중 선택 없음 (같은 참조라 setState해도 다시 그리지 않는다)
 const DIM = 0.28; // 검색에서 일치하지 않는 행의 투명도
 
 /** 커밋 하나의 ref 라벨 칩: 첫 ref + "+N". 로컬과 같은 이름의 원격은 칩 안에 아이콘으로 합친다.
@@ -84,7 +86,7 @@ interface Props {
   refs: Ref[];
   theme: string;
   selected: string | null;
-  onSelect: (id: string) => void;
+  onSelect: (id: string | null) => void;
   /** 맨 아래 근처까지 스크롤하면 부른다 (더 읽을 게 있는지는 부르는 쪽이 판단). 참조가 안정적이어야 한다 */
   onMore: () => void;
   /** 작업 디렉터리 변경 파일 수. 0보다 크면 목록 맨 위에 "로컬 변경사항" 행을 둔다. */
@@ -458,6 +460,40 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
     const id = requestAnimationFrame(() => (readColors(), drawRef.current()));
     return () => cancelAnimationFrame(id);
   }, [theme]);
+  // ⌘/Ctrl-클릭 다중 선택(드래그 체리픽용). 선택한 커밋 외에 더 고른 것들(고른 첫 커밋 포함). 일반 클릭은 비운다.
+  const [multi, setMulti] = useState<ReadonlySet<string>>(NONE);
+  const multiRef = useRef(multi);
+  multiRef.current = multi;
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  const commitsRef = useRef(commits);
+  commitsRef.current = commits;
+  const pickRow = useCallback((id: string, e: React.MouseEvent) => {
+    if (isMulti(e)) {
+      const cur = selectedRef.current;
+      const prev = multiRef.current;
+      const n = new Set(prev.size || !cur || cur === WORKTREE ? prev : [cur]);
+      if (n.has(id)) {
+        // 해제: 선택·상세는 남은 것 중 하나(없으면 비움). 해제한 행이 선택으로 남지 않게 한다
+        n.delete(id);
+        setMulti(n.size ? n : NONE);
+        if (cur === id || !n.size) onSelect(commitsRef.current.find((c) => n.has(c.id))?.id ?? null);
+        return;
+      }
+      n.add(id);
+      setMulti(n);
+    } else if (multiRef.current.size > 1 && multiRef.current.has(id)) return; // 드래그할 수 있게 유지 (그냥 눌렀다 떼면 onDrag의 onClick이 고른다)
+    else if (multiRef.current.size) setMulti(NONE);
+    onSelect(id);
+  }, [onSelect]);
+  const dragRow = useCallback((e: React.PointerEvent, c: Commit) => {
+    if (isMulti(e) || e.shiftKey) return;
+    const m = multiRef.current;
+    const list = m.size > 1 && m.has(c.id) ? commitsRef.current.filter((x) => m.has(x.id)) : [c];
+    dnd.begin(e.nativeEvent, list, () => (setMulti(NONE), onSelect(c.id)));
+  }, [onSelect]);
+  const headId = useMemo(() => refs.find((r) => r.head)?.target, [refs]);
+
   const laneStyle = (lane: number, color: number): CSSProperties =>
     ({ "--lane": `var(--g${color % PALETTE_N})`, "--nx": cssX(lane) }) as CSSProperties;
 
@@ -529,7 +565,7 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
         <div
           className={"row local-row" + (selected === WORKTREE ? " selected" : "")}
           style={{ paddingLeft: PAD_LEFT, height: ROW_H, ...laneStyle(headRow?.lane ?? 0, headRow?.color ?? 0), "--mx": PAD_LEFT } as CSSProperties}
-          onMouseDown={() => onSelect(WORKTREE)}
+          onMouseDown={() => (setMulti(NONE), onSelect(WORKTREE))}
           onClick={onOpen && (() => onOpen(WORKTREE))}
         >
           <span className="wip-node" style={{ left: cssX(headRow?.lane ?? 0) }} />
@@ -556,11 +592,13 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
                 lane={row.lane}
                 color={row.color}
                 chip={chips.get(c.id)}
-                selected={c.id === selected}
+                selected={c.id === selected || multi.has(c.id)}
+                head={c.id === headId}
                 match={matchSet.has(c.id)}
                 dim={(dimming && !matchSet.has(c.id)) || (!!lit && !lit.set.has(c.id))}
                 refs={refs}
-                onSelect={onSelect}
+                onPick={pickRow}
+                onDrag={dragRow}
                 onOpen={onOpen}
               />
             );
@@ -573,9 +611,9 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
 });
 
 /** 커밋 한 행. 원시값 props만 받아 memo로 감싸, 선택이 바뀌면 바뀐 두 행만 다시 그린다. */
-const Row = memo(function Row({ c, top, lane, color, chip, selected, match, dim, refs, onSelect, onOpen }: {
+const Row = memo(function Row({ c, top, lane, color, chip, selected, head, match, dim, refs, onPick, onDrag, onOpen }: {
   c: Commit; top: number; lane: number; color: number; chip: Chip | undefined;
-  selected: boolean; match: boolean; dim: boolean; refs: Ref[]; onSelect: (id: string) => void; onOpen?: (id: string) => void;
+  selected: boolean; head: boolean; match: boolean; dim: boolean; refs: Ref[]; onPick: (id: string, e: React.MouseEvent) => void; onDrag: (e: React.PointerEvent, c: Commit) => void; onOpen?: (id: string) => void;
 }) {
   useLocale(); // 날짜 형식이 언어를 따른다
   countRender("CommitRow");
@@ -597,7 +635,9 @@ const Row = memo(function Row({ c, top, lane, color, chip, selected, match, dim,
     <div
       className={"row" + (selected ? " selected" : "") + (match ? " match" : "") + (dim ? " dim" : "")}
       style={{ top, height: ROW_H, left: 0, paddingLeft: PAD_LEFT, "--lane": `var(--g${color % PALETTE_N})`, "--nx": cssX(lane), "--mx": PAD_LEFT } as CSSProperties}
-      onMouseDown={() => (COMPACT && tip.leave(), onSelect(c.id))}
+      data-drop={LITE ? undefined : head ? "head" : "no"}
+      onPointerDown={LITE ? undefined : (e) => onDrag(e, c)}
+      onMouseDown={(e) => (COMPACT && tip.leave(), onPick(c.id, e))}
       onClick={onOpen && (() => onOpen(c.id))}
       onMouseEnter={COMPACT ? (e) => tip.hover(ctx.repo, c, e.currentTarget) : undefined}
       onMouseLeave={COMPACT ? tip.leave : undefined}

@@ -131,10 +131,23 @@ const osa = (...lines) => execFileSync("osascript", lines.flatMap((l) => ["-e", 
 /** 테스트가 띄운 앱만 집는다(평소 쓰는 git403이 켜져 있으면 이름으로는 그쪽이 잡힌다) */
 const PROC = () => `(first process whose unix id is ${app.proc.pid})`;
 const front = () => osa(`tell application "System Events" to set frontmost of ${PROC()} to true`);
-/** 열린 네이티브 메뉴에서 이름을 쳐서 고르고 Enter (NSMenu 타입 선택) */
+/** 열린 네이티브 메뉴에서 이름을 쳐서 고르고 Enter (NSMenu 타입 선택). 키 입력은 맨 앞 앱으로 가므로 테스트 앱을 앞으로 가져온 뒤 친다 */
 const pickMenu = async (label) => {
   await sleep(1000);
+  front();
   osa(`tell application "System Events" to keystroke "${label}"`, "delay 0.3", 'tell application "System Events" to key code 36');
+};
+/** 네이티브 우클릭 메뉴로 고르기: 다른 앱이 앞으로 나오면 키 입력이 거기로 가므로, done()이 참이 될 때까지 앞으로 가져와 다시 연다 (최대 4번) */
+const viaMenu = async (open, label, done) => {
+  for (let i = 0; i < 4; i++) {
+    front();
+    await js(open);
+    await pickMenu(label);
+    for (let t = 0; t < 20 && !(await done()); t++) await sleep(250);
+    if (await done()) return;
+    osa('tell application "System Events" to key code 53'); // 열린 채 남은 메뉴 닫기
+  }
+  throw new Error(`네이티브 메뉴 "${label}" 선택 실패`);
 };
 const clipboard = (() => { try { return execFileSync("pbpaste", { encoding: "utf8" }); } catch { return ""; } })();
 
@@ -189,10 +202,7 @@ try {
 
   await step("네이티브 우클릭 메뉴: 커밋 → Copy SHA를 OS 메뉴에서 고르면 클립보드에 SHA", async () => {
     execFileSync("pbcopy", { input: "" });
-    front();
-    await js(`rightClick(byText(".commits .subject", "a를 바꿈"));`);
-    await pickMenu("Copy SHA");
-    await until(() => execFileSync("pbpaste", { encoding: "utf8" }) === git("rev-parse", "HEAD~1"), "클립보드 SHA");
+    await viaMenu(`rightClick(byText(".commits .subject", "a를 바꿈"));`, "Copy SHA", () => execFileSync("pbpaste", { encoding: "utf8" }) === git("rev-parse", "HEAD~1"));
   });
 
   await step("네이티브 메뉴 막대: UI가 만든 막대(App/File/Edit/Repository/View/Window/Help)로 바뀌고, 저장소 항목이 켜져 있고, Help > Quick launch가 팔레트를 연다", async () => {
@@ -244,12 +254,10 @@ try {
   });
 
   await step("외부 diff 도구: 커밋 상세 파일 우클릭(네이티브 메뉴) → 커밋 전후 파일로 difftool 실행", async () => {
-    await js(`
+    await viaMenu(`
       press(byText(".commits .subject", "a를 바꿈"));
       rightClick(await waitFor(() => $$(".details [role=option]").find((o) => o.textContent.includes("a.txt")), "상세의 a.txt"));
-    `);
-    await pickMenu("Open in external diff tool");
-    await until(() => existsSync(join(out, "remote")), "difftool 실행");
+    `, "Open in external diff tool", () => existsSync(join(out, "remote")));
     eq(readFileSync(join(out, "local"), "utf8"), "old\n", "왼쪽 = 부모 커밋");
     eq(readFileSync(join(out, "remote"), "utf8"), "new\n", "오른쪽 = 커밋");
     await js(`await waitFor(() => byText(".toast *", "external diff tool finished"), "종료 알림");`);
@@ -305,6 +313,56 @@ try {
     await answerAuth("Password", PASS);
     await until(() => git("log", "-1", "--format=%s") === "원격에서 온 커밋", "Pull로 받음", 20000);
     await js(`await waitFor(() => byText(".commits .subject", "원격에서 온 커밋"), "그래프에 표시");`);
+  });
+
+  await step("브랜치 비교·드래그 체리픽: 사이드바 다중 선택 → 네이티브 우클릭 메뉴 '비교' → 두 목록이 진짜 git log와 같고, 비교 목록 커밋 둘을 현재 브랜치에 끌어 놓으면 네이티브 확인 뒤 오래된 순으로 적용된다", async () => {
+    const base = git("rev-parse", "HEAD");
+    for (const [br, files] of [["cmp-a", ["a1", "a2"]], ["cmp-b", ["b1"]]]) {
+      git("checkout", "-q", "-b", br, "main");
+      for (const f of files) { writeFileSync(join(repo, `${f}.txt`), `${f}\n`); git("add", `${f}.txt`); git("commit", "-qm", `비교 ${f}`); }
+    }
+    git("checkout", "-q", "main");
+    git("tag", "cmp-b", "main"); // 같은 이름 태그: 짧은 이름이면 브랜치 대신 태그가 비교된다
+    const subjects = (range) => git("log", "--topo-order", "--format=%s", range, "--").split("\n").filter(Boolean);
+    const item = (n) => `$$('.sidebar section[data-sec="local"] button.item').find((b) => b.querySelector(".label")?.textContent === ${JSON.stringify(n)})`;
+    front();
+    // 파일 감시가 브랜치·태그 변경을 다 반영해 사이드바가 안정된 뒤에 조작한다 (다시 그려지면서 요소가 바뀌면 우클릭이 헛돈다)
+    await js(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); await waitFor(() => ${item("cmp-a")} && ${item("cmp-b")}, "사이드바에 새 브랜치"); await sleep(2000);`);
+    await js(`
+      press(${item("cmp-a")});
+      ${item("cmp-b")}.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }));
+      await waitFor(() => ${item("cmp-b")}?.getAttribute("aria-pressed") === "true", "다중 선택 표시(aria-pressed)");
+    `);
+    await viaMenu(`rightClick(${item("cmp-b")});`, "Compare", () => js(`return !!$(".cmp-title");`));
+    const listed = (side) => js(`await waitFor(() => $$('.cmp-col[data-side="${side}"] [role=option] .h-subject').length || $('.cmp-col[data-side="${side}"] .cmp-none'), "${side} 목록"); return $$('.cmp-col[data-side="${side}"] [role=option] .h-subject').map((e) => e.textContent);`);
+    eq(await js(`await waitFor(() => $(".cmp-title"), "비교 화면"); return $(".cmp-title").textContent;`), "cmp-a ↔ cmp-b", "제목은 짧은 이름");
+    eq(await listed("a"), subjects("refs/heads/cmp-b..refs/heads/cmp-a"), "왼쪽 = git log b..a");
+    eq(await listed("b"), subjects("refs/heads/cmp-a..refs/heads/cmp-b"), "오른쪽 = git log a..b");
+    eq(subjects("refs/heads/cmp-a..refs/heads/cmp-b"), ["비교 b1"], "(같은 이름 태그가 있어도 브랜치의 b1)");
+
+    // 비교 목록의 두 커밋을 PointerEvent로 끌어 현재 브랜치(main) 항목에 놓는다
+    await js(`
+      const row = (t) => $$('.cmp-col[data-side="a"] [role=option]').find((o) => o.textContent.includes(t));
+      const old = await waitFor(() => row("비교 a1"), "a1 행");
+      old.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, metaKey: true })); // 첫 커밋(a2)에 더한다
+      await waitFor(() => $$('.cmp-col[data-side="a"] [role=option][aria-selected=true]').length === 2, "두 커밋 선택");
+      const ev = (t, type, x, y) => t.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, buttons: type === "pointerup" ? 0 : 1, clientX: x, clientY: y, pointerId: 1, isPrimary: true, pointerType: "mouse" }));
+      const r = old.getBoundingClientRect();
+      ev(old, "pointerdown", r.x + 30, r.y + 8);
+      ev(window, "pointermove", r.x + 50, r.y + 24);
+      const main = await waitFor(() => $$('.sidebar section[data-sec="local"] button.item').find((b) => b.querySelector(".label")?.textContent === "main"), "사이드바 main");
+      main.scrollIntoView({ block: "nearest" }); // 섹션 안 목록이 스크롤돼 있으면 가려진다
+      const m = main.getBoundingClientRect();
+      ev(window, "pointermove", m.x + 30, m.y + m.height / 2);
+      await waitFor(() => document.documentElement.dataset.dnd === "ok" && main.classList.contains("drop-ok"), "main이 드롭 가능으로 표시 (dnd=" + document.documentElement.dataset.dnd + ", 점의 요소=" + document.elementFromPoint(m.x + 30, m.y + m.height / 2)?.outerHTML.slice(0, 80) + ", drop=" + main.dataset.drop + ")");
+      setTimeout(() => ev(window, "pointerup", m.x + 30, m.y + m.height / 2), 0);
+    `);
+    await sleep(1500);
+    osa('tell application "System Events" to key code 36'); // 네이티브 확인 "예"
+    await until(() => git("rev-parse", "HEAD") !== base, "cherry-pick 적용", 15000);
+    eq(git("log", "--format=%s", `${base}..HEAD`).split("\n").reverse(), ["비교 a1", "비교 a2"], "HEAD 위에 오래된 순으로");
+    eq(git("status", "--porcelain"), "", "깨끗한 작업 트리");
+    await js(`await waitFor(() => byText(".toast *", "2 commits cherry-picked"), "완료 알림"); press(await waitFor(() => $(".cmp .back"), "그래프로 돌아가기"));`);
   });
 
   await step("키체인: 계정 연결은 토큰을 OS 키체인에만 저장하고, 다시 실행해도 남아 있고, 삭제(네이티브 확인)하면 지운다", async () => {

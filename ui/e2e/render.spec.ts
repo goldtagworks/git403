@@ -1027,3 +1027,58 @@ test("AI 채팅: 열이 닫힌 채 진행 중이면 상태바 항목만 다시 �
   expect(after.AiChatStatusItem - before.AiChatStatusItem).toBeLessThanOrEqual(2); // 사라질 때만 (구독이 두 갈래라 한 번 더 확인할 수 있다)
   expect(after.AiChatStatusItem).toBeGreaterThan(before.AiChatStatusItem);
 });
+
+test("브랜치 비교(29단계): 사이드바 다중 선택·비교 화면의 커밋 선택·드래그는 그래프·사이드바·툴바·상태바를 다시 그리지 않는다", async ({ page }) => {
+  const side = (name: string | RegExp) => page.locator(".side").getByRole("button", { name }).first();
+  const before0 = await renders(page);
+  // 사이드바 ⌘/Ctrl-클릭 다중 선택: 토글한 항목만 다시 그린다 (Sidebar 본체·그래프는 그대로)
+  await side("graph").click({ modifiers: ["ControlOrMeta"] });
+  await side("pull-lock").click({ modifiers: ["ControlOrMeta"] });
+  const picked = await renders(page);
+  for (const id of ["Sidebar", "CommitGraph", "Toolbar", "StatusBar"]) expect(picked[id], id).toBe(before0[id]);
+  await side("pull-lock").click({ button: "right" });
+  await page.getByRole("menuitem", { name: /비교$/ }).click();
+  await expect(page.locator(".cmp-col").first().getByRole("option").first()).toBeVisible();
+  await expect(page.locator(".diff .add").first()).toBeVisible();
+  // 비교 안에서 커밋 고르기 + 사이드바·목록 위로 드래그(놓지 않음): 비교 목록·상세만 바뀐다
+  await page.waitForTimeout(400); // 열 때 숨겨진 그래프의 크기 관찰(ResizeObserver) 렌더링 1회가 끝난 뒤를 기준으로
+  const before = await renders(page);
+  await page.locator(".cmp-col").nth(1).getByRole("option").nth(1).click();
+  await expect(page.locator(".cmp-col").nth(1).getByRole("option").nth(1)).toHaveAttribute("aria-selected", "true");
+  const src = (await page.locator(".cmp-col").first().getByRole("option").first().boundingBox())!;
+  await side(/^main/).evaluate((el) => el.scrollIntoView({ block: "nearest" }));
+  const dst = (await side(/^main/).boundingBox())!;
+  await page.mouse.move(src.x + 30, src.y + src.height / 2);
+  await page.mouse.down(); // 누르는 순간의 선택 렌더링은 정상 — 그 뒤 드래그 구간만 잰다
+  await expect(page.locator(".cmp-col").first().getByRole("option").first()).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(".diff .add").first()).toBeVisible();
+  await page.waitForTimeout(400); // 상세의 비동기 조회(작성자·본문 등)가 끝난 뒤를 기준으로
+  const cmpBefore = await renders(page);
+  await page.mouse.move(src.x + 50, src.y + 20, { steps: 3 });
+  await page.mouse.move(dst.x + 30, dst.y + dst.height / 2, { steps: 10 });
+  await expect(side(/^main/)).toHaveClass(/drop-ok/);
+  const during = await renders(page);
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  for (const id of ["Sidebar", "CommitGraph", "Toolbar", "StatusBar", "CompareLists", "CompareRow", "Details"]) expect(during[id], `드래그 중 ${id}`).toBe(cmpBefore[id]);
+  for (const id of ["Sidebar", "CommitGraph", "Toolbar", "StatusBar"]) expect(during[id], id).toBe(before[id]);
+});
+
+test("그래프 커밋 행 드래그(체리픽)는 드래그 중 그래프·행·사이드바를 다시 그리지 않는다", async ({ page }) => {
+  const commits = page.locator(".commits");
+  await commits.getByText("그래프 곡선 렌더링").click();
+  const src = (await commits.locator(".row").filter({ hasText: "그래프 곡선 렌더링" }).boundingBox())!;
+  const dst = (await page.locator(".side").getByRole("button", { name: /^main/ }).first().boundingBox())!;
+  await page.mouse.move(src.x + 200, src.y + src.height / 2);
+  await page.mouse.down();
+  await expect(commits.locator(".row.selected")).toContainText("그래프 곡선 렌더링");
+  await expect(page.locator(".diff .add").first()).toBeVisible();
+  const before = await renders(page);
+  await page.mouse.move(src.x + 220, src.y + 30, { steps: 3 });
+  await page.mouse.move(dst.x + 30, dst.y + dst.height / 2, { steps: 12 });
+  await expect(page.locator(".dnd-ghost")).toBeVisible();
+  const during = await renders(page);
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  for (const id of ["CommitGraph", "CommitRow", "Sidebar", "Details", "Toolbar", "StatusBar"]) expect(during[id], id).toBe(before[id]);
+});

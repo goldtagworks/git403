@@ -11,6 +11,12 @@ export interface Commit {
   body: string;
 }
 
+/** 브랜치 비교 (compare_refs): onlyA = `git log b..a`, onlyB = `git log a..b`, 최신순 */
+export interface RefCompare {
+  onlyA: Commit[];
+  onlyB: Commit[];
+}
+
 export interface Edge {
   from: number;
   to: number;

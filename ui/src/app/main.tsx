@@ -22,6 +22,8 @@ import { RewordHost } from "../features/rebase/Reword";
 import { AutoFetch, SettingsHost } from "../widgets/settings/SettingsSheet";
 import { GRAPH_PAGE, graphLimit, onPrefs, pref } from "../shared/lib/settings";
 import { Sidebar } from "../widgets/sidebar/Sidebar";
+import { CompareDetails, CompareLists } from "../features/compare/CompareView";
+import { compare, useCompareOpen } from "../shared/model/compare";
 import { markSelected } from "../shared/model/selection";
 import { useRatioSplit, useSplit } from "../shared/ui/Splitter";
 import { Notices } from "../shared/ui/Notices";
@@ -96,6 +98,7 @@ function App() {
   const [status, setStatus] = useState<Status | null>(null);
   const [issueRules, setIssueRules] = useState<IssueRule[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const cmpOpen = useCompareOpen(); // 브랜치 비교 화면: 그래프·상세 자리를 대신한다. 값은 열림 여부뿐이라 비교 중 커밋을 골라도 App은 다시 그려지지 않는다
   const [wide, setWide] = useState(true); // 로컬 변경사항을 그래프 자리까지 넓게 (고를 때마다 다시 켠다)
   const pick = useCallback((id: string | null) => (id === WORKTREE && setWide(true), setSelected(id)), []); // 이미 골라 둔 상태에서 다시 눌러도 넓게
   const [job, setJob] = useState<{ id: number; name: string; quiet?: boolean } | null>(null);
@@ -269,13 +272,14 @@ function App() {
     if (p) loadAll(p);
   }, [loadAll, clear]);
 
+  const selectFromSide = useCallback((id: string) => (compare.close(), setSelected(id)), []); // 사이드바에서 브랜치를 고르면 비교를 닫고 그 커밋으로
   const showPalette = useCallback(() => setPalette(true), []);
 
   // 탭 목록·활성 탭 저장 (재시작 시 복원)
   useEffect(() => store("tabs", tabs), [tabs]);
   useEffect(() => markSelected(selected), [selected]);
   // 크게 보기는 저장소를 바꾸거나 선택이 없어지면 닫는다 (시트에서 다른 커밋을 골라도 유지)
-  useEffect(() => bigView.exit(), [repo]);
+  useEffect(() => (bigView.exit(), compare.close()), [repo]);
   useEffect(() => void (selected || bigView.exit()), [selected]);
   useEffect(() => void (repo && store("activeTab", repo)), [repo]);
   ctx.activeTab = pending ?? repo;
@@ -540,12 +544,12 @@ function App() {
         <div className="workspace" data-right={(right && aiChat.available) || undefined}>
           {!COMPACT && !DETAIL && (
             <div className="pane side" style={{ width: sideW }}>
-              <Sidebar repo={repo} refs={refs} submodules={submodules} worktrees={worktrees} onSelect={setSelected} />
+              <Sidebar repo={repo} refs={refs} submodules={submodules} worktrees={worktrees} onSelect={selectFromSide} />
             </div>
           )}
           {!COMPACT && !DETAIL && sideSplit}
-          <main className="main" data-layout={right ? "right" : undefined} data-wide={(!COMPACT && !DETAIL && selected === WORKTREE && status && wide) || undefined}>
-            {!DETAIL && <div className="pane graph" style={right ? undefined : { height: COMPACT ? "100%" : `${listH * 100}%` }}>
+          <main className="main" data-layout={right ? "right" : undefined} data-wide={(!COMPACT && !DETAIL && !cmpOpen && selected === WORKTREE && status && wide) || undefined}>
+            {!DETAIL && <div className="pane graph" style={{ ...(right ? undefined : { height: COMPACT ? "100%" : `${listH * 100}%` }), ...(cmpOpen && { display: "none" }) }}>
               <CommitGraph
                 view={view}
                 refs={refs}
@@ -557,8 +561,13 @@ function App() {
                 onOpen={COMPACT ? openInExt : undefined}
               />
             </div>}
+            {!COMPACT && !DETAIL && cmpOpen && (
+              <div className="pane graph" style={right ? undefined : { height: `${listH * 100}%` }}>
+                <CompareLists repo={repo} />
+              </div>
+            )}
             {!COMPACT && !DETAIL && (right ? colSplit : listSplit)}
-            {!COMPACT && !DETAIL && selected === WORKTREE && status && wide && (
+            {!COMPACT && !DETAIL && !cmpOpen && selected === WORKTREE && status && wide && (
               <div className="wide-bar">
                 <button className="back" onClick={() => setWide(false)}>← {t("app.backToGraph")}</button>
                 <span>{t("graph.localChanges")}</span>
@@ -566,9 +575,11 @@ function App() {
             )}
             {right ? (
               <div className="detail-col" style={{ width: colW, ["--detail-w" as string]: colW + "px" }}>
-                {selected === WORKTREE && status ? <ChangesView repo={repo} status={status} onError={toastError} /> : <Details repo={repo} commit={commit} rules={issueRules} right />}
+                {cmpOpen ? <CompareDetails repo={repo} rules={issueRules} right /> : selected === WORKTREE && status ? <ChangesView repo={repo} status={status} onError={toastError} /> : <Details repo={repo} commit={commit} rules={issueRules} right />}
               </div>
-            ) : COMPACT ? null : !DETAIL && selected === WORKTREE && status ? (
+            ) : COMPACT ? null : !DETAIL && cmpOpen ? (
+              <CompareDetails repo={repo} rules={issueRules} />
+            ) : !DETAIL && selected === WORKTREE && status ? (
               <ChangesView repo={repo} status={status} onError={toastError} />
             ) : (
               <Details repo={repo} commit={commit} rules={issueRules} />
