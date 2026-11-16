@@ -63,7 +63,7 @@ pub fn parse_line(line: &str) -> Vec<ChatEvent> {
     }
     match v["type"].as_str() {
         Some("assistant") => v["message"]["content"].as_array().into_iter().flatten().filter_map(|b| match b["type"].as_str()? {
-            "text" => Some(ChatEvent::Text { text: s(&b["text"]) }).filter(|_| !b["text"].as_str().unwrap_or_default().is_empty()),
+            "text" => (!b["text"].as_str().unwrap_or_default().is_empty()).then(|| ChatEvent::Text { text: s(&b["text"]) }),
             "tool_use" => {
                 let input = &b["input"];
                 // git 도구는 인자 배열을 한 줄로(공백이 든 인자는 따옴표), 파일 도구는 경로, 그 밖은 입력 JSON 그대로.

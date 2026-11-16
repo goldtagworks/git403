@@ -587,7 +587,7 @@ mock: `author_avatars`는 `merge@demo.dev`만 null, 나머지는 data: URL. `win
 
 ## 빌드
 
-- Rust 버전은 `rust-toolchain.toml`(1.92.0)로 고정. Tauri 2.12가 1.90 이상을 요구한다.
+- Rust 버전은 `rust-toolchain.toml`(1.97.1)로 고정(CI `.github/workflows/*.yml`도 같은 버전). Tauri 2.12가 1.90 이상, jj-lib 0.47(30단계)이 1.97.1 이상을 요구한다.
 - `pnpm dev` (루트) → Vite + Tauri 개발 실행.
 - 테스트
   - Rust: `cargo test --workspace` (core는 실제 git으로 pull·취소까지 검증)

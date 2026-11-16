@@ -10,8 +10,20 @@ use std::process::Command;
 use gc_core::gix_backend::GixBackend;
 use gc_core::{CliBackend, GitBackend, GitRunner};
 
+/// 실행하는 사람의 전역 git 설정(`~/.gitconfig`의 `pull.rebase` 등)이 시험에 새지 않게 한다.
+/// CliBackend가 띄우는 git과 GixBackend가 함께 이 프로세스 환경을 읽으므로 프로세스 전체에 한 번 건다.
+/// 모든 시험은 저장소를 만들 때 `git_env`를 먼저 부르므로 백엔드가 설정을 읽기 전에 걸린다(`Once`는 다른 스레드를 기다리게 한다).
+fn isolate() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        std::env::set_var("GIT_CONFIG_GLOBAL", "/dev/null");
+        std::env::set_var("GIT_CONFIG_NOSYSTEM", "1");
+    });
+}
+
 /// 날짜를 고정해 해시가 재현되게 한다 (`n`번째 커밋 = 2020-01-01 + n시간).
 fn git_env(dir: &Path, args: &[&str], n: u32) -> String {
+    isolate();
     let date = format!("{} +0900", 1_577_836_800 + n as u64 * 3600);
     let o = Command::new("git")
         .current_dir(dir)
@@ -476,8 +488,19 @@ fn copy_repo(from: &Path) -> tempfile::TempDir {
 
 /// 상태(`status v2`)·인덱스(`ls-files -s`)·스테이지된 diff가 같고 `git fsck`가 통과하는지.
 fn assert_same_repo_state(a: &Path, b: &Path, what: &str) {
+    same_state(a, b, what, false)
+}
+
+/// 방금 각 백엔드가 "지금 시각"으로 커밋한 뒤: 두 커밋 사이에 초가 바뀌면 해시가 달라지므로 `# branch.oid`만 빼고 비교한다
+/// (커밋 내용 — 트리·부모·작성자·메시지 — 은 `commit_info`가 따로 비교한다).
+fn assert_same_state_after_commit(a: &Path, b: &Path, what: &str) {
+    same_state(a, b, what, true)
+}
+
+fn same_state(a: &Path, b: &Path, what: &str, skip_oid: bool) {
+    let strip = |s: String| if skip_oid { s.split('\0').filter(|l| !l.starts_with("# branch.oid ")).collect::<Vec<_>>().join("\0") } else { s };
     for args in [&["status", "--porcelain=v2", "-z", "--branch", "-uall"][..], &["ls-files", "-s", "-z"], &["diff", "--cached", "--no-color"], &["diff", "--no-color"]] {
-        let (x, y) = (git(a, args), git(b, args));
+        let (x, y) = (strip(git(a, args)), strip(git(b, args)));
         assert_eq!(x, y, "{what}: `git {args:?}` 결과가 다르다 (왼쪽 = CliBackend)");
     }
     git(b, &["fsck", "--strict", "--no-dangling"]);
@@ -534,7 +557,7 @@ async fn commit이_같다() {
     c.commit(a.path(), msg, false).await.unwrap();
     g.commit(b.path(), msg, false).await.unwrap();
     assert_eq!(commit_info(a.path()), commit_info(b.path()));
-    assert_same_repo_state(a.path(), b.path(), "commit");
+    assert_same_state_after_commit(a.path(), b.path(), "commit");
     git(b.path(), &["fsck", "--strict"]);
     // amend: 작성자 유지, 부모 유지, 새 트리
     for p in [a.path(), b.path()] {
@@ -544,7 +567,7 @@ async fn commit이_같다() {
     c.commit(a.path(), "고친 메시지", true).await.unwrap();
     g.commit(b.path(), "고친 메시지", true).await.unwrap();
     assert_eq!(commit_info(a.path()), commit_info(b.path()));
-    assert_same_repo_state(a.path(), b.path(), "amend");
+    assert_same_state_after_commit(a.path(), b.path(), "amend");
     // 바꿀 게 없으면 둘 다 오류, 빈 메시지도 오류
     assert!(c.commit(a.path(), "또", false).await.is_err());
     assert!(g.commit(b.path(), "또", false).await.is_err());
@@ -1214,6 +1237,7 @@ async fn resolve_undo가_있어도_commit은_된다() {
 // ---- 27g(1): fetch(원격 선택)·branch·switch·pull --ff-only ----
 
 fn out(d: &Path, args: &[&str]) -> String {
+    isolate();
     let o = Command::new("git").current_dir(d).args(args).env("GIT_CONFIG_NOSYSTEM", "1").output().unwrap();
     String::from_utf8_lossy(&o.stdout).into_owned()
 }

@@ -404,7 +404,7 @@ mod tests {
     #[test]
     fn guide_finish_filters_files_and_normalizes_lines() {
         let diff = part("diff", "diff --git a/src/a.rs b/src/a.rs\n--- a/src/a.rs\n+++ b/src/a.rs\n@@ -1 +1 @@\n+x\ndiff --git a/src/b.rs b/src/b.rs\n--- a/src/b.rs\n+++ /dev/null\n");
-        let v = finish(Task::Guide, guide_raw(), &[diff.clone()]).unwrap();
+        let v = finish(Task::Guide, guide_raw(), std::slice::from_ref(&diff)).unwrap();
         let steps = v["steps"].as_array().unwrap();
         assert_eq!(steps.len(), 2, "diff에 없는 파일 단계는 버림");
         assert_eq!((steps[0]["startLine"].as_i64(), steps[0]["endLine"].as_i64()), (Some(9), Some(9)));
