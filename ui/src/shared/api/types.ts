@@ -17,16 +17,11 @@ export interface RefCompare {
   onlyB: Commit[];
 }
 
-export interface Edge {
-  from: number;
-  to: number;
-  color: number;
-}
-
 export interface Row {
   lane: number;
   color: number;
-  edges: Edge[];
+  /** 이 행에서 다음 행으로 가는 선들, 평평하게 `[from, to, color, from, to, color, …]` (crates/graph `flat_edges`: 선마다 객체를 만들면 큰 저장소에서 메모리가 수백 MB) */
+  edges: number[];
 }
 
 export interface GraphView {

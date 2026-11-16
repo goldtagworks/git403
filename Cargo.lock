@@ -1603,6 +1603,7 @@ name = "gc-graph"
 version = "1.0.6"
 dependencies = [
  "serde",
+ "serde_json",
 ]
 
 [[package]]

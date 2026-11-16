@@ -23,7 +23,21 @@ pub struct Edge {
 pub struct Row {
     pub lane: u16,
     pub color: u16,
+    /// 직렬화는 `[from, to, color, from, to, color, …]` 평평한 숫자 배열.
+    /// 머지가 많은 저장소는 행마다 선이 수십 개라(git/git: 평균 60개) 선마다 객체를 만들면 IPC·웹뷰 메모리가 수백 MB가 된다.
+    #[serde(serialize_with = "flat_edges")]
     pub edges: Vec<Edge>,
+}
+
+fn flat_edges<S: serde::Serializer>(edges: &[Edge], s: S) -> Result<S::Ok, S::Error> {
+    use serde::ser::SerializeSeq;
+    let mut seq = s.serialize_seq(Some(edges.len() * 3))?;
+    for e in edges {
+        seq.serialize_element(&e.from)?;
+        seq.serialize_element(&e.to)?;
+        seq.serialize_element(&e.color)?;
+    }
+    seq.end()
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -215,5 +229,11 @@ mod tests {
     fn two_branch_tips_get_two_lanes() {
         let l = run(&[("f", &["a"]), ("g", &["a"]), ("a", &[])]);
         assert_eq!((l.rows[0].lane, l.rows[1].lane, l.rows[2].lane), (0, 1, 0));
+    }
+
+    #[test]
+    fn edges_serialize_flat() {
+        let row = Row { lane: 1, color: 2, edges: vec![Edge { from: 0, to: 0, color: 3 }, Edge { from: 1, to: 0, color: 2 }] };
+        assert_eq!(serde_json::to_string(&row).unwrap(), r#"{"lane":1,"color":2,"edges":[0,0,3,1,0,2]}"#);
     }
 }

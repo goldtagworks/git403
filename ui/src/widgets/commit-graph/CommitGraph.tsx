@@ -237,8 +237,11 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
     // 선은 레인을 따라 위에서 아래로: 계보 노드에서 나가는 선, 그 선이 이어지는 레인만 진하게
     let on = new Set<number>();
     const edges = layout.rows.map((r, i) => {
-      const flags = r.edges.map((e) => (e.from === r.lane ? set.has(commits[i].id) : on.has(e.from)));
-      on = new Set(r.edges.filter((_, k) => flags[k]).map((e) => e.to));
+      const e = r.edges;
+      const flags: boolean[] = [];
+      for (let k = 0; k < e.length; k += 3) flags.push(e[k] === r.lane ? set.has(commits[i].id) : on.has(e[k]));
+      on = new Set();
+      for (let k = 0; k < e.length; k += 3) if (flags[k / 3]) on.add(e[k + 1]);
       return flags;
     });
     return { set, edges };
@@ -253,7 +256,7 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
     let n = 1;
     for (const r of layout.rows.slice(0, FIT_ROWS)) {
       n = Math.max(n, r.lane + 1);
-      for (const e of r.edges) n = Math.max(n, e.from + 1, e.to + 1);
+      for (let k = 0; k < r.edges.length; k += 3) n = Math.max(n, r.edges[k] + 1, r.edges[k + 1] + 1);
     }
     return n;
   }, [layout]);
@@ -368,15 +371,17 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
       const y0 = i * ROW_H + ROW_H / 2;
       const y1 = y0 + ROW_H;
       ctx.globalAlpha = dimming && !matchSet.has(commits[i].id) && !(i + 1 < commits.length && matchSet.has(commits[i + 1].id)) ? DIM : 1;
-      for (const [k, e] of layout.rows[i].edges.entries()) {
-        if (lit) ctx.globalAlpha = lit.edges[i][k] ? 1 : DIM;
-        ctx.strokeStyle = color(e.color);
+      const es = layout.rows[i].edges;
+      for (let k = 0; k < es.length; k += 3) {
+        const [from, to] = [es[k], es[k + 1]];
+        if (lit) ctx.globalAlpha = lit.edges[i][k / 3] ? 1 : DIM;
+        ctx.strokeStyle = color(es[k + 2]);
         ctx.beginPath();
-        ctx.moveTo(x(e.from), y0);
-        if (e.from === e.to) ctx.lineTo(x(e.to), y1);
+        ctx.moveTo(x(from), y0);
+        if (from === to) ctx.lineTo(x(to), y1);
         else {
           const mid = (y0 + y1) / 2;
-          ctx.bezierCurveTo(x(e.from), mid, x(e.to), mid, x(e.to), y1);
+          ctx.bezierCurveTo(x(from), mid, x(to), mid, x(to), y1);
         }
         ctx.stroke();
       }

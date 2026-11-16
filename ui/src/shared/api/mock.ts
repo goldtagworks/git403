@@ -44,7 +44,7 @@ const view: GraphView = {
   commits,
   layout: {
     max_lanes: 3,
-    rows: rows.map(([lane, color, edges]) => ({ lane, color, edges: edges.map(([from, to, c]) => ({ from, to, color: c })) })),
+    rows: rows.map(([lane, color, edges]) => ({ lane, color, edges: edges.flat() })),
   },
 };
 
@@ -71,7 +71,7 @@ const sameTag: Ref = { kind: "tag", name: "hotfix/pull-lock", target: sha("c3"),
 let made: Commit | null = null;
 const allRefs = () => [...refs.map((r) => (made && r.kind === "local" && r.head ? { ...r, target: made.id } : r)), ...((window as any).__spike ? [spikeRef] : []), ...((window as any).__multiRef ? [multiRef] : []), ...((window as any).__sameTag ? [sameTag] : [])];
 const baseView = (): GraphView =>
-  made ? { commits: [made, ...commits], layout: { ...view.layout, rows: [{ lane: 0, color: 0, edges: [{ from: 0, to: 0, color: 0 }] }, ...view.layout.rows] } } : (window as any).__spike ? { commits: [spike, ...commits], layout: { ...view.layout, rows: [{ lane: 1, color: 3, edges: [{ from: 1, to: 0, color: 3 }] }, ...view.layout.rows] } } : view;
+  made ? { commits: [made, ...commits], layout: { ...view.layout, rows: [{ lane: 0, color: 0, edges: [0, 0, 0] }, ...view.layout.rows] } } : (window as any).__spike ? { commits: [spike, ...commits], layout: { ...view.layout, rows: [{ lane: 1, color: 3, edges: [1, 0, 3] }, ...view.layout.rows] } } : view;
 const graphWithout = (hidden: string[]): GraphView => {
   const base = baseView();
   if (!hidden.length) return base;
@@ -423,7 +423,7 @@ function handle(cmd: string, args: any): any {
       (w.__graphCalls ??= []).push(limit);
       const n = Math.min(w.__bigGraph, limit);
       const cs: Commit[] = Array.from({ length: n }, (_, i) => ({ id: String(i).padStart(40, "0"), parents: i + 1 < w.__bigGraph ? [String(i + 1).padStart(40, "0")] : [], author: "김개발", email: "dev@demo.dev", time: 1_760_000_000 - i * 60, subject: `커밋 ${i}`, body: "" }));
-      return { commits: cs, layout: { max_lanes: 1, rows: cs.map((c) => ({ lane: 0, color: 0, edges: c.parents.length ? [{ from: 0, to: 0, color: 0 }] : [] })) } };
+      return { commits: cs, layout: { max_lanes: 1, rows: cs.map((c) => ({ lane: 0, color: 0, edges: c.parents.length ? [0, 0, 0] : [] })) } };
     }
     if (cmd === "ensure_commit_graph") return void (((window as any).__cgCalls ??= []) as string[]).push((args as { repo: string }).repo);
     if (cmd === "load_graph") {
