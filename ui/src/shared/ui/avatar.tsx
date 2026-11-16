@@ -68,16 +68,21 @@ export function onAvatarChange(f: () => void) {
   return () => void anyChange.delete(f);
 }
 
-const useUrl = (email: string) =>
-  useSyncExternalStore(
-    (f) => {
-      const k = key(email);
+// 이메일별 구독 함수는 한 번만 만든다: 렌더마다 새로 만들면 아바타(그래프 행마다)가 렌더할 때마다 구독을 풀었다가 다시 건다
+const onKey = new Map<string, (f: () => void) => () => void>();
+const onEmail = (k: string) => {
+  let on = onKey.get(k);
+  if (!on) {
+    on = (f) => {
       const s = subs.get(k) ?? subs.set(k, new Set()).get(k)!;
       s.add(f);
       return () => void s.delete(f);
-    },
-    () => urls.get(key(email)) ?? null,
-  );
+    };
+    onKey.set(k, on);
+  }
+  return on;
+};
+const useUrl = (email: string) => useSyncExternalStore(onEmail(key(email)), () => urls.get(key(email)) ?? null);
 
 // Canvas용 이미지 캐시. 불러오면 onLoad로 다시 그리게 한다. 실패는 "bad"로 기억해 이니셜(점)로 둔다.
 const imgs = new Map<string, HTMLImageElement | "bad">();

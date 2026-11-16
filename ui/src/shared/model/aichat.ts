@@ -272,15 +272,17 @@ export const aiChat = {
   },
 };
 
+// 구독 함수는 모듈에서 한 번만 만든다: 렌더마다 새로 만들면 React가 렌더할 때마다 구독을 풀었다가 다시 건다 (docs/performance.md)
+const onChats = sub(subs), onRun = sub(runSubs), onOpen = sub(openSubs);
 /** 이 저장소의 대화 (없으면 undefined) */
-export const useChat = (repo: string) => useSyncExternalStore(sub(subs), () => chats.get(repo));
+export const useChat = (repo: string) => useSyncExternalStore(onChats, () => chats.get(repo));
 /** 어떤 대화든 실행 중인지 — 상태바 항목만 구독한다 */
-export const useChatRunning = () => useSyncExternalStore(sub(runSubs), () => anyRunning);
-export const useChatOpen = (repo: string) => useSyncExternalStore(sub(openSubs), () => isOpen(repo));
+export const useChatRunning = () => useSyncExternalStore(onRun, () => anyRunning);
+export const useChatOpen = (repo: string) => useSyncExternalStore(onOpen, () => isOpen(repo));
 /** 실행 중인데 그 저장소의 열이 닫혀 있는 대화가 있는지 — 상태바 "AI 작업 중…"만 구독한다 */
 const hidden = () => [...chats.values()].some((c) => c.running && !isOpen(c.repo));
 const subHidden = (f: () => void) => {
-  const a = sub(runSubs)(f), b = sub(openSubs)(f);
+  const a = onRun(f), b = onOpen(f);
   return () => (a(), b());
 };
 export const useChatHidden = () => useSyncExternalStore(subHidden, hidden);

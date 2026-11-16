@@ -83,9 +83,9 @@ export const useVisibleCount = (repo: string, refs: Ref[]) =>
 /** "보는 중 70/97"용: 숨긴 ref가 있을 때만 `보이는수/전체`, 없으면 빈 문자열 (스태시 제외) */
 export const useViewing = (repo: string, refs: Ref[]) =>
   useSyncExternalStore(subscribe, () => {
-    const all = refs.filter((r) => r.kind !== "stash");
-    const shown = all.reduce((n, r) => n + (isHiddenRef(repo, r) ? 0 : 1), 0);
-    return shown < all.length ? `${shown}/${all.length}` : "";
+    let all = 0, shown = 0; // 스냅숏은 자주 불리므로 배열을 만들지 않고 센다
+    for (const r of refs) if (r.kind !== "stash") (all++, isHiddenRef(repo, r) || shown++);
+    return shown < all ? `${shown}/${all}` : "";
   });
 /** 숨김 항목 집합. 바뀔 때만 새 참조 (memo 의존성용) */
 export const useHiddenSet = (repo: string) => useSyncExternalStore(subscribe, () => entries(repo));

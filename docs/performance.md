@@ -20,6 +20,9 @@
 | 파생 데이터는 `useMemo` | 트리 만들기(`buildTree`, `toTree`), 커밋별 ref 맵 등. 렌더마다 다시 계산하지 않는다 |
 | 긴 목록은 보이는 행만 그린다 | 커밋 목록은 가상 스크롤 + Canvas. 수만 행을 DOM으로 만들지 않는다 |
 | Context는 자주 바뀌는 값에 쓰지 않는다 | Context 값이 바뀌면 구독하는 모든 컴포넌트가 다시 그려진다 |
+| **외부 스토어 스냅숏은 저장된 참조나 원시값만 돌려준다** | `useSyncExternalStore(sub, getSnapshot)`은 참조가 바뀌면 "변경"으로 보고, 매번 새 참조면 무한 리렌더(크래시). `getSnapshot` 안에서 `?? []`·`?? {}`·`.filter`·`.map`·`{ ...x }` 금지 — 폴백은 밖에서 모듈 상수(`const NONE = []`), 변환은 `useMemo`. 계산이 필요하면 원시값(문자열·boolean·숫자)으로 돌려준다 (`useVisibleCount`·`aiSummary`가 문자열인 이유) |
+| **구독 함수도 참조가 안정적이어야 한다** | `useSyncExternalStore(on(key), …)`처럼 렌더마다 새 함수를 넘기면 React가 렌더마다 구독을 풀고 다시 건다. 모듈 상수로 두거나 키별로 한 번만 만들어 캐시한다 (`prAi.on`·아바타 `onEmail`·`aichat`의 `onChats`) |
+| **목록 항목은 자기 값만 구독한다** | 행마다 `useXxx(key)`로 그 행의 boolean만 구독하면 바뀐 행만 다시 그려진다 (`useRefPicked`·`useHiddenRef`·`useActive`). 목록 전체를 구독해 행에 props로 나눠 주지 않는다. 선택은 `Set`으로 O(1) 판단 |
 
 ## 3. 측정과 회귀 방지
 

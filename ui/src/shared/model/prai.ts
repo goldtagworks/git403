@@ -57,6 +57,7 @@ const recs = new Map<string, Rec>();
 let ridSeq = 0, cardSeq = 0;
 const posting = new Set<string>(); // 게시 확인창이 뜨기 전부터 동기로 거는 잠금(연타로 확인창·게시가 겹치지 않게)
 const subs = new Map<string, Set<() => void>>();
+const onKey = new Map<string, (f: () => void) => () => void>();
 export const aiKey = (repo: string, number: number) => `${repo}\0${number}`;
 const emit = (key: string) => subs.get(key)?.forEach((f) => f());
 const put = (key: string, rec: Rec) => (recs.set(key, rec), emit(key));
@@ -91,10 +92,18 @@ function mergeInc(prev: Extract<Run, { status: "done" }>, prevSha: string, fresh
 
 export const prAi = {
   get: (key: string) => recs.get(key),
-  on: (key: string) => (f: () => void) => {
-    const set = subs.get(key) ?? subs.set(key, new Set()).get(key)!;
-    set.add(f);
-    return () => void set.delete(f);
+  /** 키별 구독 함수. 같은 키면 같은 함수(참조 안정): `useSyncExternalStore`가 렌더마다 다시 구독하지 않게 */
+  on: (key: string) => {
+    let on = onKey.get(key);
+    if (!on) {
+      on = (f: () => void) => {
+        const set = subs.get(key) ?? subs.set(key, new Set()).get(key)!;
+        set.add(f);
+        return () => void set.delete(f);
+      };
+      onKey.set(key, on);
+    }
+    return on;
   },
   /** 시작(같은 PR의 이전 요청은 취소). 취소·동의 거절이면 처음 상태로, 오류는 오류로, 끝나면 결과로 */
   start(key: string, sha: string, call: AiCall<AiPrReview>, opts: Rec["opts"]) {

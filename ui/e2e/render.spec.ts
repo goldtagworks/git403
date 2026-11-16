@@ -1082,3 +1082,23 @@ test("그래프 커밋 행 드래그(체리픽)는 드래그 중 그래프·행�
   await page.mouse.up();
   for (const id of ["CommitGraph", "CommitRow", "Sidebar", "Details", "Toolbar", "StatusBar"]) expect(during[id], id).toBe(before[id]);
 });
+
+// 정적 점검 (docs/performance.md "외부 스토어"): useSyncExternalStore에 렌더마다 새 구독 함수를 넘기거나, 스냅숏에서 새 참조를 만들지 않는다
+test("정적 점검: useSyncExternalStore 구독 함수·스냅숏 참조 안정성", async () => {
+  const { readdirSync, readFileSync, statSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const files: string[] = [];
+  const walk = (d: string) => { for (const f of readdirSync(d)) { const p = join(d, f); if (statSync(p).isDirectory()) walk(p); else if (/\.tsx?$/.test(f)) files.push(p); } };
+  walk(join(import.meta.dirname, "../src"));
+  const bad: string[] = [];
+  for (const f of files) {
+    const src = readFileSync(f, "utf8");
+    // 구독 인자(첫 인자): 화살표 함수·sub(...)를 그 자리에서 만들면 렌더마다 새 함수
+    for (const [, subArg] of src.matchAll(/useSyncExternalStore\(\s*([^,]+?),/g))
+      if (/^(\([^)]*\)|\w+)\s*=>|^sub\(/.test(subArg.trim())) bad.push(`${f}: 구독 함수를 렌더마다 새로 만듦 — ${subArg.trim().slice(0, 60)}`);
+    // 스냅숏(둘째 인자, 한 줄짜리): 새 배열·객체를 만들지 않는다
+    for (const [, snap] of src.matchAll(/useSyncExternalStore\([^,\n]+,\s*(.*)\);?$/gm))
+      if (/\?\?\s*[[{]|\|\|\s*[[{]|\.filter\(|\.map\(|\{\s*\.\.\./.test(snap)) bad.push(`${f}: 스냅숏이 새 참조를 만듦 — ${snap.trim().slice(0, 80)}`);
+  }
+  expect(bad).toEqual([]);
+});
