@@ -893,7 +893,7 @@ test("지원 작업이 제한된 백엔드(capabilities)도 진행률 이벤트 
   for (const id of ["CommitGraph", "Sidebar", "Details", "Toolbar"]) expect(during[id], id).toBe(before[id]);
 });
 
-// 모바일 셸(widgets/mobile): 화면 이동·시트·스크롤이 다른 화면을 다시 그리지 않는다. 데스크탑 beforeEach는 쓰지 않고 Android UA 컨텍스트를 따로 연다.
+// 모바일 셸(app/mobile): 화면 이동·시트·스크롤이 다른 화면을 다시 그리지 않는다. 데스크탑 beforeEach는 쓰지 않고 Android UA 컨텍스트를 따로 연다.
 test("모바일: 상세·diff·파일 이동·뒤로·브랜치 시트는 커밋 목록을 다시 그리지 않고, 목록 스크롤은 셸·상세를 다시 그리지 않는다", async ({ browser }) => {
   const ctx = await browser.newContext({
     userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36",
@@ -1099,6 +1099,29 @@ test("정적 점검: useSyncExternalStore 구독 함수·스냅숏 참조 안정
     // 스냅숏(둘째 인자, 한 줄짜리): 새 배열·객체를 만들지 않는다
     for (const [, snap] of src.matchAll(/useSyncExternalStore\([^,\n]+,\s*(.*)\);?$/gm))
       if (/\?\?\s*[[{]|\|\|\s*[[{]|\.filter\(|\.map\(|\{\s*\.\.\./.test(snap)) bad.push(`${f}: 스냅숏이 새 참조를 만듦 — ${snap.trim().slice(0, 80)}`);
+  }
+  expect(bad).toEqual([]);
+});
+
+// 정적 점검 (docs/reuse.md ui 절, FSD): import는 위 레이어 → 아래 레이어로만, 같은 레이어의 다른 슬라이스는 import하지 않는다(shared 예외)
+test("정적 점검: FSD 레이어 import 방향", async () => {
+  const { readdirSync, readFileSync, statSync } = await import("node:fs");
+  const { join, relative, resolve, dirname } = await import("node:path");
+  const root = join(import.meta.dirname, "../src");
+  const ORDER = ["shared", "entities", "features", "widgets", "app"];
+  const files: string[] = [];
+  const walk = (d: string) => { for (const f of readdirSync(d)) { const p = join(d, f); if (statSync(p).isDirectory()) walk(p); else if (/\.tsx?$/.test(f)) files.push(p); } };
+  walk(root);
+  const where = (p: string) => { const [layer, slice] = relative(root, p).split("/"); return { layer, slice, rank: ORDER.indexOf(layer) }; };
+  const bad: string[] = [];
+  for (const f of files) {
+    const from = where(f);
+    for (const [, spec] of readFileSync(f, "utf8").matchAll(/from "(\.[^"]+)"/g)) {
+      const to = where(resolve(dirname(f), spec));
+      if (to.rank < 0 || from.rank < 0) continue;
+      if (to.rank > from.rank) bad.push(`${relative(root, f)} → ${spec} (아래 레이어가 위 레이어를 import)`);
+      else if (to.rank === from.rank && from.layer !== "shared" && from.layer !== "app" && to.slice !== from.slice) bad.push(`${relative(root, f)} → ${spec} (같은 레이어의 다른 슬라이스)`);
+    }
   }
   expect(bad).toEqual([]);
 });

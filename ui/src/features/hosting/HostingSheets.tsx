@@ -6,7 +6,7 @@ import { Sheet, SheetActions, SheetBody, SheetHead } from "../../shared/ui/Sheet
 import { t, useLocale, type Key } from "../../shared/i18n/i18n";
 import { api } from "../../shared/api/api";
 import { ctx, ops, prBus, type AiCall, type PrInit, type PrProbe, type PrState, useAiOn } from "../../shared/model/ops";
-import { AiSources } from "../ai/AiSources";
+import { AiSources } from "../../entities/ai/AiSources";
 import { Markdown } from "../../shared/ui/Markdown";
 import type { AiSource, HostAccount, HostProvider } from "../../shared/api/types";
 

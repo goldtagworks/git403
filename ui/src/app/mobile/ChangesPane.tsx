@@ -10,7 +10,7 @@ import { ctx, ops } from "../../shared/model/ops";
 import { neighbors } from "../../shared/ui/FileNav";
 import { Icon } from "../../shared/ui/Icon";
 import { contextMenu } from "../../shared/ui/menu";
-import { isStaged, isUnstaged, statusChar, type Side } from "../changes/ChangesView";
+import { isStaged, isUnstaged, statusChar, type Side } from "../../widgets/changes/ChangesView";
 
 const NONE: StatusFile[] = [];
 /** 저장소별 커밋 메시지 초안(세션 메모리). 변경 화면을 떠났다 와도 남고 다른 저장소엔 안 섞인다. 데스크탑처럼 앱을 다시 켜면 없다 */

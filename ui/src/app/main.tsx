@@ -1,4 +1,4 @@
-import { StrictMode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { StrictMode, memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { COMPACT, DETAIL, hideWindow, listen, onOpenRepo, onSelect, openCommit, reportSelected } from "../shared/api/bridge";
 import { api } from "../shared/api/api";
@@ -22,8 +22,8 @@ import { RewordHost } from "../features/rebase/Reword";
 import { AutoFetch, SettingsHost } from "../widgets/settings/SettingsSheet";
 import { GRAPH_PAGE, graphLimit, onPrefs, pref } from "../shared/lib/settings";
 import { Sidebar } from "../widgets/sidebar/Sidebar";
-import { CompareDetails, CompareLists } from "../features/compare/CompareView";
-import { compare, useCompareOpen } from "../shared/model/compare";
+import { CompareLists } from "../features/compare/CompareView";
+import { compare, useCompareCommit, useCompareOpen } from "../shared/model/compare";
 import { markSelected } from "../shared/model/selection";
 import { useRatioSplit, useSplit } from "../shared/ui/Splitter";
 import { Notices } from "../shared/ui/Notices";
@@ -31,7 +31,7 @@ import { gh, suggestOtherAccount } from "../shared/model/gh";
 import { StatusBar } from "../widgets/status-bar/StatusBar";
 import { toast, toastError } from "../shared/lib/toast";
 import { Toasts } from "../shared/ui/Toasts";
-import { MobileShell } from "../widgets/mobile/MobileShell";
+import { MobileShell } from "./mobile/MobileShell";
 import { Tabs } from "../widgets/tabs/Tabs";
 import { Toolbar } from "../widgets/toolbar/Toolbar";
 import { WORKTREE, type GraphView, type Ref, type RepoChange, type Status, type Submodule, type Worktree } from "../shared/api/types";
@@ -75,6 +75,13 @@ const keptTags = new Set<string>();
 
 /** 인증 실패(hosting.unauthorized)면 모바일 토스트에 "계정 연결" 버튼(설정 > 계정) — 모바일엔 gh·키체인 로그인이 없어 토큰 연결이 유일한 길 */
 const connectAction = (code?: string) => (isMobile && code === "hosting.unauthorized" ? { label: t("toast.connectAccount"), run: ops.manageAccounts } : undefined);
+
+/** 브랜치 비교 화면의 상세: 비교 목록에서 고른 커밋만 구독해 기존 `Details`에 넘긴다(App은 다시 그려지지 않음).
+ *  features(비교)가 widgets(Details)를 import하면 FSD 위반이라 둘을 조합하는 app 계층에 둔다 */
+const CompareDetails = memo(function CompareDetails({ repo, rules, right }: { repo: string; rules: IssueRule[]; right?: boolean }) {
+  const commit = useCompareCommit();
+  return <Details repo={repo} commit={commit} rules={rules} right={right} />;
+});
 
 function App() {
   useLocale(); // 언어가 바뀔 때만 App 아래 non-memo 화면이 다시 그려진다

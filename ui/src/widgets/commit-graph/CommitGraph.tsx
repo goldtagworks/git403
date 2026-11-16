@@ -23,7 +23,7 @@ import { isMulti, pick, useFocusRef } from "../../shared/model/selection";
 import { dnd } from "../../shared/model/dnd";
 import { Avatar, avatarImage, avatarUrl, onAvatarChange, requestAvatars } from "../../shared/ui/avatar";
 
-const LITE = COMPACT || isMobile; // 두 줄 행·열 머리글 없음·브랜치 열 없음: VS Code 사이드바·패널과 모바일(widgets/mobile)이 같이 쓴다
+const LITE = COMPACT || isMobile; // 두 줄 행·열 머리글 없음·브랜치 열 없음: VS Code 사이드바·패널과 모바일(app/mobile)이 같이 쓴다
 const ROW_H = COMPACT ? 44 : isMobile ? 56 : 28; // 모바일: 두 줄 행(터치 타깃 44px 이상)
 const COMPACT_GRAPH_MAX = 72; // compact 그래프 열 상한 (넘는 레인은 페이드로 잘린다)
 const LANE_W = 22;

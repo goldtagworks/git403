@@ -13,7 +13,7 @@ import { Icon } from "../../shared/ui/Icon";
 import { contextMenu } from "../../shared/ui/menu";
 import { neighbors } from "../../shared/ui/FileNav";
 import { Sha } from "../../shared/ui/Sha";
-import { MessageBody, parseCoAuthors, splitMessage } from "../details/Details";
+import { MessageBody, parseCoAuthors, splitMessage } from "../../widgets/details/Details";
 
 const DATE_OPTS: Intl.DateTimeFormatOptions = { dateStyle: "medium", timeStyle: "short" };
 const baseName = (p: string) => p.slice(p.lastIndexOf("/") + 1);

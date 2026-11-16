@@ -1335,7 +1335,7 @@ html[data-big] .detail-col .details > .info { width: var(--detail-w) !important;
 .detail-col .details > .info > .msg-box { flex: 0 1 auto; min-height: 60px; } /* 창이 낮으면 메시지 상자가 먼저 줄어(최소 60px) 파일 목록 자리를 남긴다 */
 
 /* 모바일(Android 폰·태블릿): <html data-mobile>은 platform.ts initMobile이 켠다. 데스크탑·VS Code에는 속성이 없어 아래 규칙이 하나도 적용되지 않는다.
-   데스크탑 셸(툴바·탭·상태바)은 모바일에서 마운트되지 않고, 화면은 widgets/mobile(.m-*)이 그린다. 터치 타깃은 최소 44px. 색은 토큰만. */
+   데스크탑 셸(툴바·탭·상태바)은 모바일에서 마운트되지 않고, 화면은 app/mobile(.m-*)이 그린다. 터치 타깃은 최소 44px. 색은 토큰만. */
 html[data-mobile] .app { box-sizing: border-box; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); } /* 네이티브 inset(MainActivity)이 이미 비웠으면 0 */
 html[data-mobile] { touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
 html[data-mobile] :where(button, select, input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"])) { min-height: 44px; }

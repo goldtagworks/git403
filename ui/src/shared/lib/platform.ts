@@ -6,7 +6,7 @@ export const isWin = /Windows/i.test(navigator.userAgent), isMac = /Mac/i.test(n
 // 판정은 여기 한 곳: WebView의 User-Agent에 Android가 있으면 모바일. 동기 값이라 첫 렌더부터 쓰고(IPC 응답을 기다리지 않는다),
 // 데스크탑·VS Code 웹뷰는 항상 false라서 아래 코드는 아무것도 구독·설치하지 않는다. 목업 E2E는 Playwright `userAgent`로 켠다.
 export const isMobile = /Android/i.test(navigator.userAgent);
-/** 이 폭(px) 이상이면 태블릿(두 칸), 아래면 폰(한 화면에 한 가지) — widgets/mobile/MobileShell.tsx */
+/** 이 폭(px) 이상이면 태블릿(두 칸), 아래면 폰(한 화면에 한 가지) — app/mobile/MobileShell.tsx */
 export const TABLET = 600;
 
 const wideQuery = isMobile ? matchMedia(`(min-width: ${TABLET}px)`) : null;

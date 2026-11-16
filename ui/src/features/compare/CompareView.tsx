@@ -4,15 +4,13 @@ import type { Commit, RefCompare } from "../../shared/api/types";
 import { t, useLocale } from "../../shared/i18n/i18n";
 import { countRender } from "../../shared/lib/profile";
 import { relTime } from "../../shared/lib/reltime";
-import type { IssueRule } from "../../shared/lib/issues";
-import { compare, useCompare, useCompareCommit } from "../../shared/model/compare";
+import { compare, useCompare } from "../../shared/model/compare";
 import { dnd } from "../../shared/model/dnd";
 import { atCommit } from "../../shared/model/menus";
 import { ctx, ops } from "../../shared/model/ops";
 import { isMulti } from "../../shared/model/selection";
 import { contextMenu, type MenuEntry } from "../../shared/ui/menu";
 import { Sha } from "../../shared/ui/Sha";
-import { Details } from "../../widgets/details/Details";
 
 type Side = "a" | "b";
 interface Sel { side: Side; ids: ReadonlySet<string> }
@@ -141,8 +139,3 @@ const CmpRow = memo(function CmpRow({ c, side, selected, onPick, onDrag, onMenu 
   );
 });
 
-/** 비교 화면의 아래쪽: 고른 커밋의 정보·변경 파일·diff는 기존 `Details`를 그대로 쓴다 */
-export const CompareDetails = memo(function CompareDetails({ repo, rules, right }: { repo: string; rules: IssueRule[]; right?: boolean }) {
-  const commit = useCompareCommit();
-  return <Details repo={repo} commit={commit} rules={rules} right={right} />;
-});

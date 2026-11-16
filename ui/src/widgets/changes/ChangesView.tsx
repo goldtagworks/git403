@@ -16,7 +16,7 @@ import { DiffFrame } from "../../shared/ui/DiffFrame";
 import { inspect } from "../../features/inspect/Inspector";
 import { bigView } from "../../shared/model/bigview";
 import { GuidePanel, GuideTabs, useGuidePanelOpen, useGuideView, useStagedGuide } from "../../features/ai/GuidePanel";
-import { AiSources } from "../../features/ai/AiSources";
+import { AiSources } from "../../entities/ai/AiSources";
 import type { AiSource, Status, StatusFile } from "../../shared/api/types";
 
 export type Side = "unstaged" | "staged";
