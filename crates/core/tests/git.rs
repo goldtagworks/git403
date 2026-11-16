@@ -427,3 +427,69 @@ async fn 빠른_pull은_갈라졌을_때_ff_only로_멈춘다() {
     assert!(matches!(r, Err(Error::Exit { .. })));
     assert_eq!(out(&repo, &["rev-list", "--merges", "--count", "HEAD"]), "0");
 }
+
+fn run(dir: &Path, args: &[&str]) -> String {
+    let o = std::process::Command::new("git")
+        .current_dir(dir)
+        .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "git {args:?}");
+    String::from_utf8_lossy(&o.stdout).trim().to_owned()
+}
+
+/// main(base·m1) 에서 갈라진 feat(f1·f2). compare_refs는 양방향을 정확히 나눈다.
+#[tokio::test]
+async fn compare_refs_both_directions_and_rejects_options() {
+    let tmp = tempfile::tempdir().unwrap();
+    let d = tmp.path();
+    git(d, &["init", "-q", "-b", "main"]);
+    git(d, &["commit", "-q", "--allow-empty", "-m", "base"]);
+    git(d, &["switch", "-q", "-c", "feat"]);
+    git(d, &["commit", "-q", "--allow-empty", "-m", "f1"]);
+    git(d, &["commit", "-q", "--allow-empty", "-m", "f2"]);
+    git(d, &["switch", "-q", "main"]);
+    git(d, &["commit", "-q", "--allow-empty", "-m", "m1"]);
+    let runner = GitRunner::default();
+
+    let c = gc_core::compare_refs(&runner, d, "main", "feat", 100).await.unwrap();
+    let subj = |v: &[gc_core::Commit]| v.iter().map(|c| c.subject.clone()).collect::<Vec<_>>();
+    assert_eq!(subj(&c.only_a), ["m1"]);
+    assert_eq!(subj(&c.only_b), ["f2", "f1"]);
+    assert_eq!(c.only_a[0].id, run(d, &["rev-parse", "main"]));
+
+    // 같은 ref끼리는 둘 다 비어 있다
+    let same = gc_core::compare_refs(&runner, d, "main", "main", 100).await.unwrap();
+    assert!(same.only_a.is_empty() && same.only_b.is_empty());
+
+    // 옵션처럼 보이는 ref·범위 식·없는 ref는 거절 (출력 파일이 생기지 않는다)
+    for bad in ["--output=/tmp/gc_cmp_pwn", "-n1", " --all", "^main", "a..b", "", "ma in"] {
+        assert!(gc_core::compare_refs(&runner, d, bad, "feat", 100).await.is_err(), "a={bad:?}");
+        assert!(gc_core::compare_refs(&runner, d, "main", bad, 100).await.is_err(), "b={bad:?}");
+    }
+    assert!(!Path::new("/tmp/gc_cmp_pwn").exists());
+    assert!(gc_core::compare_refs(&runner, d, "main", "nope", 100).await.is_err());
+}
+
+/// 여러 커밋 cherry-pick: `git` IPC가 넘기는 `cherry-pick <오래된 것> <최신>` 한 번으로 순서대로 적용된다.
+#[tokio::test]
+async fn cherry_pick_many_applies_in_order() {
+    let tmp = tempfile::tempdir().unwrap();
+    let d = tmp.path();
+    git(d, &["init", "-q", "-b", "main"]);
+    git(d, &["commit", "-q", "--allow-empty", "-m", "base"]);
+    git(d, &["switch", "-q", "-c", "feat"]);
+    for n in ["f1", "f2", "f3"] {
+        std::fs::write(d.join(n), n).unwrap();
+        git(d, &["add", n]);
+        git(d, &["commit", "-q", "-m", n]);
+    }
+    let shas: Vec<String> = run(d, &["log", "--format=%H", "--reverse", "main..feat"]).lines().map(str::to_owned).collect();
+    git(d, &["switch", "-q", "main"]);
+    let runner = GitRunner::default();
+    let argv: Vec<&str> = ["cherry-pick"].into_iter().chain(shas[..2].iter().map(String::as_str)).collect();
+    runner.output_allow(d, &argv, &[]).await.unwrap();
+    assert_eq!(run(d, &["log", "--format=%s", "-3"]), "f2\nf1\nbase");
+    assert!(!d.join("f3").exists());
+}

@@ -93,6 +93,40 @@ pub async fn search_content(git: &GitRunner, repo: &Path, text: &str, hidden: &[
     Ok(String::from_utf8_lossy(&out).lines().map(str::to_owned).collect())
 }
 
+/// 두 ref 비교 결과: `only_a` = `git log B..A`(A에만 있는 커밋), `only_b` = `git log A..B`(B에만 있는 커밋).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefCompare {
+    pub only_a: Vec<Commit>,
+    pub only_b: Vec<Commit>,
+}
+
+#[cfg(feature = "cli")]
+/// 비교용 ref 검사: `-`로 시작(옵션 주입)·빈 값·`..`·`^` 시작·공백·제어 문자를 거절한다. 실제 git에는 `--end-of-options`로도 넘긴다.
+fn check_ref(r: &str) -> Result<&str> {
+    crate::reject_option(r)?;
+    if r.is_empty() || r.starts_with('^') || r.contains("..") || r.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err(gc_i18n::coded!("git.badArg", "invalid argument (must not start with '-'): {arg}", arg = r).into());
+    }
+    Ok(r)
+}
+
+#[cfg(feature = "cli")]
+/// 브랜치 비교: 두 ref의 서로에게 없는 커밋을 양쪽 방향으로 돌려준다 (각각 `limit`개까지, 최신순).
+pub async fn compare_refs(git: &GitRunner, repo: &Path, a: &str, b: &str, limit: usize) -> Result<RefCompare> {
+    let (a, b) = (check_ref(a)?, check_ref(b)?);
+    let max = format!("--max-count={limit}");
+    let one = |range: String| {
+        let max = &max;
+        async move {
+            let out = git.output(repo, &["log", "--no-show-signature", FORMAT, max, "--end-of-options", &range, "--"]).await?;
+            parse(&String::from_utf8_lossy(&out))
+        }
+    };
+    let (only_a, only_b) = tokio::try_join!(one(format!("{b}..{a}")), one(format!("{a}..{b}")))?;
+    Ok(RefCompare { only_a, only_b })
+}
+
 #[cfg(feature = "cli")]
 fn parse(text: &str) -> Result<Vec<Commit>> {
     text.split('\x1e')

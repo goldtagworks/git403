@@ -58,9 +58,9 @@ pub use blame::blame;
 pub use blob::{base64, BLOB_LIMIT};
 #[cfg(feature = "cli")]
 pub use blob::file_blob;
-pub use log::Commit;
+pub use log::{Commit, RefCompare};
 #[cfg(feature = "cli")]
-pub use log::{file_log, head_commit, read_log, search_content};
+pub use log::{compare_refs, file_log, head_commit, read_log, search_content};
 pub use open::{canonical_in_repo, open_command, path_in_repo, OpenCmd};
 pub use patchfile::is_mailbox_patch;
 pub use rebase::RebaseStep;

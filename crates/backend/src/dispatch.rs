@@ -72,6 +72,10 @@ impl Backend {
                 let (repo, path) = (a.repo()?, a.get::<String>("path")?);
                 json(git.file_log(&repo, &path, 5000).await.map_err(err)?)
             }
+            "compare_refs" => {
+                let (repo, ra, rb) = (a.repo()?, a.get::<String>("a")?, a.get::<String>("b")?);
+                json(git.compare_refs(&repo, &ra, &rb, 5000).await.map_err(err)?)
+            }
             "search_content" => {
                 let (repo, text, hidden) = (a.repo()?, a.get::<String>("text")?, a.get::<Option<Vec<String>>>("hidden")?.unwrap_or_default());
                 json(git.search_content(&repo, &text, &hidden).await.map_err(err)?)

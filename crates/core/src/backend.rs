@@ -79,6 +79,9 @@ pub trait GitBackend: Send + Sync {
     async fn file_log(&self, _repo: &Path, _path: &str, _limit: usize) -> Result<Vec<Commit>> {
         no("file_log")
     }
+    async fn compare_refs(&self, _repo: &Path, _a: &str, _b: &str, _limit: usize) -> Result<crate::RefCompare> {
+        no("compare_refs")
+    }
     async fn search_content(&self, _repo: &Path, _text: &str, _hidden: &[String]) -> Result<Vec<String>> {
         no("search_content")
     }
@@ -209,6 +212,9 @@ impl GitBackend for CliBackend {
     }
     async fn file_log(&self, repo: &Path, path: &str, limit: usize) -> Result<Vec<Commit>> {
         crate::file_log(&self.0, repo, path, limit).await
+    }
+    async fn compare_refs(&self, repo: &Path, a: &str, b: &str, limit: usize) -> Result<crate::RefCompare> {
+        crate::compare_refs(&self.0, repo, a, b, limit).await
     }
     async fn search_content(&self, repo: &Path, text: &str, hidden: &[String]) -> Result<Vec<String>> {
         crate::search_content(&self.0, repo, text, hidden).await
