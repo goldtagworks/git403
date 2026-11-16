@@ -66,7 +66,7 @@
 | 28 | 다국어 23개: 기존 14(en ko zh-CN zh-TW vi ja tl km uz lo ru th mn ne) + 유럽 9(de fr es pt-BR it pl tr uk nl), 언어마다 `locales/xx.ts` 전량 번역 | 완료 |
 | A | Android 트랙(하위 단계 27a~27g): 코어 백엔드 레이어화(`GitBackend`·`GixBackend`), Tauri Android 빌드, 모바일 화면, gix fetch·브랜치·pull·push·계정 토큰 인증 | 진행 중 (실기기 GitHub push 확인 남음) |
 | 29 | 브랜치 비교(두 브랜치 선택 → 한쪽에만 있는 커밋 두 목록 + diff), 드래그 체리픽(커밋 → 현재 브랜치, 확인 후 `cherry-pick`) | 완료 |
-| 30 | jj(Jujutsu) 모드: 저장소별 git/jj 선택(colocate, `.git` 공유). 30a 먼저 `jj-lib` 연동 가능성 확인(gix 버전 호환·앱 용량, CLI 의존 없이). 이후 jj 모드 UI — 스테이징 대신 split/squash, change ID·`@` 표시, operation log·undo, bookmark·익명 브랜치, 충돌 커밋 표시 | 대기 |
+| 30 | jj(Jujutsu) 모드: 저장소별 git/jj 선택(colocate, `.git` 공유). 30a `jj-lib` 연동 가능성 확인(완료, 2026-11-16 — 결과는 아래 "30a 결과"). 이후 jj 모드 UI — 스테이징 대신 split/squash, change ID·`@` 표시, operation log·undo, bookmark·익명 브랜치, 충돌 커밋 표시 | 대기 |
 | 31 | UI 네이티브 전환 검토: ① 현재 앱 측정(큰 저장소 기준 RAM — WebContent·WebView2 등 관련 프로세스 합계 —, 시작 시간, 그래프 스크롤, 큰 diff; macOS·Windows·Linux WebKitGTK) ② 같은 화면을 네이티브 시제품(GPUI·Slint 등, Android 가능성 포함)으로 같은 조건 비교 ③ 숫자로 전체 전환·하이브리드(그래프·diff만 네이티브)·유지 결정. VS Code 확장은 네이티브 UI(GPUI 등)를 넣을 수 없음(기본 UI·웹뷰만) → 전환·하이브리드면 확장용 웹 UI를 따로 유지해야 하는 비용을 감점 요인으로 판단 | 대기 |
 
 기능 목록 출처: rea로 확인한 참고 앱의 화면·대화상자·명령 목록. 같은 기능을 우리 방식으로 새로 구현한다.
@@ -74,6 +74,14 @@
 별도 트랙(단계 사이에 끼워 넣음)
 - 참고 앱 분석 결과 정리 후 분석 산출물 삭제 (단계 1 전)
 - 하네스(에이전트·스킬) 재구성 (단계 3 완료 후, 기본 작업 흐름이 생긴 시점)
+
+### 30a 결과 — `jj-lib` 연동 가능성 (2026-11-16, 저장소 밖 시험 크레이트로 확인, 코드는 남기지 않음)
+- **결론: 가능.** jj CLI 없이 라이브러리로 기존 git 저장소에 jj를 붙이고(`Workspace::init_external_git`, 기존 `.git` 그대로) 다시 열어(`default_workspace_loader_factory().create` → `load` → `load_at_head`) 작업 중 커밋(`@`)의 change ID를 읽었다. 저장소의 git 커밋·ref는 그대로.
+- **gix 호환**: `jj-lib 0.47.1`이 `gix 0.90`을 쓴다 = 우리 `gc-core`(feature `gix`)와 같은 버전. 의존성이 하나로 합쳐진다. 단, 이후 gix를 올릴 때는 jj-lib가 쓰는 버전에 맞춰야 한다(둘이 묶임).
+- **Rust 버전 — 걸림돌**: jj-lib 0.47.1은 **Rust 1.97.1 이상**이 필요하고 우리 `rust-toolchain.toml`은 1.92.0. 30단계 본작업 전에 툴체인을 올려야 한다(전체 테스트·Android 빌드 재확인 포함).
+- **용량**(macOS arm64, release·strip·thin LTO, 저장소 열기 + head 읽기 수준): 빈 실행 파일 0.34MB, gix만 1.80MB, jj-lib 10.13MB → **jj-lib 순증 약 8.3MB**(gix가 이미 있는 Android 빌드 기준), 데스크탑 기본 빌드(CLI 백엔드, gix 없음)는 **약 9.8MB** 증가. 기능을 더 쓰면 늘 수 있다.
+- **API 주의**: 0.47에서 저장소 로드 등 주요 API가 async(`pollster::block_on` 등으로 호출), 로더 구조체는 비공개라 팩토리(`default_workspace_loader_factory`)로 만든다. `init_colocated_git`은 기존 `.git`이 있으면 거절하므로 기존 저장소엔 `init_external_git`.
+- **할 일(본작업에 포함)**: 라이브러리 init은 jj CLI와 달리 `.jj/.gitignore`를 만들지 않아 `git status`에 `.jj/`가 미추적으로 보인다 → CLI와 같게 직접 만든다. Android 타깃 크로스 빌드는 미확인(툴체인 올린 뒤 확인).
 
 ---
 
