@@ -99,8 +99,9 @@ function App() {
   const [issueRules, setIssueRules] = useState<IssueRule[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const cmpOpen = useCompareOpen(); // 브랜치 비교 화면: 그래프·상세 자리를 대신한다. 값은 열림 여부뿐이라 비교 중 커밋을 골라도 App은 다시 그려지지 않는다
-  const [wide, setWide] = useState(true); // 로컬 변경사항을 그래프 자리까지 넓게 (고를 때마다 다시 켠다)
-  const pick = useCallback((id: string | null) => (id === WORKTREE && setWide(true), setSelected(id)), []); // 이미 골라 둔 상태에서 다시 눌러도 넓게
+  const [wide, setWide] = useState(false); // 로컬 변경사항을 그래프 자리까지 넓게: 행 더블클릭으로만 켠다(한 번 클릭은 선택 → 오른쪽/아래 상세)
+  const pick = useCallback((id: string | null) => (id !== WORKTREE && setWide(false), setSelected(id)), []);
+  const openLocal = useCallback(() => (setWide(true), setSelected(WORKTREE)), []);
   const [job, setJob] = useState<{ id: number; name: string; quiet?: boolean } | null>(null);
   const [message, setMessage] = useState("");
   const [palette, setPalette] = useState(false);
@@ -559,6 +560,7 @@ function App() {
                 onMore={loadMore}
                 localCount={localCount}
                 onOpen={COMPACT ? openInExt : undefined}
+                onOpenLocal={COMPACT ? undefined : openLocal}
               />
             </div>}
             {!COMPACT && !DETAIL && cmpOpen && (

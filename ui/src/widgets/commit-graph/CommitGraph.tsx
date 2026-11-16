@@ -93,6 +93,8 @@ interface Props {
   localCount: number;
   /** compact 전용: 행 클릭(커밋 id 또는 WORKTREE). 참조가 안정적이어야 한다 */
   onOpen?: (id: string) => void;
+  /** "로컬 변경사항" 행 더블클릭: 변경 화면을 그래프 자리까지 넓게. 참조가 안정적이어야 한다 */
+  onOpenLocal?: () => void;
 }
 
 /** 커밋 우클릭 메뉴 (ops 재사용). 그룹 순서: 체크아웃 → 이 커밋 기준 작업 → AI → 복사·패치·웹 → 태그 */
@@ -130,7 +132,7 @@ const commitMenu = (c: Commit, refs: Ref[]): MenuEntry[] => {
  * 커밋 목록 + 그래프. 보이는 행만 Canvas에 그리는 가상 스크롤.
  * 레인 간 이동은 베지어 곡선으로 그린다.
  */
-export const CommitGraph = memo(function CommitGraph({ view, refs, theme, selected, onSelect, onMore, localCount, onOpen }: Props) {
+export const CommitGraph = memo(function CommitGraph({ view, refs, theme, selected, onSelect, onMore, localCount, onOpen, onOpenLocal }: Props) {
   useLocale();
   countRender("CommitGraph");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -572,6 +574,7 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
           style={{ paddingLeft: PAD_LEFT, height: ROW_H, ...laneStyle(headRow?.lane ?? 0, headRow?.color ?? 0), "--mx": PAD_LEFT } as CSSProperties}
           onMouseDown={() => (setMulti(NONE), onSelect(WORKTREE))}
           onClick={onOpen && (() => onOpen(WORKTREE))}
+          onDoubleClick={onOpenLocal}
         >
           <span className="wip-node" style={{ left: cssX(headRow?.lane ?? 0) }} />
           <span className="subject">{t("graph.localChanges")} <span className="count-pill">{localCount}</span></span>

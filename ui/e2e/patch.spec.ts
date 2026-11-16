@@ -72,7 +72,7 @@ test("작업 디렉터리 변경: diff --binary --output (스테이지됨·안 �
 test("저장 대화상자를 취소하면 git을 실행하지 않는다", async ({ page }) => {
   await page.evaluate(() => ((window as any).__saveCancel = true));
   const before = (await gitCalls(page)).length;
-  await page.getByText("로컬 변경사항").click();
+  await page.getByText("로컬 변경사항").dblclick();
   await page.getByRole("button", { name: "← 그래프" }).click(); // 넓은 변경 화면에서 그래프로
   await page.getByRole("button", { name: "패치 저장" }).first().click();
   await page.locator(".commits").getByText("Initial commit").click({ button: "right" });

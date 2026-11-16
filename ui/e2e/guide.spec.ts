@@ -292,7 +292,7 @@ test("진입점: 커밋 우클릭 '읽는 흐름 가이드'와 빠른 실행이 
 
 test("빠른 실행: 대상이 정해지기 전에 닫으면 요청이 사라지고, 변경 화면에서 스테이지가 비면 안내가 나온다", async ({ page }) => {
   await open(page);
-  await page.locator(".commits").getByText("로컬 변경사항").click();
+  await page.locator(".commits").getByText("로컬 변경사항").dblclick();
   await page.getByRole("button", { name: "← 그래프" }).click(); // 넓은 변경 화면에서 그래프로
   await page.getByRole("listbox", { name: "스테이지됨", exact: true }).getByRole("option").first().dblclick();
   await expect(page.getByRole("listbox", { name: "스테이지됨", exact: true }).getByRole("option")).toHaveCount(0);

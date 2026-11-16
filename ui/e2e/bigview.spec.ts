@@ -577,10 +577,15 @@ test("파일 우클릭 \"크게 보기\"는 그 파일을 먼저 고른 뒤 진�
   await expect(diffPath(page)).toContainText("CommitGraph.tsx");
 });
 
-test("로컬 변경사항은 그래프 자리까지 넓게 열리고, ← 그래프로 돌아오면 다시 고를 때 또 넓게 열린다", async ({ page }) => {
+test("로컬 변경사항: 한 번 클릭은 선택(그래프 그대로, 상세 자리에 변경 목록), 더블클릭은 그래프 자리까지 넓게, ← 그래프로 돌아온다", async ({ page }) => {
   await open(page);
-  await page.getByText("로컬 변경사항").click();
   const back = page.getByRole("button", { name: "← 그래프" });
+  const local = page.locator(".commits").getByText("로컬 변경사항");
+  await local.click();
+  await expect(page.getByLabel("커밋 제목", { exact: true })).toBeVisible(); // 상세 자리에 변경 목록·커밋 상자
+  await expect(page.locator(".main > .pane.graph")).toBeVisible();
+  await expect(back).toHaveCount(0);
+  await local.dblclick();
   await expect(back).toBeVisible();
   await expect(page.locator(".main > .pane.graph")).toBeHidden();
   const list = await box(page, ".changes-lists, .details > .info");
@@ -589,17 +594,20 @@ test("로컬 변경사항은 그래프 자리까지 넓게 열리고, ← 그래
   await back.click();
   await expect(page.locator(".main > .pane.graph")).toBeVisible();
   await expect(page.getByLabel("커밋 제목", { exact: true })).toBeVisible(); // 작은 패널로 그대로
-  await page.locator(".commits").getByText("로컬 변경사항").click(); // 골라 둔 채 다시 눌러도 넓게
+  await local.click(); // 골라 둔 채 한 번 더 눌러도 넓어지지 않는다
+  await expect(back).toHaveCount(0);
+  await local.dblclick();
   await expect(back).toBeVisible();
   await back.click();
   await page.locator(".commits").getByText("Initial commit").click();
-  await page.locator(".commits").getByText("로컬 변경사항").click();
-  await expect(back).toBeVisible();
+  await local.click(); // 다른 커밋을 거쳐 와도 한 번 클릭은 넓어지지 않는다
+  await expect(page.getByLabel("커밋 제목", { exact: true })).toBeVisible();
+  await expect(back).toHaveCount(0);
 });
 
 test("변경 화면: 크게 보던 파일을 원래대로 되돌려 변경이 모두 사라지면 크게 보기를 닫고 빈 화면이 되지 않는다", async ({ page }) => {
   await open(page);
-  await page.getByText("로컬 변경사항").click();
+  await page.getByText("로컬 변경사항").dblclick();
   await page.getByRole("listbox", { name: "스테이지됨", exact: true }).getByRole("option").first().click();
   await bigBtn(page).click();
   expect(await isBig(page)).toBe(true);

@@ -192,7 +192,7 @@ test("AI 리뷰 시트·설정 AI 탭 입력·커밋 상자 AI 작성은 그래�
     for (const id of ["CommitGraph", "Sidebar", "Details", "Toolbar"]) expect(now[id], id).toBe(before[id]);
   };
   // 1) 커밋 상자의 AI 작성: 대기 → 채움, 설정 AI 탭 입력
-  await page.locator(".commits").getByText("로컬 변경사항").click();
+  await page.locator(".commits").getByText("로컬 변경사항").dblclick();
   await page.getByRole("button", { name: "← 그래프" }).click(); // 넓은 변경 화면에서 그래프로
   await expect(page.getByRole("button", { name: "AI로 작성" })).toBeVisible();
   await page.waitForTimeout(400); // AI 상태 조회 등 비동기 갱신이 끝날 때까지
@@ -267,7 +267,7 @@ test("이미지 diff 비교 방식 전환·슬라이더 드래그는 그래프·
   // beforeEach가 연 페이지에 이미지 mock을 심는다
   const m3 = sha("m3");
   await seedNow(page, { blobs: { [`${m3}^:img/a.png`]: BEFORE, [`${m3}:img/a.png`]: AFTER } });
-  await page.locator(".commits").getByText("로컬 변경사항").click(); // 다른 커밋을 거쳐 와야 변경 파일을 다시 읽는다
+  await page.locator(".commits").getByText("로컬 변경사항").dblclick(); // 다른 커밋을 거쳐 와야 변경 파일을 다시 읽는다
   await page.getByRole("button", { name: "← 그래프" }).click(); // 넓은 변경 화면에서 그래프로
   await page.locator(".commits").getByText("Merge branch 'feature/graph'").click();
   await page.getByRole("option", { name: /a\.png/ }).click();
@@ -310,7 +310,7 @@ test("변경 화면에서 status가 새로 읽혀도 같은 이미지는 file_bl
 test("xib 시각 diff: 변경 목록 호버·클릭은 그래프·사이드바·상세·diff 본체를 다시 그리지 않는다", async ({ page }) => {
   const m3 = sha("m3"), p = "ui/SongCell.xib", b64 = (s: string) => Buffer.from(s).toString("base64");
   await seedNow(page, { path: p, diff: textDiff(p), blobs: { [`${m3}^:${p}`]: b64(cellXib(false)), [`${m3}:${p}`]: b64(cellXib(true)) } });
-  await page.locator(".commits").getByText("로컬 변경사항").click();
+  await page.locator(".commits").getByText("로컬 변경사항").dblclick();
   await page.getByRole("button", { name: "← 그래프" }).click(); // 넓은 변경 화면에서 그래프로
   await page.locator(".commits").getByText("Merge branch 'feature/graph'").click();
   await page.getByRole("option", { name: /SongCell\.xib/ }).click();
@@ -375,7 +375,7 @@ test("가이드 단계 이동은 ImageDiff(memo)를 다시 그리지 않는다 (
   const step = (title: string, file: string) => ({ title, file, startLine: 1, endLine: 1, detail: title });
   await page.evaluate(([g]) => ((window as any).__aiResult = { guide: g }), [{ overview: "o", decision: null, steps: [step("a", "img/a.png"), step("b", "img/a.png")], focus: [], apis: [], checks: [] }]);
   await seedNow(page, { blobs: { [`${m3}^:img/a.png`]: BEFORE, [`${m3}:img/a.png`]: AFTER } });
-  await page.locator(".commits").getByText("로컬 변경사항").click();
+  await page.locator(".commits").getByText("로컬 변경사항").dblclick();
   await page.getByRole("button", { name: "← 그래프" }).click(); // 넓은 변경 화면에서 그래프로
   await page.locator(".commits").getByText("Merge branch 'feature/graph'").click();
   await page.getByRole("option", { name: /a\.png/ }).click();
@@ -398,7 +398,7 @@ test("가이드 단계 이동은 IbDiff(memo)를 다시 그리지 않는다", as
   const step = (title: string, file: string) => ({ title, file, startLine: 1, endLine: 1, detail: title });
   await page.evaluate(([g]) => ((window as any).__aiResult = { guide: g }), [{ overview: "o", decision: null, steps: [step("a", x), step("b", x)], focus: [], apis: [], checks: [] }]);
   await seedNow(page, { path: x, diff: textDiff(x), blobs: { [`${m3}^:${x}`]: b64(cellXib(false)), [`${m3}:${x}`]: b64(cellXib(true)) } });
-  await page.locator(".commits").getByText("로컬 변경사항").click();
+  await page.locator(".commits").getByText("로컬 변경사항").dblclick();
   await page.getByRole("button", { name: "← 그래프" }).click(); // 넓은 변경 화면에서 그래프로
   await page.locator(".commits").getByText("Merge branch 'feature/graph'").click();
   await page.getByRole("option", { name: /SongCell\.xib/ }).click();
@@ -822,7 +822,7 @@ test("sha 호버 카드: 호버로 카드가 뜨는 순간과 같은 sha 위 재
 });
 
 test("로컬 변경사항 넓게 보기를 끄면(← 그래프로) CommitGraph를 다시 그리지 않는다", async ({ page }) => {
-  await page.locator(".commits").getByText("로컬 변경사항").click();
+  await page.locator(".commits").getByText("로컬 변경사항").dblclick();
   await expect(page.locator(".main[data-wide]")).toBeVisible();
   await page.waitForTimeout(400);
   const before = await renders(page);
