@@ -596,3 +596,16 @@ test("로컬 변경사항은 그래프 자리까지 넓게 열리고, ← 그래
   await page.locator(".commits").getByText("로컬 변경사항").click();
   await expect(back).toBeVisible();
 });
+
+test("변경 화면: 크게 보던 파일을 원래대로 되돌려 변경이 모두 사라지면 크게 보기를 닫고 빈 화면이 되지 않는다", async ({ page }) => {
+  await open(page);
+  await page.getByText("로컬 변경사항").click();
+  await page.getByRole("listbox", { name: "스테이지됨", exact: true }).getByRole("option").first().click();
+  await bigBtn(page).click();
+  expect(await isBig(page)).toBe(true);
+  // 앱 밖에서 파일을 원래대로 되돌림 → 변경 없음
+  await page.evaluate(() => ((window as any).__clean = true, (window as any).__emit("repo-changed", { worktree: true, refs: false })));
+  await expect.poll(() => isBig(page)).toBe(false);
+  await expect(page.getByText("변경된 파일이 없습니다")).toBeVisible();
+  await expect(page.getByRole("button", { name: "← 그래프" })).toBeVisible();
+});

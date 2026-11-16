@@ -84,11 +84,12 @@ export const ChangesView = memo(function ChangesView({
     bigView.picked();
   }, [fw, status]);
 
-  // 목록이 바뀌어 선택한 파일이 사라지면 첫 파일을 고른다.
+  // 목록이 바뀌어 선택한 파일이 사라지면 첫 파일을 고른다. 남은 파일이 없으면(되돌려 변경이 없어짐) 크게 보기를 닫는다 — 덮을 diff가 없어 빈 화면이 된다.
   useEffect(() => {
     if (!selFile) {
       const f = unstaged[0] ?? staged[0];
       setSel(f ? { side: unstaged[0] ? "unstaged" : "staged", path: f.path } : null);
+      if (!f) bigView.exit();
     }
   }, [selFile, unstaged, staged]);
 
