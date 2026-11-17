@@ -9,6 +9,7 @@ import { tip } from "../../shared/model/tip";
 import { relTime } from "../../shared/lib/reltime";
 import { CommitTip } from "./CommitTip";
 import { isHiddenRef, useHiddenSet } from "../../shared/lib/hidden";
+import { useJjRow } from "../../shared/lib/jjview";
 import { ctx, ops } from "../../shared/model/ops";
 import { resetMenu, stashMenu } from "../../shared/model/menus";
 import { startInteractiveRebase } from "../../features/rebase/RebaseSheet";
@@ -625,6 +626,14 @@ const Row = memo(function Row({ c, top, lane, color, chip, selected, head, match
 }) {
   useLocale(); // 날짜 형식이 언어를 따른다
   countRender("CommitRow");
+  const [jjShort, jjAt, jjConflict, jjFull] = useJjRow(ctx.repo, c.id).split("|"); // jj 보기: 이 행의 change ID·@·충돌만 구독 (jj 보기가 아니면 전부 undefined)
+  const jjEl = jjShort && (
+    <span className="jj-mark">
+      {jjAt === "1" && <span className="jj-at" title={t("graph.jjWorking")}>@</span>}
+      <span className="jj-id" title={t("graph.jjChange", { id: jjFull })}>{jjShort.slice(0, 8)}</span>
+      {jjConflict === "1" && <span className="jj-conflict">{t("graph.jjConflict")}</span>}
+    </span>
+  );
   const badgeEl = chip && (
   <span
     className={`badge ${chip.kind}${chip.head ? " head" : ""}`}
@@ -655,6 +664,7 @@ const Row = memo(function Row({ c, top, lane, color, chip, selected, head, match
         <span className="c-main">
           <span className="c-l1">
             {chip && <span className="row-refs">{badgeEl}</span>}
+            {jjEl}
             <span className="subject">{c.subject}</span>
           </span>
           <span className="c-l2">{COMPACT ? `${c.id.slice(0, 7)} · ${relTime(c.time)} · ${c.author}` : `${c.author} · ${relTime(c.time)}`}</span>
@@ -668,7 +678,7 @@ const Row = memo(function Row({ c, top, lane, color, chip, selected, head, match
       )}
       {!LITE && (
         <>
-          <span className="subject">{c.subject}{c.body && <span className="body"> {c.body}</span>}</span>
+          <span className="subject">{jjEl}{c.subject}{c.body && <span className="body"> {c.body}</span>}</span>
           <span className="author"><Avatar name={c.author} email={c.email} /><span>{c.author}</span></span>
           <span className="date">{dateFmt(DATE_OPTS).format(c.time * 1000)}</span>
           <Sha id={c.id} />

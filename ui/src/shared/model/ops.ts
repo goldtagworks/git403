@@ -7,6 +7,7 @@ import { api } from "../api/api";
 import { t } from "../i18n/i18n";
 import { build, kindLabels, targetLabels, type CustomCommand, type CustomKind, type CustomTarget, type CustomVars } from "../lib/custom";
 import { showAll, toggleHidden } from "../lib/hidden";
+import { jjEnabled, jjOn, setJjStatus, setJjView } from "../lib/jjview";
 import { prompt, type Field } from "../ui/prompt";
 import { toast, toastError, type ToastOpts } from "../lib/toast";
 import type { MenuEntry } from "../ui/menu";
@@ -1113,6 +1114,33 @@ export const ops = {
   lockWorktree: (path: string) => gitReload(["worktree", "lock", "--", path], t("ops.wt.locked")),
   unlockWorktree: (path: string) => gitReload(["worktree", "unlock", "--", path], t("ops.wt.unlocked")),
   pruneWorktrees: () => gitReload(["worktree", "prune"], t("ops.wt.pruned")),
+
+  // ---- jj 모드(30d): 켜짐 여부는 `.jj`(jj_status 성공), git/jj 보기는 저장소별 설정(lib/jjview.ts) ----
+  /** `jj_status`를 읽어 스토어에 반영한다(저장소를 열 때·다시 읽을 때 그래프보다 먼저). 꺼져 있거나 실패하면 git 보기 그대로. */
+  jjLoad: async (repo: string) => setJjStatus(repo, await api.jjStatus(repo).catch(() => null)),
+  jjEnabled: () => jjEnabled(ctx.repo),
+  jjOn: () => jjOn(ctx.repo),
+  /** jj 모드 켜기: OS 확인창 → `jj_enable`(멱등) → jj 보기로 그래프 다시 읽기 */
+  jjEnable: async () => {
+    const repo = ctx.repo;
+    if (!repo || !(await confirm(t("ops.jj.confirm"), t("ops.jj.confirmTitle")))) return;
+    try {
+      await api.jjEnable(repo);
+      setJjView(repo, "jj");
+      await ops.jjLoad(repo);
+    } catch (e) {
+      return ctx.error(String(e));
+    }
+    if (repo === ctx.repo) {
+      ctx.notify(t("ops.jj.enabled"));
+      ctx.reload();
+    }
+  },
+  /** git 보기 ↔ jj 보기 (그래프 범위가 달라서 다시 읽는다) */
+  jjToggleView: () => {
+    setJjView(ctx.repo, jjOn(ctx.repo) ? "git" : "jj");
+    ctx.reload();
+  },
 
   // ---- Git LFS (설치 안 됐으면 안내만) ----
   lfsStatus: () => ctx.showLfs(),

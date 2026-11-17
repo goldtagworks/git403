@@ -3,6 +3,7 @@ import { checkUpdate, invoke, openUrl, pickOpen as open, pickSave as save, relau
 import { t } from "../i18n/i18n";
 import type { Locale } from "../i18n/i18n";
 import { hiddenPatterns } from "../lib/hidden";
+import { jjScope } from "../lib/jjview";
 import { graphLimit, pref } from "../lib/settings";
 import type { JjStatus, GhAccounts, GhProbe, GhRepoAccount, AiProvider, AiEffort, PrReviewComment, ConflictBlobs, AiMethod, AiPart, AiResults, AiBackup, AiRisk, AiSeen, AiChatEntry, AiChatSettings, AiChatSummary, AiStatus, AiTask, BlameLine, ChangedFile, Commit, GraphView, RefCompare, HostAccount, InboxPr, PrDetail, HostProvider, Lfs, Pr, Ref, RemoteInfo, RemoteRepo, SshKey, Stats, StatsRange, Status, Submodule, SettingsApplied, SettingsPreview, SettingsSectionId, Worktree } from "./types";
 
@@ -29,7 +30,7 @@ export const api = {
   /** 폴더 아래 git 저장소 경로 (정렬) */
   findRepos: (root: string) => invoke<string[]>("find_repos", { root }),
   /** `limit` = 읽을 커밋 수(없으면 첫 페이지). 상한 설정을 넘지 않는다 */
-  loadGraph: (repo: string, limit?: number) => invoke<GraphView>("load_graph", { repo, limit: graphLimit(limit), hidden: hiddenPatterns(repo) }),
+  loadGraph: (repo: string, limit?: number) => invoke<GraphView>("load_graph", { repo, limit: graphLimit(limit), hidden: [...hiddenPatterns(repo), ...jjScope(repo)] }),
   /** commit-graph 파일이 없거나 오래됐으면 백그라운드로 만든다 (바로 반환, 실패는 Rust가 로그만) */
   ensureCommitGraph: (repo: string) => invoke<void>("ensure_commit_graph", { repo }),
   /** 작성자 프로필 사진 url (이메일당 한 건, 없으면 null). 캐시는 백엔드 */
@@ -87,7 +88,7 @@ export const api = {
   fileLog: (repo: string, path: string) => invoke<Commit[]>("file_log", { repo, path }),
   /** 브랜치 비교: 서로에게 없는 커밋 두 목록 (최신순, 각 5000개까지). gix(Android)는 미지원 */
   compareRefs: (repo: string, a: string, b: string) => invoke<RefCompare>("compare_refs", { repo, a, b }),
-  searchContent: (repo: string, text: string) => invoke<string[]>("search_content", { repo, text, hidden: hiddenPatterns(repo) }),
+  searchContent: (repo: string, text: string) => invoke<string[]>("search_content", { repo, text, hidden: [...hiddenPatterns(repo), ...jjScope(repo)] }),
   blame: (repo: string, path: string, rev: string | null) => invoke<BlameLine[]>("blame", { repo, path, rev }),
   /** 저장소 안의 텍스트 파일 끝에 한 줄 덧붙인다 (.gitignore 등) */
   /** 서브모듈 제거 뒤 .git/modules/<이름> 삭제 */

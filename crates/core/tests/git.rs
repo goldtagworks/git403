@@ -524,3 +524,44 @@ async fn cherry_pick_many_applies_in_order() {
     assert_eq!(run(d, &["log", "--format=%s", "-3"]), "f2\nf1\nbase");
     assert!(!d.join("f3").exists());
 }
+
+/// jj가 만든 `refs/jj/` 아래(버려진 커밋·`@`)는 git 보기에서 빠지고, jj 보기(`+jj`·`+jj:<sha>`)에서 보인다.
+#[tokio::test]
+async fn jj_refs_hidden_in_git_view_and_shown_in_jj_view() {
+    let tmp = tempfile::tempdir().unwrap();
+    let d = tmp.path();
+    git(d, &["init", "-q", "-b", "main"]);
+    git(d, &["commit", "-q", "--allow-empty", "-m", "base"]);
+    git(d, &["checkout", "-q", "-b", "tmp"]);
+    git(d, &["commit", "-q", "--allow-empty", "-m", "abandoned"]);
+    git(d, &["update-ref", "refs/jj/keep/aaaa", "HEAD"]);
+    git(d, &["checkout", "-q", "main"]);
+    git(d, &["branch", "-q", "-D", "tmp"]);
+    git(d, &["commit", "-q", "--allow-empty", "-m", "at-commit"]);
+    let wc = String::from_utf8(std::process::Command::new("git").current_dir(d).args(["rev-parse", "HEAD"]).output().unwrap().stdout).unwrap().trim().to_owned();
+    git(d, &["reset", "-q", "--hard", "HEAD~1"]); // `@`는 어떤 ref로도 안 닿는다
+    let g = GitRunner::default();
+    let subjects = |hidden: Vec<String>| {
+        let g = &g;
+        async move {
+            let mut v: Vec<String> = read_log(g, d, 20, &hidden).await.unwrap().into_iter().map(|c| c.subject).collect();
+            v.sort();
+            v
+        }
+    };
+    assert_eq!(subjects(vec![]).await, ["base"]);
+    assert_eq!(subjects(vec!["+jj".into()]).await, ["abandoned", "base"]);
+    assert_eq!(subjects(vec![format!("+jj:{wc}")]).await, ["abandoned", "at-commit", "base"]);
+    // 없는 SHA는 무시, 형식이 틀린 값(옵션 주입 시도)은 표지 자체를 무시해 git 보기와 같다
+    assert_eq!(subjects(vec![format!("+jj:{}", "0".repeat(40))]).await, ["abandoned", "base"]);
+    assert_eq!(subjects(vec!["+jj:--output=/tmp/x".into()]).await, ["base"]);
+    assert_eq!(subjects(vec![format!("+jj:{wc}x")]).await, ["base"]);
+    // 내용 검색도 같은 범위
+    std::fs::write(d.join("f.txt"), "needle\n").unwrap();
+    git(d, &["add", "f.txt"]);
+    git(d, &["commit", "-q", "-m", "needle"]);
+    git(d, &["update-ref", "refs/jj/keep/bbbb", "HEAD"]);
+    git(d, &["reset", "-q", "--hard", "HEAD~1"]);
+    assert!(gc_core::search_content(&g, d, "needle", &[]).await.unwrap().is_empty());
+    assert_eq!(gc_core::search_content(&g, d, "needle", &["+jj".into()]).await.unwrap().len(), 1);
+}

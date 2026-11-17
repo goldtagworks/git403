@@ -159,6 +159,13 @@ async fn 로그와_헤드와_refs가_같다() {
     same("read_log hidden", c.read_log(d, 1000, &hidden).await.unwrap(), g.read_log(d, 1000, &hidden).await.unwrap());
     let hidden = vec!["refs/heads/main".to_owned(), "refs/tags/*".to_owned()];
     same("read_log hidden2", c.read_log(d, 1000, &hidden).await.unwrap(), g.read_log(d, 1000, &hidden).await.unwrap());
+    // jj 보기: refs/jj/ 아래는 git 보기에서 빠지고 jj 보기에서 보인다 (두 백엔드 같게)
+    git(d, &["update-ref", "refs/jj/keep/aaaa", "HEAD~1"]);
+    let tip = c.head_commit(d).await.unwrap();
+    for hidden in [vec![], vec!["+jj".to_owned()], vec![format!("+jj:{tip}")], vec![format!("+jj:{}", "0".repeat(40))], vec!["+jj:--all".to_owned()]] {
+        same(&format!("read_log jj {hidden:?}"), c.read_log(d, 1000, &hidden).await.unwrap(), g.read_log(d, 1000, &hidden).await.unwrap());
+    }
+    git(d, &["update-ref", "-d", "refs/jj/keep/aaaa"]);
     same("read_refs", c.read_refs(d).await.unwrap(), g.read_refs(d).await.unwrap());
     let log = c.read_log(d, 1000, &[]).await.unwrap();
     for cm in &log {

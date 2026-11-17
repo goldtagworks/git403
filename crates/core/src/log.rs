@@ -27,23 +27,50 @@ const BODY_MAX: usize = 200;
 #[cfg(feature = "cli")]
 const SEP: char = '\u{1f}';
 
+/// jj 보기 표지: `hidden`에 `+jj`(작업 사본 없음) 또는 `+jj:<커밋 SHA>`(`@`를 추가 시작점으로)가 있으면 jj 보기다.
+/// jj 보기가 아니면 jj가 만든 `refs/jj/` 아래(버려진 커밋 포함)를 그래프에서 뺀다. SHA는 16진수 40·64자만 받고 아니면 표지를 무시한다(인자 주입 방지).
+pub(crate) enum JjScope {
+    Off,
+    On(Option<String>),
+}
+
+pub(crate) fn jj_scope(hidden: &[String]) -> JjScope {
+    let mut on = false;
+    let mut sha = None;
+    for h in hidden {
+        if h == "+jj" {
+            on = true;
+        } else if let Some(s) = h.strip_prefix("+jj:") {
+            if matches!(s.len(), 40 | 64) && s.bytes().all(|b| b.is_ascii_hexdigit()) {
+                on = true;
+                sha = Some(s.to_ascii_lowercase());
+            }
+        }
+    }
+    if on { JjScope::On(sha) } else { JjScope::Off }
+}
+
 #[cfg(feature = "cli")]
 /// 숨긴 ref(`refs/heads/x`, 폴더는 `refs/remotes/origin/foo/*`)를 `--all` 앞의 `--exclude`로 바꾼다.
 /// `refs/`로 시작하지 않는 값은 무시한다. 빈 목록이면 아무것도 붙지 않는다.
 fn exclude_args(hidden: &[String]) -> Vec<String> {
-    hidden.iter().filter(|p| p.starts_with("refs/")).map(|p| format!("--exclude={p}")).collect()
+    let jj = matches!(jj_scope(hidden), JjScope::Off).then(|| "--exclude=refs/jj/*".to_owned());
+    jj.into_iter().chain(hidden.iter().filter(|p| p.starts_with("refs/")).map(|p| format!("--exclude={p}"))).collect()
 }
 
 #[cfg(feature = "cli")]
 /// 숨긴 폴더 안에서 다시 보이게 한 예외(`!refs/remotes/origin/x`, 폴더는 `!…/foo/*`)를 `--all` 뒤에 붙인다.
 /// `--exclude`는 다음 `--all`까지만 걸리므로 예외는 다시 포함된다. 폴더는 `--glob`, 단일 ref는 그대로(없는 ref는 `--ignore-missing`로 무시).
 fn include_args(hidden: &[String]) -> Vec<String> {
-    let inc: Vec<String> = hidden
+    let mut inc: Vec<String> = hidden
         .iter()
         .filter_map(|p| p.strip_prefix('!'))
         .filter(|p| p.starts_with("refs/") && !p.starts_with("refs/-"))
         .map(|p| if p.ends_with("/*") { format!("--glob={p}") } else { p.to_owned() })
         .collect();
+    if let JjScope::On(Some(sha)) = jj_scope(hidden) {
+        inc.push(sha); // `@`(작업 사본 커밋): jj가 refs/jj/keep에 안 붙였을 때도 그래프에 보이게
+    }
     if inc.is_empty() { inc } else { [vec!["--ignore-missing".to_owned()], inc].concat() }
 }
 
@@ -166,8 +193,22 @@ mod tests {
     #[test]
     fn exclude_args_keeps_only_refs() {
         let h = ["refs/heads/x".to_owned(), "refs/remotes/origin/foo/*".to_owned(), "--all".to_owned()];
-        assert_eq!(exclude_args(&h), ["--exclude=refs/heads/x", "--exclude=refs/remotes/origin/foo/*"]);
-        assert!(exclude_args(&[]).is_empty());
+        // git 보기: refs/jj/ 아래는 늘 맨 앞에서 제외
+        assert_eq!(exclude_args(&h), ["--exclude=refs/jj/*", "--exclude=refs/heads/x", "--exclude=refs/remotes/origin/foo/*"]);
+        assert_eq!(exclude_args(&[]), ["--exclude=refs/jj/*"]);
+        // jj 보기(`+jj`·`+jj:<sha>`)는 제외하지 않는다
+        assert_eq!(exclude_args(&["+jj".to_owned()]), Vec::<String>::new());
+    }
+
+    #[test]
+    fn jj_scope_validates_sha() {
+        let ok = "a".repeat(40);
+        assert!(matches!(jj_scope(&[format!("+jj:{ok}")]), JjScope::On(Some(s)) if s == ok));
+        assert!(matches!(jj_scope(&[format!("+jj:{}", "A".repeat(64))]), JjScope::On(Some(s)) if s == "a".repeat(64)));
+        assert!(matches!(jj_scope(&["+jj".to_owned()]), JjScope::On(None)));
+        for bad in ["+jj:--all", "+jj:", "+jj:abc", &format!("+jj:{ok}0"), &format!("+jj:{}g", "a".repeat(39))] {
+            assert!(matches!(jj_scope(&[bad.to_owned()]), JjScope::Off), "{bad}");
+        }
     }
 
     #[test]

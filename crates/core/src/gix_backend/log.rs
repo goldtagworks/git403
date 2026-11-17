@@ -6,6 +6,7 @@ use gix::bstr::ByteSlice;
 use gix::traverse::commit::topo;
 
 use super::common::{fail, glob, hex, open, subject_body};
+use crate::log::{jj_scope, JjScope};
 use crate::{Commit, Result};
 
 const BODY_MAX: usize = 200;
@@ -36,6 +37,7 @@ pub(super) fn to_commit(c: &gix::Commit<'_>) -> Result<Commit> {
 fn tips(r: &gix::Repository, hidden: &[String]) -> Result<Vec<gix::ObjectId>> {
     let excl: Vec<&str> = hidden.iter().map(String::as_str).filter(|p| p.starts_with("refs/")).collect();
     let incl: Vec<&str> = hidden.iter().filter_map(|p| p.strip_prefix('!')).filter(|p| p.starts_with("refs/") && !p.starts_with("refs/-")).collect();
+    let jj = jj_scope(hidden);
     let mut out: Vec<gix::ObjectId> = Vec::new();
     let mut push = |r: &gix::Repository, id: gix::ObjectId| {
         // 커밋을 가리키는 ref만 (태그→트리/블롭은 log가 무시한다)
@@ -55,12 +57,20 @@ fn tips(r: &gix::Repository, hidden: &[String]) -> Result<Vec<gix::ObjectId>> {
             continue;
         }
         let incl_hit = incl.iter().any(|p| if p.ends_with("/*") { glob(p.as_bytes(), &name) } else { p.as_bytes() == name.as_slice() });
+        if !incl_hit && matches!(jj, JjScope::Off) && name.starts_with(b"refs/jj/") {
+            continue;
+        }
         if !incl_hit && excl.iter().any(|p| glob(p.as_bytes(), &name)) {
             continue;
         }
         let mut reference = reference;
         if let Ok(id) = reference.peel_to_id() {
             push(r, id.detach());
+        }
+    }
+    if let JjScope::On(Some(sha)) = &jj {
+        if let Ok(id) = gix::ObjectId::from_hex(sha.as_bytes()) {
+            push(r, id); // 없는 SHA는 CLI의 `--ignore-missing`처럼 무시
         }
     }
     Ok(out)

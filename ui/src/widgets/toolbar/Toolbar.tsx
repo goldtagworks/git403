@@ -141,6 +141,7 @@ export const Toolbar = memo(function Toolbar(p: Props) {
           { label: t("toolbar.addWorktree"), op: "worktree", action: ops.addWorktree },
           { label: t("toolbar.applyPatch"), op: ["apply", "am"], action: ops.applyPatch },
           { label: t("toolbar.stats"), op: "repo_stats", action: ops.repoStats },
+          ops.jjEnabled() ? { label: t("toolbar.jjView"), checked: ops.jjOn(), action: ops.jjToggleView } : { label: t("toolbar.jjEnable"), action: ops.jjEnable },
           { label: "Git Flow", op: FLOW_OPS, submenu: ops.flowMenu() } as MenuEntry,
           {
             label: "LFS",

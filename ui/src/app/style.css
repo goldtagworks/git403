@@ -303,6 +303,11 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 /* "로컬 변경사항" 점선 노드: 레인 색 점선 원 + 아래로 HEAD까지 점선(나머지는 캔버스) */
 .wip-node { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; box-sizing: border-box; border: 2px dashed var(--lane); border-radius: 50%; background: var(--surface); }
 .wip-node::after { content: ""; position: absolute; left: 50%; top: 100%; height: 8px; margin-left: -1.25px; border-left: 2.5px dotted var(--lane); }
+/* jj 보기: 제목 앞 change ID(고정폭·muted), 작업 사본 @(강조 틴트), 충돌(danger 틴트). 색은 토큰만 */
+.jj-mark { display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; vertical-align: top; line-height: 26px; }
+.jj-id { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; color: var(--muted); }
+.jj-at { padding: 0 5px; border-radius: 8px; font-size: 11px; font-weight: 600; line-height: 16px; background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent-fg); }
+.jj-conflict { padding: 0 6px; border-radius: 8px; font-size: 11px; line-height: 16px; background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent); }
 .subject { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .author { width: 110px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .avatar { flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; object-fit: cover; color: var(--av-fg); font-weight: 600; line-height: 1; vertical-align: middle; overflow: hidden; }

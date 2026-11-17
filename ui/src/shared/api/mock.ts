@@ -427,6 +427,7 @@ function handle(cmd: string, args: any): any {
     }
     if (cmd === "ensure_commit_graph") return void (((window as any).__cgCalls ??= []) as string[]).push((args as { repo: string }).repo);
     if (cmd === "load_graph") {
+      ((window as any).__graphHidden ??= []).push((args as { hidden?: string[] }).hidden ?? []); // E2E: load_graph에 넘긴 hidden 목록(jj 표지 포함)
       const v = graphWithout((args as { hidden?: string[] }).hidden ?? []);
       return (window as any).__slow?.includes((args as { repo: string }).repo) ? new Promise((r) => setTimeout(() => r(v), 500)) : v;
     }

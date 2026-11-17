@@ -1125,3 +1125,28 @@ test("정적 점검: FSD 레이어 import 방향", async () => {
   }
   expect(bad).toEqual([]);
 });
+
+test("jj 보기: 켜기·끄기와 jj 상태 반영은 바뀐 행만 다시 그리고 그래프·사이드바·상세·툴바는 건드리지 않는다", async ({ page }) => {
+  const status = {
+    workingCopy: sha("m3"),
+    changeIds: { [sha("m3")]: { short: "kkmpptxzrspx", full: "kkmpptxzrspxqwertyuiopasdfghjklz" }, [sha("c5")]: { short: "rlvkpnrzqnoo", full: "rlvkpnrzqnooqwertyuiopasdfghjklz" } },
+    conflicted: [sha("c5")],
+    truncated: false,
+  };
+  await page.addInitScript((j) => Object.assign(window, { __jj: j }), { enabled: true, status });
+  await page.reload(); // 열린 탭이 복원된다
+  await expect(page.locator(".jj-mark")).toHaveCount(2);
+  await expect(page.locator(".diff .add").first()).toBeVisible();
+  const menu = async (name: RegExp) => {
+    await page.locator(".toolbar .picker").first().click();
+    await page.getByRole("menu").getByRole("menuitem", { name }).click();
+  };
+  const before = await renders(page);
+  await menu(/✓ jj 보기/); // 보기 전환 = 그래프 다시 읽기(내용이 같으면 참조 유지)
+  await expect(page.locator(".jj-mark")).toHaveCount(0);
+  await menu(/jj 보기/);
+  await expect(page.locator(".jj-mark")).toHaveCount(2);
+  const after = await renders(page);
+  for (const id of ["CommitGraph", "Sidebar", "Details", "Toolbar"]) expect(after[id], id).toBe(before[id]);
+  expect(after.CommitRow - before.CommitRow).toBeLessThanOrEqual(8); // 표시가 있는 2개 행만 (켜고 끌 때 각 1번, StrictMode 개발 렌더는 두 번씩 센다)
+});

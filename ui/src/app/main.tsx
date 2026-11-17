@@ -173,7 +173,8 @@ function App() {
     try {
       const want = graphLimit(graphRead.current.repo === path ? Math.max(graphRead.current.n, GRAPH_PAGE) : undefined); // 스크롤로 늘린 개수 유지 (상한이 작아서 줄었던 값은 한 페이지로)
       // 상태도 같이 받는다 (그래프 뒤에 순서대로 기다리지 않게)
-      const [v, r, st] = await Promise.all([api.loadGraph(path, want), api.loadRefs(path), api.loadStatus(path).catch(() => null)]);
+      // jj 보기는 `@` 커밋을 그래프 시작점으로 넘겨야 하므로 jj 상태를 그래프보다 먼저 읽는다 (꺼져 있으면 바로 실패해 빠르다)
+      const [v, r, st] = await Promise.all([ops.jjLoad(path).then(() => api.loadGraph(path, want)), api.loadRefs(path), api.loadStatus(path).catch(() => null)]);
       if (seq !== loadSeq.current) return; // 탭을 빨리 바꾸면 늦게 온 이전 결과는 버린다
       graphRead.current = { repo: path, n: want, full: v.commits.length >= want };
       pendingRef.current = null;
