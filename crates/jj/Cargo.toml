@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 gc-i18n = { path = "../i18n" }
+gix = { version = "0.90", default-features = false }
 jj-lib = "=0.47.1"
 pollster = "1"
 serde.workspace = true

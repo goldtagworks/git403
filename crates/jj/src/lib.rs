@@ -4,13 +4,17 @@
 //! `.git`·`.jj`가 실제 디렉터리(심볼릭 링크·gitfile 아님)일 때만 연다.
 //! gix 버전은 `jj-lib`가 쓰는 것(0.90)과 `gc-core`가 같아야 한다.
 
+mod ops;
+pub use ops::{abandon, describe, edit, new_commit, split, squash};
+pub(crate) use ops::repo_lock;
+
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gc_i18n::{coded, Coded};
-use jj_lib::config::StackedConfig;
+use jj_lib::config::{ConfigLayer, ConfigSource, StackedConfig};
 use jj_lib::default_backend_factories::{
     default_backend_factories, default_working_copy_factories, default_workspace_loader_factory,
 };
@@ -47,7 +51,7 @@ pub struct JjStatus {
     pub truncated: bool,
 }
 
-fn fail(step: &str, e: impl std::fmt::Display) -> Coded {
+pub(crate) fn fail(step: &str, e: impl std::fmt::Display) -> Coded {
     coded!("jj.failed", "jj operation failed ({step}): {detail}", step = step, detail = e.to_string())
 }
 
@@ -56,7 +60,7 @@ fn real_dir(p: &Path) -> bool {
 }
 
 /// 저장소 루트 검증: 정규화되고 `.git`이 실제 디렉터리(링크·gitfile 아님)
-fn check_root(repo: &Path) -> Result<PathBuf, Coded> {
+pub(crate) fn check_root(repo: &Path) -> Result<PathBuf, Coded> {
     let root = fs::canonicalize(repo).map_err(|e| fail("path", e))?;
     if !real_dir(&root.join(".git")) {
         return Err(coded!("jj.notRepo", "Not a plain git repository (.git must be a real directory)"));
@@ -66,6 +70,26 @@ fn check_root(repo: &Path) -> Result<PathBuf, Coded> {
 
 fn settings() -> Result<UserSettings, Coded> {
     UserSettings::from_config_and_home_dir(StackedConfig::with_defaults(), None).map_err(|e| fail("settings", e))
+}
+
+/// 쓰기 작업용 설정: 기본 설정 + 저장소의 git 설정(`user.name`·`user.email`, 전역·저장소 git config 그대로 = git 커밋과 같은 작성자).
+/// 사용자·저장소 jj 설정은 읽지 않는다. git 실행 파일은 쓰지 않는다(gix로 읽음 — PATH·Android 무관).
+pub(crate) fn settings_with_identity(root: &Path) -> Result<UserSettings, Coded> {
+    let mut config = StackedConfig::with_defaults();
+    let mut layer = ConfigLayer::empty(ConfigSource::User);
+    if let Ok(repo) = gix::open(root) {
+        let snap = repo.config_snapshot();
+        for key in ["user.name", "user.email"] {
+            if let Some(v) = snap.string(key) {
+                let v = v.to_string();
+                if !v.trim().is_empty() {
+                    layer.set_value(key, v).map_err(|e| fail("settings", e))?;
+                }
+            }
+        }
+    }
+    config.add_layer(layer);
+    UserSettings::from_config_and_home_dir(config, None).map_err(|e| fail("settings", e))
 }
 
 /// `.jj`·`.jj/repo`·`.jj/working_copy`가 모두 실제 디렉터리(링크 아님)
@@ -79,6 +103,7 @@ pub fn is_enabled(repo_path: &Path) -> bool {
 /// jj CLI처럼 `.jj/.gitignore`(`/*`)를 만들어 `git status`에 `.jj/`가 안 보이게 한다.
 pub fn enable(repo_path: &Path) -> Result<(), Coded> {
     let root = check_root(repo_path)?;
+    let _gate = repo_lock(&root);
     let jj = root.join(".jj");
     if fs::symlink_metadata(&jj).is_ok() {
         if is_enabled(&root) {
@@ -135,12 +160,19 @@ fn ensure_gitignore(jj: &Path) -> Result<(), Coded> {
 }
 
 fn load(root: &Path) -> Result<(Workspace, Arc<ReadonlyRepo>), Coded> {
-    let settings = settings()?;
-    let ws = default_workspace_loader_factory()
+    load_with(root, &settings()?)
+}
+
+pub(crate) fn load_workspace(root: &Path, settings: &UserSettings) -> Result<Workspace, Coded> {
+    default_workspace_loader_factory()
         .create(root)
         .map_err(|e| fail("loader", e))?
-        .load(&settings, &default_backend_factories(), &default_working_copy_factories())
-        .map_err(|e| fail("load", e))?;
+        .load(settings, &default_backend_factories(), &default_working_copy_factories())
+        .map_err(|e| fail("load", e))
+}
+
+pub(crate) fn load_with(root: &Path, settings: &UserSettings) -> Result<(Workspace, Arc<ReadonlyRepo>), Coded> {
+    let ws = load_workspace(root, settings)?;
     let repo = pollster::block_on(ws.load_at_head()).map_err(|e| fail("head", e))?;
     Ok((ws, repo))
 }

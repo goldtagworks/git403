@@ -68,6 +68,14 @@
 - 이력은 저장 전 `redact`(토큰, URL `user:pass@`, `Authorization: Bearer`·`bearer`, `password=`/`pass=`/`pwd=`/`credential`/`private_key` 값, 개인키 블록)로 가린다. 저장 실패는 `note` 이벤트로 알린다. AI 답의 링크는 실제 주소를 숨기지 않는다(전체 주소를 title로, 보이는 글자에 호스트가 없으면 ` (호스트)` 덧붙임).
 - Tauri CSP(`src-tauri/tauri.conf.json`): `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: asset:…; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; frame-src 'none'; form-action 'none'`. 이유: UI는 `fetch`·웹소켓·`eval`을 쓰지 않고 네트워크는 Rust 쪽이 하며, 이미지는 아바타(GitHub·Gravatar·PR 본문)처럼 임의 https 호스트와 data·blob만 필요하다. 인라인 스타일은 React `style`·초기 스플래시용이라 `'unsafe-inline'`(스타일만). 개발(`tauri dev`)용 `devCsp`만 Vite HMR(`ws://localhost:1420`)을 더 연다.
 
+## jj 모드 (`crates/jj`, IPC `jj_*`)
+
+- **저장소는 신뢰하지 않는다.** `.git`·`.jj`·`.jj/repo`·`.jj/working_copy`가 실제 디렉터리(링크·gitfile 거절)일 때만 연다. 사용자·저장소 **jj 설정은 읽지 않는다**(`StackedConfig::with_defaults`). git 실행 파일은 쓰지 않는다(설정은 gix로 읽음 → 훅·fsmonitor·alias 실행 경로 없음).
+- **커밋 작성자 = 저장소의 git config**(`user.name`·`user.email`, 전역·저장소 로컬 모두 — git 커밋과 같은 값). 저장소 로컬 설정은 신뢰하지 않는 입력이지만 **문자열 두 개로만** 쓰이고(커밋의 작성자 칸) 실행·경로 해석에 쓰이지 않는다. 무시 파일은 `core.excludesFile`을 `trusted_path`로만(저장소 로컬 설정이 가리키는 파일은 안 읽음) + `.git/info/exclude`.
+- **인자 검증은 저장소를 열기 전**: SHA는 16진수 정확히 40자(리비전 식·옵션 주입 불가), 경로는 저장소 상대만 — 빈 값·절대·`..`·`.`·`//`·`\`·`:`(드라이브·NTFS 스트림)·NUL 거절, `.git`·`.jj`는 윈도가 같게 보는 변형(`.git.`·끝 공백·8.3 `GIT~1`)까지 구성요소 단위로 거절. 설명은 1MiB·NUL 금지. 시험: `rejects_bad_sha_paths_and_leaves_repo_untouched`(거절 뒤 ref·operation 불변)·`windows_style_reserved_paths_are_refused`·서버 `jj_쓰기_ipc_와_우회_거절`.
+- **불변 커밋은 고치지 않는다**: 루트, `trunk()`(main/master/trunk @origin/@upstream)·태그·추적 안 하는 원격 북마크의 조상(jj 기본 `immutable_heads()`).
+- **동시성·중단**: 저장소별 직렬화 + 작업 사본 잠금 뒤에 head 읽기. 중단된 작업이 남긴 뒤처진 작업 사본은 사용자 변경이 없을 때만 체크아웃하고, 변경이 있으면 덮어쓰지 않고 거절(`jj.stale`). 밖에서 HEAD가 옮겨졌는데 옛 `@` SHA로 온 요청은 거절.
+
 ## 검증 (보안에 닿는 변경마다 필수)
 
 1. **우회 시도를 테스트로 남긴다.** 허용 목록·경로 제한을 바꾸면 실제 `claude` CLI로 우회 명령(예: `git -c alias.x='!sh' x`, `git -c core.pager=…`, `git config core.hooksPath …`, 체이닝 `&&`·`;`·`$( )`·리다이렉트, 저장소 밖 Read/Edit, 악의적 `.claude/settings.json`이 든 저장소)이 막히는지 확인하고 회귀 테스트로 고정한다.
@@ -75,6 +83,7 @@
 3. **문서 동기화.** 허용 목록·확인 규칙이 바뀌면 이 문서와 `docs/reuse.md`를 함께 고친다. 문서와 코드가 다르면 버그로 본다.
 
 변경 이력
+- 2026-11-17: jj 모드 절(30e 쓰기 작업: 인자 검증·불변 커밋·작성자=git config·동시성)
 - 2026-11-05: AI 채팅 보안 리뷰(금지 목록 `-c` 우회·도구 경로 무제한·저장소 설정 신뢰) 뒤 작성
 - 2026-11-05: OS 샌드박스 방어층(macOS Seatbelt·Linux bubblewrap·Windows는 확인+경고)과 "다층 방어" 절
 - 2026-11-05: 9차 리뷰 — hooksPath 홈 전개·서브모듈 기준·include 설정 파일 보호·샌드박스 밖 git 생성 단일화+소스 검사·확인에 본 지문 대조·저장소 잠금·되돌리기 digest 강제·이력 권한

@@ -353,3 +353,58 @@ fn jj_는_심볼릭_링크_git_jj_를_거절한다() {
     let v = s.call(3, "jj_status", json!({"repo": r.path()}));
     assert!(v["err"].as_str().unwrap().contains("jj.notEnabled"), "{v}");
 }
+
+#[test]
+fn jj_쓰기_ipc_와_우회_거절() {
+    let (cfg, r) = (tempfile::tempdir().unwrap(), repo());
+    let p = r.path();
+    let repo = p.to_string_lossy().into_owned();
+    let mut s = Server::start(cfg.path());
+    let git = |args: &[&str]| {
+        let o = std::process::Command::new("git").args(args).current_dir(p).output().unwrap();
+        assert!(o.status.success(), "git {args:?}");
+        String::from_utf8(o.stdout).unwrap().trim().to_string()
+    };
+    let main = git(&["rev-parse", "HEAD"]);
+    // 켜기 전
+    let v = s.call(1, "jj_new", json!({"repo": repo, "parents": [main]}));
+    assert!(v["err"].as_str().unwrap().contains("jj.notEnabled"), "{v}");
+    assert_eq!(s.call(2, "jj_enable", json!({"repo": repo}))["ok"], Value::Null);
+
+    // new → describe → squash(sha 생략·paths 생략) → abandon
+    assert_eq!(s.call(3, "jj_new", json!({"repo": repo, "parents": [main]}))["ok"], json!([]));
+    let wc = |s: &mut Server, id| s.call(id, "jj_status", json!({"repo": repo}))["ok"]["workingCopy"].as_str().unwrap().to_string();
+    let w = wc(&mut s, 4);
+    assert_eq!(git(&["rev-parse", &format!("{w}^")]), main);
+    assert_eq!(s.call(5, "jj_describe", json!({"repo": repo, "sha": w, "message": "hello"}))["ok"], json!([]));
+    let w = wc(&mut s, 6);
+    assert_eq!(git(&["log", "-1", "--format=%s", &w]), "hello");
+    std::fs::write(p.join("n.txt"), "n\n").unwrap();
+    assert_eq!(s.call(7, "jj_squash", json!({"repo": repo, "paths": ["n.txt"]}))["ok"], json!([]));
+    let w = wc(&mut s, 8);
+    let parent = git(&["rev-parse", &format!("{w}^")]);
+    assert!(git(&["ls-tree", "-r", "--name-only", &parent]).contains("n.txt"));
+    assert_eq!(s.call(9, "jj_split", json!({"repo": repo, "sha": parent, "paths": ["n.txt"]}))["ok"], json!([]));
+    let w = wc(&mut s, 13);
+    let second = git(&["rev-parse", &format!("{w}^")]);
+    assert_eq!(s.call(10, "jj_edit", json!({"repo": repo, "sha": second}))["ok"], json!([]));
+    assert_eq!(wc(&mut s, 11), second);
+    assert_eq!(s.call(12, "jj_abandon", json!({"repo": repo, "sha": second}))["ok"], json!([]));
+    git(&["fsck", "--strict"]);
+
+    // 우회: 옵션·리비전 식 SHA, 경로 탈출, 인자 누락·형식 오류
+    let main = git(&["rev-parse", "main"]);
+    for (i, sha) in ["--all", "main", "HEAD~1", "../x"].iter().enumerate() {
+        let v = s.call(20 + i as u64, "jj_abandon", json!({"repo": repo, "sha": sha}));
+        assert!(v["err"].as_str().unwrap().contains("jj.badSha"), "{v}");
+    }
+    for (i, path) in ["../../etc/passwd", "/etc/passwd", ".git/config", "a/../../b"].iter().enumerate() {
+        let v = s.call(30 + i as u64, "jj_squash", json!({"repo": repo, "paths": [path]}));
+        assert!(v["err"].as_str().unwrap().contains("jj.badPath"), "{v}");
+        let v = s.call(40 + i as u64, "jj_split", json!({"repo": repo, "sha": main, "paths": [path]}));
+        assert!(v["err"].as_str().unwrap().contains("jj.badPath"), "{v}");
+    }
+    assert!(s.call(50, "jj_new", json!({"repo": repo, "parents": "x"}))["err"].is_string());
+    assert!(s.call(51, "jj_describe", json!({"repo": repo, "sha": main}))["err"].is_string());
+    assert!(s.call(52, "jj_new", json!({"repo": repo, "parents": []}))["err"].as_str().unwrap().contains("jj.badSha"));
+}

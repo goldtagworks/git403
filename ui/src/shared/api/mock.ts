@@ -810,6 +810,15 @@ function handle(cmd: string, args: any): any {
       if (!j.enabled) throw JSON.stringify({ code: "jj.notEnabled", vars: {}, message: "jj is not enabled for this repository" });
       return j.status ?? { workingCopy: null, changeIds: {}, conflicted: [], truncated: false };
     }
+    // jj 쓰기(30e): 호출만 gitCalls에 [cmd, ...인자]로 기록(결과 상태는 window.__jj.status로 테스트가 정함). window.__jj.fail(JSON 문자열)이 있으면 그 오류로 실패
+    if (/^jj_(new|describe|edit|squash|split|abandon)$/.test(cmd)) {
+      const j = ((window as any).__jj ??= {});
+      if (!j.enabled) throw JSON.stringify({ code: "jj.notEnabled", vars: {}, message: "jj is not enabled for this repository" });
+      if (j.fail) throw j.fail;
+      const a = args as { parents?: string[]; sha?: string | null; message?: string; paths?: string[] | null };
+      gitCalls.push([cmd, ...(a.parents ? [a.parents.join(",")] : []), ...(a.sha ? [a.sha] : []), ...(a.message !== undefined ? [a.message] : []), ...(a.paths ? [a.paths.join(",")] : [])]);
+      return [];
+    }
     if (cmd === "account_remove") {
       const { account } = args as { account: HostAccount };
       (window as any).__accounts = accountList().filter((a) => !(a.provider === account.provider && a.host === account.host && a.username === account.username));

@@ -107,6 +107,31 @@ impl Backend {
                 let repo = a.repo()?;
                 json(off(move || gc_jj::status(&repo).map_err(|e| e.json())).await?)
             }
+            // jj 쓰기 작업(30e): 모두 블로킹 스레드(저장소별 직렬화는 gc_jj 안), 성공하면 경고 `Coded` 값 배열(보통 빈 배열), 오류는 `jj.*` 코드 JSON. SHA는 16진수 40자, paths는 저장소 상대 파일만
+            "jj_new" => {
+                let (repo, parents) = (a.repo()?, a.get::<Vec<String>>("parents")?);
+                json(off(move || gc_jj::new_commit(&repo, &parents).map(|w| w.iter().map(gc_i18n::Coded::value).collect::<Vec<_>>()).map_err(|e| e.json())).await?)
+            }
+            "jj_describe" => {
+                let (repo, sha, message) = (a.repo()?, a.get::<String>("sha")?, a.get::<String>("message")?);
+                json(off(move || gc_jj::describe(&repo, &sha, &message).map(|w| w.iter().map(gc_i18n::Coded::value).collect::<Vec<_>>()).map_err(|e| e.json())).await?)
+            }
+            "jj_edit" => {
+                let (repo, sha) = (a.repo()?, a.get::<String>("sha")?);
+                json(off(move || gc_jj::edit(&repo, &sha).map(|w| w.iter().map(gc_i18n::Coded::value).collect::<Vec<_>>()).map_err(|e| e.json())).await?)
+            }
+            "jj_squash" => {
+                let (repo, sha, paths) = (a.repo()?, a.get::<Option<String>>("sha")?, a.get::<Option<Vec<String>>>("paths")?.unwrap_or_default());
+                json(off(move || gc_jj::squash(&repo, sha.as_deref(), &paths).map(|w| w.iter().map(gc_i18n::Coded::value).collect::<Vec<_>>()).map_err(|e| e.json())).await?)
+            }
+            "jj_split" => {
+                let (repo, sha, paths) = (a.repo()?, a.get::<String>("sha")?, a.get::<Vec<String>>("paths")?);
+                json(off(move || gc_jj::split(&repo, &sha, &paths).map(|w| w.iter().map(gc_i18n::Coded::value).collect::<Vec<_>>()).map_err(|e| e.json())).await?)
+            }
+            "jj_abandon" => {
+                let (repo, sha) = (a.repo()?, a.get::<String>("sha")?);
+                json(off(move || gc_jj::abandon(&repo, &sha).map(|w| w.iter().map(gc_i18n::Coded::value).collect::<Vec<_>>()).map_err(|e| e.json())).await?)
+            }
             // ---- 통계 ----
             "repo_stats" => {
                 let (repo, range, branch, with_lines, token) =

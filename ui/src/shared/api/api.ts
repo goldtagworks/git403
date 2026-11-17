@@ -5,7 +5,7 @@ import type { Locale } from "../i18n/i18n";
 import { hiddenPatterns } from "../lib/hidden";
 import { jjScope } from "../lib/jjview";
 import { graphLimit, pref } from "../lib/settings";
-import type { JjStatus, GhAccounts, GhProbe, GhRepoAccount, AiProvider, AiEffort, PrReviewComment, ConflictBlobs, AiMethod, AiPart, AiResults, AiBackup, AiRisk, AiSeen, AiChatEntry, AiChatSettings, AiChatSummary, AiStatus, AiTask, BlameLine, ChangedFile, Commit, GraphView, RefCompare, HostAccount, InboxPr, PrDetail, HostProvider, Lfs, Pr, Ref, RemoteInfo, RemoteRepo, SshKey, Stats, StatsRange, Status, Submodule, SettingsApplied, SettingsPreview, SettingsSectionId, Worktree } from "./types";
+import type { JjStatus, JjWarning, GhAccounts, GhProbe, GhRepoAccount, AiProvider, AiEffort, PrReviewComment, ConflictBlobs, AiMethod, AiPart, AiResults, AiBackup, AiRisk, AiSeen, AiChatEntry, AiChatSettings, AiChatSummary, AiStatus, AiTask, BlameLine, ChangedFile, Commit, GraphView, RefCompare, HostAccount, InboxPr, PrDetail, HostProvider, Lfs, Pr, Ref, RemoteInfo, RemoteRepo, SshKey, Stats, StatsRange, Status, Submodule, SettingsApplied, SettingsPreview, SettingsSectionId, Worktree } from "./types";
 
 /** PR 계열 호출에 로컬 저장소 경로(연결된 gh 계정 토큰을 쓰게) */
 const lr = (localRepo?: string) => (localRepo ? { localRepo } : {});
@@ -174,6 +174,15 @@ export const api = {
   /** jj 켜기(기존 git 저장소 위, 멱등). 켜짐 여부는 `.jj` 존재 */
   jjEnable: (repo: string) => invoke<void>("jj_enable", { repo }),
   jjStatus: (repo: string) => invoke<JjStatus>("jj_status", { repo }),
+  /** jj 쓰기(30e). sha = 커밋 SHA(16진수 40자), paths = 저장소 상대 파일. 오류는 `jj.*` 코드 JSON. 성공하면 경고 배열(보통 빈 배열: git ref export 실패 등). `jj.stale`이면 새로 고친 뒤 다시. 끝나면 jjStatus·그래프를 다시 읽는다 */
+  jjNew: (repo: string, parents: string[]) => invoke<JjWarning[]>("jj_new", { repo, parents }),
+  jjDescribe: (repo: string, sha: string, message: string) => invoke<JjWarning[]>("jj_describe", { repo, sha, message }),
+  jjEdit: (repo: string, sha: string) => invoke<JjWarning[]>("jj_edit", { repo, sha }),
+  /** sha 생략 = @. paths 생략 = 커밋 전체. 머지 커밋은 거절 */
+  jjSquash: (repo: string, sha?: string, paths?: string[]) => invoke<JjWarning[]>("jj_squash", { repo, sha: sha ?? null, paths: paths ?? null }),
+  /** paths = 첫 커밋으로 갈 파일, 나머지는 둘째(`@`·자손이 옮겨 옴) */
+  jjSplit: (repo: string, sha: string, paths: string[]) => invoke<JjWarning[]>("jj_split", { repo, sha, paths }),
+  jjAbandon: (repo: string, sha: string) => invoke<JjWarning[]>("jj_abandon", { repo, sha }),
   ghBind: (repo: string, user?: string) => invoke<void>("gh_bind", { repo, ...(user ? { user } : {}) }),
   ghProbe: (repo: string) => invoke<GhProbe[]>("gh_probe", { repo }),
   cancelJob: (job: number) => invoke<void>("cancel_job", { job }),

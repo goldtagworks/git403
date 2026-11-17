@@ -1730,6 +1730,7 @@ name = "gc-jj"
 version = "1.0.6"
 dependencies = [
  "gc-i18n",
+ "gix",
  "jj-lib",
  "pollster",
  "serde",

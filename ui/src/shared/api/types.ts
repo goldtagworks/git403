@@ -204,6 +204,8 @@ export interface GhAccounts { installed: boolean; hosts: { host: string; account
 /** bound = 이 저장소에 연결한 계정(git config), active = 지금 gh 활성 계정, remote = "owner/name"(GitHub류가 아니면 null) */
 export interface JjChangeId { short: string; full: string }
 /** jj 상태(30c): 키는 git 커밋 SHA. `workingCopy`=@ 커밋 SHA */
+/** jj 쓰기 작업이 성공하며 돌려주는 경고(`Coded` 값) */
+export interface JjWarning { code: string; vars: Record<string, string>; message: string }
 export interface JjStatus { workingCopy: string | null; changeIds: Record<string, JjChangeId>; conflicted: string[]; truncated: boolean }
 export interface GhRepoAccount { host: string; bound: string | null; active: string | null; remote: string | null }
 export interface GhProbe { user: string; ok: boolean }
