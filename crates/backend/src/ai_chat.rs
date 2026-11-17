@@ -811,11 +811,15 @@ EOF"#;
     /// 9차 L2: 같은 저장소(다른 철자의 경로 포함)에서는 대화가 달라도 AI 차례를 동시에 돌리지 않는다. 끝나면 풀린다
     #[tokio::test]
     async fn only_one_ai_turn_runs_per_repository() {
-        let (b, rec, repo, bin, _keep) = setup("sleep 3\n").await;
+        // 취소될 때까지 끝나지 않는 차례(고정 sleep은 부하가 크면 두 번째 시작 전에 끝나 흔들린다)
+        let (b, rec, repo, bin, _keep) = setup("while :; do sleep 0.05; done\n").await;
         b.start_t(&prog(&bin), repo.clone(), "one".into(), "a".into(), None, true).await.unwrap();
         let alias = repo.join(".").join("..").join(repo.file_name().unwrap());
         for p in [repo.clone(), alias] {
-            let e = b.start_t(&prog(&bin), p, "two".into(), "b".into(), None, true).await.unwrap_err();
+            let e = match b.start_t(&prog(&bin), p, "two".into(), "b".into(), None, true).await {
+                Err(e) => e,
+                Ok(v) => panic!("두 번째 차례가 시작됨 {v} / 첫 차례 이벤트: {:?}", rec.0.lock().iter().filter(|p| p["conversation"] == "one").collect::<Vec<_>>()),
+            };
             assert!(e.contains("aiChat.busy"), "{e}");
         }
         // 되돌리기도 차례가 도는 동안은 거절
@@ -1130,10 +1134,20 @@ EOF"#;
     async fn ai_start_waits_briefly_for_an_automatic_fetch_but_never_for_a_user_job() {
         use serde_json::json;
         let (b, rec, repo, bin, keep) = setup(OK).await;
-        // 1초 걸리는 자동 작업: 기다렸다가 시작
-        b.dispatch("start_job", json!({"repo": repo, "args": ["-c", "alias.slow=!sleep 1", "slow"], "interactive": false})).await.unwrap();
+        // 안내 이벤트가 나간 뒤에야 끝나는 자동 작업: 기다렸다가 시작 (고정 sleep은 부하가 크면 안내 전에 끝나 흔들린다)
+        let marker = bin.path().join("fetch-done");
+        let slow = format!("alias.slow=!while [ ! -f '{}' ]; do sleep 0.05; done", marker.display());
+        b.dispatch("start_job", json!({"repo": repo, "args": ["-c", slow, "slow"], "interactive": false})).await.unwrap();
+        let (r2, m2) = (rec.clone(), marker.clone());
+        let release = tokio::spawn(async move {
+            while !r2.kinds("w1").iter().any(|k| k == "note") {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            std::fs::write(&m2, "").unwrap();
+        });
         let t = std::time::Instant::now();
         b.start_t(&prog(&bin), repo.clone(), "w1".into(), "a".into(), None, true).await.unwrap();
+        release.await.unwrap();
         assert!(t.elapsed() >= Duration::from_millis(300), "기다리지 않음: {:?}", t.elapsed());
         rec.last("w1").await;
         assert!(rec.kinds("w1").iter().any(|k| k == "note"), "기다리는 동안 안내 이벤트가 나간다: {:?}", rec.kinds("w1"));
@@ -1154,9 +1168,10 @@ EOF"#;
         }
         // 사용자가 직접 시작한 작업(interactive 생략)은 기다리지 않고 바로 거절
         let job = b.dispatch("start_job", json!({"repo": repo, "args": ["-c", "alias.slow=!sleep 30", "slow"]})).await.unwrap();
-        let t = std::time::Instant::now();
         let e = b.start_t(&prog(&bin), repo.clone(), "w3".into(), "a".into(), None, true).await.unwrap_err();
-        assert!(e.contains("aiChat.repoJobRunning") && t.elapsed() < Duration::from_millis(1000), "{e} {:?}", t.elapsed());
+        // 기다렸다면 0.3초 뒤 안내 이벤트가 나갔을 것이다(시간만 재면 부하가 클 때 대기 전 단계가 느려져 흔들린다)
+        assert!(e.contains("aiChat.repoJobRunning"), "{e}");
+        assert!(rec.kinds("w3").is_empty(), "사용자 작업은 기다리지 않는다: {:?}", rec.kinds("w3"));
         b.dispatch("cancel_job", json!({"job": job})).await.unwrap();
         // 자동 작업과 사용자 작업이 같이 돌면 사용자 작업이 있으므로 바로 거절
         drop(keep);

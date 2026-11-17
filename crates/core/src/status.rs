@@ -43,11 +43,10 @@ pub struct Status {
 #[cfg(feature = "cli")]
 /// 작업 디렉터리 상태 + 현재 브랜치의 ahead/behind.
 pub async fn read_status(git: &GitRunner, repo: &Path) -> Result<Status> {
-    let out = git
-        .query(repo, &["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all"])
-        .await?;
-    let mut st = parse(&String::from_utf8_lossy(&out))?;
-    st.operation = operation(git, repo).await;
+    // 진행 중인 작업 표시를 찾는 rev-parse는 status와 독립이라 함께 돌린다
+    let (out, operation) = tokio::join!(git.query(repo, &["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all"]), operation(git, repo));
+    let mut st = parse(&String::from_utf8_lossy(&out?))?;
+    st.operation = operation;
     Ok(st)
 }
 

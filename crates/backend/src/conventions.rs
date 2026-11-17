@@ -65,20 +65,22 @@ pub(crate) async fn collect(git: &dyn GitBackend, repo: &Path, task: gc_ai::Task
     }
     // lock을 잡지 않는 읽기 명령만 (GIT_OPTIONAL_LOCKS 없이 돈다 — status·diff류 금지)
     let cfg = |args: &'static [&'static str]| async move { git.run(repo, args, &[]).await.ok().map(|o| String::from_utf8_lossy(&o).trim().to_string()).filter(|s| !s.is_empty()) };
-    if cfg(&["config", "--local", "--get", "git403.aiConventions"]).await.is_some_and(|v| matches!(v.to_lowercase().as_str(), "false" | "0" | "no" | "off")) {
+    let commit = task == gc_ai::Task::Commit;
+    let (off, template) = tokio::join!(
+        cfg(&["config", "--local", "--get", "git403.aiConventions"]),
+        async { if commit { cfg(&["config", "--type=path", "--get", "commit.template"]).await } else { None } }
+    );
+    if off.is_some_and(|v| matches!(v.to_lowercase().as_str(), "false" | "0" | "no" | "off")) {
         return None;
     }
-    let commit = task == gc_ai::Task::Commit;
-    let template = if commit { cfg(&["config", "--type=path", "--get", "commit.template"]).await } else { None };
-    let branch = cfg(&["symbolic-ref", "--short", "-q", "HEAD"]).await;
-    let history = cfg(&["log", "-n", COMMIT_SUBJECTS, "--no-merges", "--format=%s"]).await;
 
     let root = repo.to_path_buf();
     let mut items = tokio::task::spawn_blocking(move || files(&root, commit, template.as_deref(), home.as_deref())).await.ok()?;
-    // 규칙 파일이 하나도 없으면 최근 제목·브랜치만으로는 붙이지 않는다(UI가 이미 최근 커밋 제목을 보낸다)
+    // 규칙 파일이 하나도 없으면 최근 제목·브랜치만으로는 붙이지 않는다(UI가 이미 최근 커밋 제목을 보낸다) — git 호출 없이 일찍 돌아간다
     if items.is_empty() {
         return None;
     }
+    let (branch, history) = tokio::join!(cfg(&["symbolic-ref", "--short", "-q", "HEAD"]), cfg(&["log", "-n", COMMIT_SUBJECTS, "--no-merges", "--format=%s"]));
     let mut text_item = |kind, path: &str, text: String| items.push(Item { prio: 2, kind, path: path.into(), text, truncated: false, ..Default::default() });
     if let Some(h) = history {
         text_item("history", "git log -n 20", h);

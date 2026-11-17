@@ -52,8 +52,8 @@ fn parse(text: &str) -> Vec<BlameLine> {
             infos.entry(current.clone()).or_default().time = v.parse().unwrap_or(0);
         } else if let Some(v) = l.strip_prefix("summary ") {
             infos.entry(current.clone()).or_default().summary = v.to_owned();
-        } else if l.len() >= 40 && l.as_bytes()[..40].iter().all(u8::is_ascii_hexdigit) {
-            current = l[..40].to_owned();
+        } else if let Some(sha) = l.split(' ').next().filter(|t| matches!(t.len(), 40 | 64) && t.bytes().all(|b| b.is_ascii_hexdigit())) {
+            current = sha.to_owned();
         }
     }
     lines
@@ -76,5 +76,13 @@ mod tests {
         assert_eq!(lines.len(), 3);
         assert_eq!((lines[1].author.as_str(), lines[1].text.as_str()), ("Lee", "line2"));
         assert_eq!((lines[2].author.as_str(), lines[2].summary.as_str()), ("Kim", "first"));
+    }
+
+    #[test]
+    fn sha256_header() {
+        let a = "a".repeat(64);
+        let text = format!("{a} 1 1 1\nauthor Kim\nauthor-time 5\nsummary s\nfilename f\n\tx\n");
+        let lines = parse(&text);
+        assert_eq!((lines[0].sha.as_str(), lines[0].author.as_str()), (a.as_str(), "Kim"));
     }
 }

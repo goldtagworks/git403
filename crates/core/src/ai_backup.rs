@@ -125,16 +125,26 @@ async fn ignored_within_caps(git: &GitRunner, repo: &Path) -> Vec<String> {
     const TOTAL: u64 = 20 * 1024 * 1024;
     const COUNT: usize = 5000;
     let Ok(o) = git.query(repo, &["ls-files", "-o", "-i", "--exclude-standard", "-z"]).await else { return vec![] };
-    let (mut out, mut sum) = (Vec::new(), 0u64);
-    for p in String::from_utf8_lossy(&o).split('\0').filter(|p| !p.is_empty()) {
-        let Ok(m) = repo.join(p).symlink_metadata() else { continue };
-        if !m.is_file() || m.len() > EACH || sum + m.len() > TOTAL || out.len() >= COUNT {
-            continue;
+    // 파일마다 stat이라 5000개 넘는 목록에서는 블로킹 스레드에서 한다
+    let (repo, o) = (repo.to_path_buf(), o);
+    tokio::task::spawn_blocking(move || {
+        let (mut out, mut sum) = (Vec::new(), 0u64);
+        for p in String::from_utf8_lossy(&o).split('\0').filter(|p| !p.is_empty()) {
+            if out.len() >= COUNT {
+                break;
+            }
+            let Ok(m) = repo.join(p).symlink_metadata() else { continue };
+            // 크기 초과 파일은 건너뛰고 다음 작은 파일을 계속 담는다(개수 상한에서만 멈춤)
+            if !m.is_file() || m.len() > EACH || sum + m.len() > TOTAL {
+                continue;
+            }
+            sum += m.len();
+            out.push(p.to_owned());
         }
-        sum += m.len();
-        out.push(p.to_owned());
-    }
-    out
+        out
+    })
+    .await
+    .unwrap_or_default()
 }
 
 async fn snapshot_wip(git: &GitRunner, repo: &Path, id: &str) -> Result<Option<String>> {

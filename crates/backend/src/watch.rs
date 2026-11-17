@@ -67,7 +67,12 @@ impl RepoWatcher {
     pub fn start(repo: &Path, on_change: impl Fn(RepoChange) + Send + 'static) -> notify_debouncer_mini::notify::Result<Self> {
         // macOS FSEvents는 심링크를 푼 경로(/var → /private/var)로 알린다. 두 형태 모두 .git으로 알아본다.
         let roots: Vec<PathBuf> = [Some(repo.to_path_buf()), gc_pathkey::canonical(repo).ok()].into_iter().flatten().collect();
-        let git_dirs: Vec<PathBuf> = roots.iter().map(|r| r.join(".git")).collect();
+        let mut git_dirs: Vec<PathBuf> = roots.iter().map(|r| r.join(".git")).collect();
+        // linked worktree·서브모듈은 `.git`이 파일이라 실제 git 디렉터리(와 공통 디렉터리)가 작업 트리 밖에 있다
+        let linked = linked_git_dirs(repo);
+        for d in &linked {
+            git_dirs.extend([Some(d.clone()), gc_pathkey::canonical(d).ok()].into_iter().flatten());
+        }
         let root = repo.to_path_buf();
         let repo_str = repo.to_string_lossy().into_owned();
         let mut ignored = ignore_rules(&root);
@@ -81,6 +86,9 @@ impl RepoWatcher {
             }
         })?;
         watcher.watch(repo, RecursiveMode::Recursive)?;
+        for d in &linked {
+            watcher.watch(d, RecursiveMode::Recursive)?;
+        }
         std::thread::spawn(move || debounce(rx, move |events| {
             let mut change = RepoChange { worktree: false, refs: false, repo: repo_str.clone() };
             for path in &events {
@@ -117,6 +125,19 @@ impl RepoWatcher {
         }));
         Ok(Self { _watcher: watcher, stopped })
     }
+}
+
+/// `.git`이 파일(`gitdir: <경로>`)일 때 가리키는 git 디렉터리와, 그 안 `commondir`이 가리키는 공통 디렉터리(refs 등이 있는 곳).
+/// 저장소 내용은 믿지 않으므로 `HEAD`가 있는 디렉터리만 감시한다(`.git` 파일이 `/`나 홈을 가리켜 전체를 감시하게 만들 수 없다).
+fn linked_git_dirs(repo: &Path) -> Vec<PathBuf> {
+    let Ok(text) = std::fs::read_to_string(repo.join(".git")) else { return vec![] };
+    let Some(rel) = text.lines().find_map(|l| l.strip_prefix("gitdir:")).map(str::trim) else { return vec![] };
+    let valid = |d: PathBuf| gc_pathkey::canonical(&d).ok().filter(|d| d.join("HEAD").is_file());
+    let Some(gitdir) = valid(repo.join(rel)) else { return vec![] };
+    let common = std::fs::read_to_string(gitdir.join("commondir")).ok().and_then(|c| valid(gitdir.join(c.trim())));
+    let mut v = vec![gitdir];
+    v.extend(common.filter(|c| *c != v[0]));
+    v
 }
 
 /// 루트 .gitignore와 .git/info/exclude 규칙. (하위 폴더의 .gitignore는 보지 않는다 — 걸러지지 않은 변경은 상태를 한 번 더 읽을 뿐)
@@ -293,6 +314,33 @@ mod tests {
         let g = m.begin(&k).unwrap();
         m.finish(&k, g, None);
         assert!(m.begin(&k).is_some());
+    }
+
+    #[test]
+    fn linked_worktree의_git_디렉터리를_푼다() {
+        let run = |d: &Path, a: &[&str]| assert!(std::process::Command::new("git").current_dir(d).args(a).status().unwrap().success());
+        let main = tempfile::tempdir().unwrap();
+        let (m, wt) = (main.path(), main.path().join("wt"));
+        run(m, &["init", "-q", "-b", "main"]);
+        run(m, &["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "i"]);
+        run(m, &["worktree", "add", "-q", wt.to_str().unwrap(), "-b", "b"]);
+        assert!(wt.join(".git").is_file());
+        let dirs = linked_git_dirs(&wt);
+        assert_eq!(dirs.len(), 2);
+        assert!(dirs[0].ends_with("worktrees/wt") && dirs[1].ends_with(".git"));
+        assert!(linked_git_dirs(m).is_empty(), "일반 저장소는 .git 폴더라 추가 감시 없음");
+        // 불신: HEAD 없는 디렉터리·엉뚱한 내용은 무시
+        let evil = tempfile::tempdir().unwrap();
+        std::fs::write(evil.path().join(".git"), "gitdir: /\n").unwrap();
+        assert!(linked_git_dirs(evil.path()).is_empty());
+        // 감시도 시작되고 커밋이 refs 변경으로 온다
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _w = RepoWatcher::start(&wt, move |c| drop(tx.send(c))).unwrap();
+        std::thread::sleep(Duration::from_millis(300));
+        while rx.try_recv().is_ok() {}
+        run(&wt, &["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x"]);
+        let c = rx.recv_timeout(Duration::from_secs(5)).expect("linked worktree 커밋이 감지돼야 함");
+        assert!(c.refs);
     }
 
     #[test]

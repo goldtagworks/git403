@@ -268,11 +268,14 @@ pub async fn status<S: SecretStore>(settings: &Settings, path: Option<&str>, sto
 
 /// 선택된 공급자의 호출 대상. 쓸 방식이 없으면 `NoBackend`.
 pub async fn backend<S: SecretStore>(settings: &Settings, path: Option<&str>, store: &S) -> Result<Backend> {
-    let st = status(settings, path, store).await?;
+    // `status()`와 같은 `resolve` 규칙이되 선택된 공급자만: CLI는 필요할 때만 감지하고 키는 쓸 때만 한 번 읽는다
     let p = settings.provider;
-    match st.current.active {
+    let method = settings.of(p).method;
+    let cli = resolve(method, true, false) == Some(Active::Cli) && cli::detect(p, path).await.is_some();
+    let key = if resolve(method, cli, true) == Some(Active::Key) { key_get(store, p)? } else { None };
+    match resolve(method, cli, key.is_some()) {
         Some(Active::Cli) => Ok(Backend::Cli { provider: p, program: p.program().into(), path: path.map(String::from) }),
-        Some(Active::Key) => Ok(Backend::Key { provider: p, key: key_get(store, p)?.ok_or(Error::NoBackend)?, model: settings.model(p).into(), base: p.api_base().into() }),
+        Some(Active::Key) => Ok(Backend::Key { provider: p, key: key.ok_or(Error::NoBackend)?, model: settings.model(p).into(), base: p.api_base().into() }),
         None => Err(Error::NoBackend),
     }
 }

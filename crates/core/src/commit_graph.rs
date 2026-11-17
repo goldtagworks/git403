@@ -42,9 +42,15 @@ pub async fn ensure_commit_graph(git: &GitRunner, repo: &Path) -> Result<bool> {
     if !running().lock().unwrap().insert(info.clone()) {
         return Ok(false);
     }
-    let res = git.query(repo, &["commit-graph", "write", "--reachable", "--split", "--size-multiple=2"]).await;
-    running().lock().unwrap().remove(&info);
-    res.map(|_| true)
+    // future가 await 중 drop돼도 running에서 빠지도록 guard로 지운다
+    struct Guard(PathBuf);
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            running().lock().unwrap().remove(&self.0);
+        }
+    }
+    let _guard = Guard(info);
+    git.query(repo, &["commit-graph", "write", "--reachable", "--split", "--size-multiple=2"]).await.map(|_| true)
 }
 
 #[cfg(test)]

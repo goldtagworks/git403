@@ -34,11 +34,12 @@ pub struct Ref {
 #[cfg(feature = "cli")]
 /// 사이드바와 그래프 배지에 쓰는 참조 전체.
 pub async fn read_refs(git: &GitRunner, repo: &Path) -> Result<Vec<Ref>> {
-    let refs = git
+    let (refs, stashes) = tokio::join!(
         // 태그는 주석 태그일 때 가리키는 커밋(`*objectname`)을 쓴다.
-        .output(repo, &["for-each-ref", "--format=%(refname)%1f%(objectname)%1f%(*objectname)%1f%(HEAD)%1f%(upstream:track,nobracket)", "refs/heads", "refs/remotes", "refs/tags"])
-        .await?;
-    let stashes = git.output(repo, &["stash", "list", "--format=%gd%x1f%H%x1f%s"]).await?;
+        git.output(repo, &["for-each-ref", "--format=%(refname)%1f%(objectname)%1f%(*objectname)%1f%(HEAD)%1f%(upstream:track,nobracket)", "refs/heads", "refs/remotes", "refs/tags"]),
+        git.output(repo, &["stash", "list", "--format=%gd%x1f%H%x1f%s"])
+    );
+    let (refs, stashes) = (refs?, stashes?);
     Ok(parse_refs(&String::from_utf8_lossy(&refs))
         .chain(parse_stashes(&String::from_utf8_lossy(&stashes)))
         .collect())

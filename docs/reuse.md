@@ -157,6 +157,7 @@ Rust에는 번역 문구가 없다. 사용자에게 보이는 오류·경고는 
 ### `stage` / `unstage` / `discard` / `apply_partial` / `commit` / `last_message` / `commit_message`
 
 파일 단위 스테이지·언스테이지·버리기, hunk·줄 단위 부분 적용(`patch.rs`가 패치를 만들고 `git apply`), 커밋·amend.
+`stage`·`unstage`·`discard`(추적 파일)는 경로 목록을 argv가 아닌 `--pathspec-from-file=- --pathspec-file-nul` + stdin으로 넘긴다(git 2.25+, 파일이 많아도 인자 길이 한도에 안 걸림; `clean`·`ls-files`는 미지원이라 `discard`의 untracked·`staged_crlf`·`fix_crlf`는 argv). 경로 해석 규칙은 argv와 같다.
 부분 적용의 줄 번호는 hunk 헤더 다음 줄부터 0번이다 (UI `DiffView`와 같은 기준).
 `patch::parse`는 diff를 `\n`으로만 나눠 CRLF 줄의 `\r`을 보존하고, 고르지 않아 뺀 줄 뒤의 `\ No newline at end of file` 표식은 같이 뺀다. 파일 헤더(rename/copy/mode/new·deleted file, 따옴표 경로)는 그대로 복사하고, hunk가 없는 diff(빈 파일 생성·바이너리·모드만 변경)는 `select`가 None이라 `apply_partial`이 아무것도 안 한다 (`tests/diff_syntax.rs`가 실제 git diff로 검증).
 
