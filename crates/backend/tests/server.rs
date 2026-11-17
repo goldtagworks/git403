@@ -393,7 +393,7 @@ fn jj_쓰기_ipc_와_우회_거절() {
     git(&["fsck", "--strict"]);
 
     // 우회: 옵션·리비전 식 SHA, 경로 탈출, 인자 누락·형식 오류
-    let main = git(&["rev-parse", "main"]);
+    let main = git(&["rev-parse", "HEAD"]); // abandon이 main 북마크를 지웠으니 HEAD(유효한 SHA)로
     for (i, sha) in ["--all", "main", "HEAD~1", "../x"].iter().enumerate() {
         let v = s.call(20 + i as u64, "jj_abandon", json!({"repo": repo, "sha": sha}));
         assert!(v["err"].as_str().unwrap().contains("jj.badSha"), "{v}");
@@ -407,4 +407,64 @@ fn jj_쓰기_ipc_와_우회_거절() {
     assert!(s.call(50, "jj_new", json!({"repo": repo, "parents": "x"}))["err"].is_string());
     assert!(s.call(51, "jj_describe", json!({"repo": repo, "sha": main}))["err"].is_string());
     assert!(s.call(52, "jj_new", json!({"repo": repo, "parents": []}))["err"].as_str().unwrap().contains("jj.badSha"));
+
+    // 30f: 북마크·operation log·undo·restore
+    let tip = git(&["rev-parse", "HEAD"]);
+    assert_eq!(s.call(60, "jj_bookmark_set", json!({"repo": repo, "name": "ipc/b", "sha": tip}))["ok"], json!([]));
+    assert_eq!(git(&["rev-parse", "refs/heads/ipc/b"]), tip);
+    let b = s.call(61, "jj_bookmarks", json!({"repo": repo}));
+    assert_eq!(b["ok"][0]["name"], "ipc/b");
+    assert_eq!(b["ok"][0]["target"], tip.as_str());
+    let log = s.call(62, "jj_op_log", json!({"repo": repo, "limit": 3}));
+    assert_eq!(log["ok"].as_array().unwrap().len(), 3);
+    assert!(log["ok"][0]["description"].as_str().unwrap().starts_with("create bookmark ipc/b"));
+    let id = log["ok"][0]["id"].as_str().unwrap().to_string();
+    assert_eq!(s.call(63, "jj_undo", json!({"repo": repo}))["ok"], json!([]));
+    assert!(git(&["for-each-ref", "refs/heads/ipc/b"]).is_empty());
+    assert_eq!(s.call(64, "jj_op_restore", json!({"repo": repo, "opId": id}))["ok"], json!([]));
+    assert_eq!(git(&["rev-parse", "refs/heads/ipc/b"]), tip);
+    assert_eq!(s.call(65, "jj_bookmark_delete", json!({"repo": repo, "name": "ipc/b"}))["ok"], json!([]));
+    assert!(git(&["for-each-ref", "refs/heads/ipc/b"]).is_empty());
+    // 우회
+    for (i, bad) in ["--force", "a..b", "a@b", "x y", "-x", "HEAD"].iter().enumerate() {
+        let v = s.call(70 + i as u64, "jj_bookmark_set", json!({"repo": repo, "name": bad, "sha": tip}));
+        assert!(v["err"].as_str().unwrap().contains("jj.badBookmark"), "{v}");
+    }
+    for (i, bad) in ["--all", "@-", "zz", ""].iter().enumerate() {
+        let v = s.call(80 + i as u64, "jj_op_restore", json!({"repo": repo, "opId": bad}));
+        assert!(v["err"].as_str().unwrap().contains("jj.badOpId"), "{v}");
+    }
+    assert!(s.call(90, "jj_bookmark_track", json!({"repo": repo, "name": "a", "remote": "git"}))["err"].as_str().unwrap().contains("jj.badRemote"));
+    assert!(s.call(91, "jj_bookmark_set", json!({"repo": repo, "name": "ok"}))["err"].is_string());
+}
+
+#[test]
+fn jj_disable_ipc() {
+    let (cfg, r) = (tempfile::tempdir().unwrap(), repo());
+    let repo = r.path().to_string_lossy().into_owned();
+    let mut s = Server::start(cfg.path());
+    let v = s.call(1, "jj_disable", json!({"repo": repo, "expect": {"opId": "00"}}));
+    assert!(v["err"].as_str().unwrap().contains("jj.notEnabled"), "{v}");
+    assert!(s.call(6, "jj_disable_check", json!({"repo": repo}))["err"].as_str().unwrap().contains("jj.notEnabled"));
+    assert_eq!(s.call(2, "jj_enable", json!({"repo": repo}))["ok"], Value::Null);
+    let c = s.call(5, "jj_disable_check", json!({"repo": repo}));
+    let op_id = c["ok"]["opId"].as_str().unwrap().to_string();
+    assert_eq!(op_id.len(), 128);
+    let mut c2 = c["ok"].clone();
+    c2.as_object_mut().unwrap().remove("opId");
+    assert_eq!(c2, json!({"orphans": [], "workingCopyDescribed": false, "workingCopyMerge": false, "otherWorkspaces": 0}), "{c}");
+    let v = s.call(7, "jj_disable", json!({"repo": repo, "expect": {"opId": "00"}}));
+    assert!(v["err"].as_str().unwrap().contains("jj.disableChanged"), "{v}");
+    // `expect`는 필수이고 16진수여야 한다: 생략·잘못된 형식·빈 값·너무 긴 값은 `jj.badOpId`, 아무것도 안 바뀐다
+    for (i, bad) in [json!({"repo": repo}), json!({"repo": repo, "expect": null}), json!({"repo": repo, "expect": {}}), json!({"repo": repo, "expect": {"opId": ""}}),
+        json!({"repo": repo, "expect": {"opId": "zz"}}), json!({"repo": repo, "expect": {"opId": "--all"}}), json!({"repo": repo, "expect": {"opId": "a".repeat(129)}}), json!({"repo": repo, "expect": {"opId": 5}})].into_iter().enumerate() {
+        let v = s.call(20 + i as u64, "jj_disable", bad);
+        assert!(v["err"].as_str().unwrap().contains("jj.badOpId"), "{i}: {v}");
+    }
+    assert!(r.path().join(".jj").exists());
+    assert!(r.path().join(".jj").exists());
+    assert_eq!(s.call(3, "jj_disable", json!({"repo": repo, "expect": {"opId": op_id}}))["ok"], json!([]));
+    assert!(!r.path().join(".jj").exists());
+    let v = s.call(4, "jj_status", json!({"repo": repo}));
+    assert!(v["err"].as_str().unwrap().contains("jj.notEnabled"), "{v}");
 }

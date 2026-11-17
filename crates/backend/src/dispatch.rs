@@ -103,6 +103,18 @@ impl Backend {
                 off(move || gc_jj::enable(&repo).map_err(|e| e.json())).await?;
                 Ok(Value::Null)
             }
+            // jj 떼기(30f+): git HEAD를 브랜치로, `refs/jj/*`·`.jj` 삭제. 경고 `Coded` 배열
+            // `expect: {opId}`(필수): `jj_disable_check`가 준 op id. 없거나 16진수가 아니면 `jj.badOpId`, 그 사이 jj가 바뀌었으면 `jj.disableChanged`로 거절
+            "jj_disable" => {
+                let repo = a.repo()?;
+                let expect = a.get::<Option<serde_json::Value>>("expect")?.and_then(|v| v.get("opId").and_then(|o| o.as_str()).map(String::from)).unwrap_or_default();
+                json(off(move || gc_jj::disable(&repo, &expect).map(|w| w.iter().map(gc_i18n::Coded::value).collect::<Vec<_>>()).map_err(|e| e.json())).await?)
+            }
+            // jj 떼기 전 확인(읽기 전용): 보존될 jj 커밋·`@` 설명·머지·다른 작업 공간 수
+            "jj_disable_check" => {
+                let repo = a.repo()?;
+                json(off(move || gc_jj::disable_check(&repo).map_err(|e| e.json())).await?)
+            }
             "jj_status" => {
                 let repo = a.repo()?;
                 json(off(move || gc_jj::status(&repo).map_err(|e| e.json())).await?)
@@ -131,6 +143,35 @@ impl Backend {
             "jj_abandon" => {
                 let (repo, sha) = (a.repo()?, a.get::<String>("sha")?);
                 json(off(move || gc_jj::abandon(&repo, &sha).map(|w| w.iter().map(gc_i18n::Coded::value).collect::<Vec<_>>()).map_err(|e| e.json())).await?)
+            }
+            // jj 30f: operation log·undo·restore·북마크. 쓰기는 위와 같은 execute 흐름(경고 배열 반환), 조회는 읽기 전용
+            "jj_op_log" => {
+                let (repo, limit) = (a.repo()?, a.get::<Option<usize>>("limit")?);
+                json(off(move || gc_jj::op_log(&repo, limit).map_err(|e| e.json())).await?)
+            }
+            "jj_undo" => {
+                let repo = a.repo()?;
+                json(off(move || gc_jj::undo(&repo).map(|w| w.iter().map(gc_i18n::Coded::value).collect::<Vec<_>>()).map_err(|e| e.json())).await?)
+            }
+            "jj_op_restore" => {
+                let (repo, op_id) = (a.repo()?, a.get::<String>("opId")?);
+                json(off(move || gc_jj::op_restore(&repo, &op_id).map(|w| w.iter().map(gc_i18n::Coded::value).collect::<Vec<_>>()).map_err(|e| e.json())).await?)
+            }
+            "jj_bookmarks" => {
+                let repo = a.repo()?;
+                json(off(move || gc_jj::bookmarks(&repo).map_err(|e| e.json())).await?)
+            }
+            "jj_bookmark_set" => {
+                let (repo, name, sha, back) = (a.repo()?, a.get::<String>("name")?, a.get::<String>("sha")?, a.get::<Option<bool>>("allowBackwards")?.unwrap_or(false));
+                json(off(move || gc_jj::bookmark_set(&repo, &name, &sha, back).map(|w| w.iter().map(gc_i18n::Coded::value).collect::<Vec<_>>()).map_err(|e| e.json())).await?)
+            }
+            "jj_bookmark_delete" => {
+                let (repo, name) = (a.repo()?, a.get::<String>("name")?);
+                json(off(move || gc_jj::bookmark_delete(&repo, &name).map(|w| w.iter().map(gc_i18n::Coded::value).collect::<Vec<_>>()).map_err(|e| e.json())).await?)
+            }
+            "jj_bookmark_track" => {
+                let (repo, name, remote) = (a.repo()?, a.get::<String>("name")?, a.get::<String>("remote")?);
+                json(off(move || gc_jj::bookmark_track(&repo, &name, &remote).map(|w| w.iter().map(gc_i18n::Coded::value).collect::<Vec<_>>()).map_err(|e| e.json())).await?)
             }
             // ---- 통계 ----
             "repo_stats" => {

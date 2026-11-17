@@ -16,10 +16,14 @@ use jj_lib::gitignore::GitIgnoreFile;
 use jj_lib::matchers::{EverythingMatcher, NothingMatcher, PrefixMatcher};
 use jj_lib::merged_tree::MergedTree;
 use jj_lib::object_id::ObjectId;
-use jj_lib::ref_name::WorkspaceName;
-use jj_lib::repo::{MutableRepo, ReadonlyRepo, Repo};
+use jj_lib::op_store::RefTarget;
+use jj_lib::op_walk;
+use jj_lib::operation::Operation;
+use jj_lib::ref_name::{RefName, RefNameBuf, RemoteName, RemoteNameBuf, WorkspaceName};
+use jj_lib::repo::{MutableRepo, ReadonlyRepo, Repo, RepoLoader};
 use jj_lib::repo_path::{RepoPath, RepoPathBuf};
-use jj_lib::rewrite::{merge_commit_trees, restore_tree, squash_commits, CommitWithSelection};
+use jj_lib::revset::RevsetExpression;
+use jj_lib::rewrite::{merge_commit_trees, restore_tree, squash_commits, CommitWithSelection, RebaseOptions, RewriteRefsOptions};
 use jj_lib::backend::CommitId;
 use jj_lib::working_copy::{SnapshotOptions, WorkingCopyFreshness};
 use jj_lib::workspace::Workspace;
@@ -39,6 +43,13 @@ enum Op {
     Squash(Option<CommitId>, Vec<RepoPathBuf>),
     Split(CommitId, Vec<RepoPathBuf>),
     Abandon(CommitId),
+    /// 마지막 operation(연속 undo면 그 앞 것)의 효과를 되돌리는 새 operation
+    Undo,
+    /// 해당 operation 시점의 저장소 상태로(새 operation)
+    Restore(String),
+    BookmarkSet { name: RefNameBuf, id: CommitId, backwards: bool },
+    BookmarkDelete(RefNameBuf),
+    BookmarkTrack { name: RefNameBuf, remote: RemoteNameBuf },
 }
 
 impl Op {
@@ -48,10 +59,17 @@ impl Op {
             Op::New(ids) => ids.contains(id),
             Op::Describe(i, _) | Op::Edit(i) | Op::Split(i, _) | Op::Abandon(i) => i == id,
             Op::Squash(i, _) => i.as_ref() == Some(id),
+            Op::BookmarkSet { id: i, .. } => i == id,
+            Op::Undo | Op::Restore(_) | Op::BookmarkDelete(_) | Op::BookmarkTrack { .. } => false,
         }
     }
 
     /// `from`을 가리키는 인자를 `to`로 바꾼다
+    /// 저장소 상태를 통째로 되돌리는 작업(작업 사본 변경은 먼저 별도 operation으로 남긴다)
+    fn rewinds(&self) -> bool {
+        matches!(self, Op::Undo | Op::Restore(_))
+    }
+
     fn remap(&mut self, from: &CommitId, to: &CommitId) {
         let fix = |id: &mut CommitId| {
             if id == from {
@@ -62,6 +80,8 @@ impl Op {
             Op::New(ids) => ids.iter_mut().for_each(fix),
             Op::Describe(id, _) | Op::Edit(id) | Op::Split(id, _) | Op::Abandon(id) => fix(id),
             Op::Squash(id, _) => id.iter_mut().for_each(fix),
+            Op::BookmarkSet { id, .. } => fix(id),
+            Op::Undo | Op::Restore(_) | Op::BookmarkDelete(_) | Op::BookmarkTrack { .. } => {}
         }
     }
 }
@@ -107,6 +127,71 @@ pub fn split(repo: &Path, sha: &str, paths: &[String]) -> Result<Vec<Coded>, Cod
 /// 커밋을 버린다(자손은 부모 위로 rebase).
 pub fn abandon(repo: &Path, sha: &str) -> Result<Vec<Coded>, Coded> {
     run(repo, Op::Abandon(parse_sha(sha)?))
+}
+
+/// 마지막 operation을 되돌린다(`jj undo`: 그 operation의 효과를 되돌리는 새 operation). 연속 호출하면 한 단계씩 더 거슬러 간다.
+pub fn undo(repo: &Path) -> Result<Vec<Coded>, Coded> {
+    run(repo, Op::Undo)
+}
+
+/// 저장소를 해당 operation 시점의 상태로 되돌린다(`jj op restore`, 새 operation). `op_id`는 16진수(전체 또는 접두).
+pub fn op_restore(repo: &Path, op_id: &str) -> Result<Vec<Coded>, Coded> {
+    // 길이 하한은 jj CLI와 같게 1자(접두가 모호하면 `jj.ambiguousOpId`로 거절), 상한은 전체 ID(128자)
+    if op_id.is_empty() || op_id.len() > 128 || !op_id.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(coded!("jj.badOpId", "Invalid operation id: {id}", id = op_id.chars().take(64).collect::<String>()));
+    }
+    run(repo, Op::Restore(op_id.to_ascii_lowercase()))
+}
+
+/// 북마크를 커밋에 만들거나 옮긴다. 뒤로·옆으로 옮기려면 `allow_backwards`(jj `--allow-backwards`).
+pub fn bookmark_set(repo: &Path, name: &str, sha: &str, allow_backwards: bool) -> Result<Vec<Coded>, Coded> {
+    let name = parse_bookmark_name(name)?;
+    // 루트 커밋(SHA 전부 0)은 저장소를 열기 전에 거절
+    if sha.len() == 40 && sha.bytes().all(|b| b == b'0') {
+        return Err(coded!("jj.rootCommit", "A bookmark cannot point to the root commit"));
+    }
+    run(repo, Op::BookmarkSet { name, id: parse_sha(sha)?, backwards: allow_backwards })
+}
+
+/// 로컬 북마크를 지운다(git 브랜치도 export로 지워진다).
+pub fn bookmark_delete(repo: &Path, name: &str) -> Result<Vec<Coded>, Coded> {
+    run(repo, Op::BookmarkDelete(parse_bookmark_name(name)?))
+}
+
+/// 원격 북마크를 추적한다(로컬 북마크를 만들고 합친다).
+pub fn bookmark_track(repo: &Path, name: &str, remote: &str) -> Result<Vec<Coded>, Coded> {
+    let name = parse_bookmark_name(name)?;
+    let bad = || coded!("jj.badRemote", "Invalid remote name: {remote}", remote = remote.chars().take(64).collect::<String>());
+    if remote.is_empty() || remote == "git" || remote.starts_with('-') || remote.contains(['/', '@', '\\', ':', '\0']) || remote.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return Err(bad());
+    }
+    run(repo, Op::BookmarkTrack { name, remote: RemoteNameBuf::from(remote) })
+}
+
+/// git ref 이름 규칙(`git check-ref-format`)에 더해 jj·인자 주입 방어: `-`로 시작·`@`·`..`·공백·제어문자·`~^:?*[\\`·`//`·
+/// 앞뒤 `/`·`.`으로 시작하는 구성요소·`.lock`/`.`로 끝나는 구성요소·`HEAD` 거절. 길이 255 이하.
+pub(crate) fn parse_bookmark_name(s: &str) -> Result<RefNameBuf, Coded> {
+    let bad = || coded!("jj.badBookmark", "Invalid bookmark name: {name}", name = s.chars().take(100).collect::<String>());
+    if s.is_empty() || s.len() > 255 || s == "HEAD" || s.starts_with('-') || s.contains("..") || s.contains("@{") {
+        return Err(bad());
+    }
+    if s.chars().any(|c| c.is_control() || c.is_whitespace() || is_format_char(c) || "@~^:?*[\\".contains(c)) {
+        return Err(bad());
+    }
+    for c in s.split('/') {
+        if c.is_empty() || c.starts_with('.') || c.ends_with('.') || c.ends_with(".lock") || reserved_component(c) {
+            return Err(bad());
+        }
+    }
+    Ok(RefNameBuf::from(s))
+}
+
+/// 눈에 안 보이는 서식 문자(Unicode `Cf` 범주): 이름을 다른 것처럼 보이게 하는 데 쓰인다(양방향 제어·폭 없는 공백·BOM 등)
+fn is_format_char(c: char) -> bool {
+    matches!(c as u32,
+        0x00AD | 0x0600..=0x0605 | 0x061C | 0x06DD | 0x070F | 0x0890..=0x0891 | 0x08E2 | 0x180E
+        | 0x200B..=0x200F | 0x202A..=0x202E | 0x2060..=0x2064 | 0x2066..=0x206F | 0xFEFF | 0xFFF9..=0xFFFB
+        | 0x110BD | 0x110CD | 0x13430..=0x1343F | 0x1BCA0..=0x1BCA3 | 0x1D173..=0x1D17A | 0xE0001 | 0xE0020..=0xE007F)
 }
 
 /// 16진수 40자만 받는다(옵션·리비전 식 주입 불가).
@@ -293,7 +378,7 @@ async fn execute(ws: &mut Workspace, root: &Path, mut op: Op) -> Result<Vec<Code
         }
     }
     let mut tx = repo.start_transaction();
-    let m = tx.repo_mut();
+    let mut m = tx.repo_mut();
 
     // 1. colocate: 밖(git)에서 바뀐 HEAD·브랜치·태그를 jj로
     let old_head = m.view().git_head(name_ref).clone();
@@ -328,14 +413,48 @@ async fn execute(ws: &mut Workspace, root: &Path, mut op: Op) -> Result<Vec<Code
         op.remap(&stale, wc_commit.id());
     }
 
+    // undo·restore: 대상 검증을 snapshot operation을 만들기 **전에** 한다(거절된 요청이 op log를 바꾸지 않게).
+    // snapshot이 만들어지면 그 operation은 지금 head의 자식이 되고 대상(head의 조상)은 그대로라 검증이 유효하다(아래에서 부모 관계 확인).
+    let snapshotted = op.rewinds() && !refused && wc_commit.id() != &pre_import_wc;
+    let rewind = match &op {
+        Op::Undo => Some(plan_undo(&repo, root, snapshotted, name_ref).await?),
+        Op::Restore(id) => Some(plan_restore(&repo, root, id, name_ref).await?),
+        _ => None,
+    };
+    // 작업 사본에 변경이 있으면 jj CLI처럼 먼저 별도의 `snapshot working copy` operation(snapshot 표시)으로 남긴다.
+    // 그 operation이 새 head가 되므로, `jj undo`는 CLI와 마찬가지로 그 snapshot을 되돌린다(변경은 operation log로 복구 가능).
+    if snapshotted {
+        let head_before = repo.operation().id().clone();
+        m.rebase_descendants().await.map_err(|e| fail("rebase", e))?;
+        tx.set_is_snapshot(true);
+        let saved = tx.commit("snapshot working copy").await.map_err(|e| fail("commit", e))?;
+        if saved.operation().parent_ids() != [head_before] {
+            return Err(fail("snapshot-op", "unexpected operation parent"));
+        }
+        locked.finish(saved.op_id().clone()).await.map_err(|e| fail("wc-finish", e))?;
+        locked = ws.start_working_copy_mutation().await.map_err(|e| fail("wc-lock", e))?;
+        repo = saved;
+        wc_commit = wc_commit_of(&repo, name_ref).await?;
+        tx = repo.start_transaction();
+        m = tx.repo_mut();
+    }
+
     // 3. 작업
-    let description = if refused { "import git head".to_string() } else { apply(m, &name, &wc_commit, op).await? };
+    let delete_abandoned = matches!(op, Op::Abandon(_));
+    let description = if refused { "import git head".to_string() } else { apply(m, &loader, rewind, &name, &wc_commit, op).await? };
 
     // 4~6. 자손 rebase, git HEAD·인덱스, git ref export.
     // 순서 이유: 둘 다 커밋 전에 한다. 커밋(op 기록)이 끝난 뒤에 git을 건드리다 실패하면 jj의 view와 git이 어긋난 채 남기 때문이다.
     // 먼저 하면 실패 시 op가 남지 않아 다음 호출의 import가 git 쪽 변경을 다시 맞춘다. ref export 실패(`failed_*`)는
     // 개별 ref 단위이고 view의 git_refs에 반영되지 않아 다음 import가 되돌려 맞추므로 경고로 돌려준다.
-    m.rebase_descendants().await.map_err(|e| fail("rebase", e))?;
+    // jj CLI의 abandon처럼: 버려진 커밋을 가리키던 북마크는 부모로 옮기지 않고 지운다
+    let rebase_options = RebaseOptions {
+        rewrite_refs: RewriteRefsOptions { delete_abandoned_bookmarks: delete_abandoned },
+        ..Default::default()
+    };
+    m.rebase_descendants_with_options(&RevsetExpression::none(), &rebase_options, |_, _| {})
+        .await
+        .map_err(|e| fail("rebase", e))?;
     let new_wc_id = m.view().get_wc_commit_id(name_ref).cloned().ok_or_else(|| fail("wc", "no working-copy commit"))?;
     let new_wc = get_commit(m, &new_wc_id).await?;
     git::reset_head(m, name_ref, root, (Some(&wc_commit), &new_wc)).await.map_err(|e| fail("reset-head", e))?;
@@ -375,7 +494,7 @@ fn snapshot_options(root: &Path) -> SnapshotOptions<'static> {
 }
 
 /// 작업 본체. operation 설명 문자열을 돌려준다.
-async fn apply(m: &mut MutableRepo, name: &jj_lib::ref_name::WorkspaceNameBuf, wc: &Commit, op: Op) -> Result<String, Coded> {
+async fn apply(m: &mut MutableRepo, loader: &RepoLoader, rewind: Option<Rewind>, name: &jj_lib::ref_name::WorkspaceNameBuf, wc: &Commit, op: Op) -> Result<String, Coded> {
     match op {
         Op::New(ids) => {
             let mut seen = Vec::new();
@@ -410,6 +529,54 @@ async fn apply(m: &mut MutableRepo, name: &jj_lib::ref_name::WorkspaceNameBuf, w
             ensure_mutable(m, &c).await?;
             m.edit(name.clone(), &c).await.map_err(|e| fail("edit", e))?;
             Ok(format!("edit commit {}", c.id().hex()))
+        }
+        Op::Undo | Op::Restore(_) => {
+            // 대상·설명은 snapshot 전에 `plan_undo`·`plan_restore`가 검증해 둔 것(거절된 요청이 op log를 바꾸지 않게)
+            let r = rewind.ok_or_else(|| fail("rewind", "no plan"))?;
+            let base = m.base_repo().clone();
+            let target_repo = loader.load_at(&r.target).await.map_err(|e| fail("load-op", e))?;
+            rewind_view(m, name, &base, &target_repo).await?;
+            Ok(r.desc)
+        }
+        Op::BookmarkSet { name, id, backwards } => {
+            let c = resolve(m, &id).await?;
+            if c.id() == m.store().root_commit_id() {
+                return Err(coded!("jj.rootCommit", "A bookmark cannot point to the root commit"));
+            }
+            let old = m.view().get_local_bookmark(&name).clone();
+            if !backwards {
+                // 이미 있고 충돌이 아니면 새 대상이 옛 대상의 자손이어야 한다(jj: Refusing to move bookmark backwards or sideways)
+                if let Some(old_id) = old.as_normal() {
+                    if !m.index().is_ancestor(old_id, c.id()).await.map_err(|e| fail("index", e))? {
+                        return Err(coded!("jj.bookmarkBackwards", "Moving bookmark {name} backwards or sideways needs confirmation", name = name.as_str().to_string()));
+                    }
+                }
+            }
+            let desc = if old.is_absent() {
+                format!("create bookmark {} pointing to commit {}", name.as_str(), c.id().hex())
+            } else {
+                format!("point bookmark {} to commit {}", name.as_str(), c.id().hex())
+            };
+            m.set_local_bookmark_target(&name, RefTarget::normal(c.id().clone()));
+            Ok(desc)
+        }
+        Op::BookmarkDelete(name) => {
+            if m.view().get_local_bookmark(&name).is_absent() {
+                return Err(coded!("jj.noBookmark", "No such bookmark: {name}", name = name.as_str().to_string()));
+            }
+            m.set_local_bookmark_target(&name, RefTarget::absent());
+            Ok(format!("delete bookmark {}", name.as_str()))
+        }
+        Op::BookmarkTrack { name, remote } => {
+            let symbol = RefName::new(name.as_str()).to_remote_symbol(RemoteName::new(remote.as_str()));
+            let rr = m.get_remote_bookmark(symbol).clone();
+            if rr.target.is_absent() {
+                return Err(coded!("jj.noBookmark", "No such remote bookmark: {name}", name = format!("{}@{}", name.as_str(), remote.as_str())));
+            }
+            if !rr.is_tracked() {
+                m.track_remote_bookmark(symbol).await.map_err(|e| fail("track", e))?;
+            }
+            Ok(format!("track remote bookmark {}@{}", name.as_str(), remote.as_str()))
         }
         Op::Abandon(id) => {
             let c = resolve(m, &id).await?;
@@ -484,4 +651,133 @@ fn combine(dest: &str, src: &str) -> String {
         (_, true) => dest.to_string(),
         _ => format!("{}\n\n{}", dest.trim_end(), src.trim_start()),
     }
+}
+
+/// undo·restore가 view를 되돌릴 대상 operation과 새 operation의 설명
+struct Rewind {
+    target: Operation,
+    desc: String,
+}
+
+const UNDO_PREFIX: &str = "undo: restore to operation ";
+
+/// jj CLI는 undo operation을 설명(`undo: restore to operation <전체 ID>`)으로 알아본다. 그 ID(되돌려 간 대상).
+fn undo_target_id(desc: &str) -> Option<&str> {
+    desc.strip_prefix(UNDO_PREFIX).map(str::trim).filter(|h| !h.is_empty() && h.len() <= 128 && h.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
+async fn resolve_op(repo: &ReadonlyRepo, id: &str) -> Result<Operation, Coded> {
+    use op_walk::{OpsetEvaluationError, OpsetResolutionError};
+    match op_walk::resolve_op_at(repo.op_store(), std::slice::from_ref(repo.operation()), id).await {
+        Ok(o) => Ok(o),
+        Err(OpsetEvaluationError::OpsetResolution(OpsetResolutionError::AmbiguousIdPrefix(_))) => {
+            Err(coded!("jj.ambiguousOpId", "Operation id prefix is ambiguous: {id}", id = id.to_string()))
+        }
+        Err(OpsetEvaluationError::OpsetResolution(_)) => Err(coded!("jj.noOperation", "Operation not found: {id}", id = id.to_string())),
+        Err(e) => Err(fail("op", e)),
+    }
+}
+
+/// 현재 git 저장소에 사용자 커밋이 있는가: HEAD(jj가 만든 커밋이면 제외)와 `refs/jj/` 밖의 모든 ref(브랜치·태그[annotated는 벗겨서]·원격 등)가 가리키는 커밋은
+/// 모양(부모·트리)과 무관하게 센다(`git commit --allow-empty`로 만든 빈 최초 커밋도 사용자 커밋). `refs/jj/keep/*`는 jj가 모든 커밋에 거는 ref라서
+/// **jj가 만든 커밋만 제외**한다: jj가 쓰는 커밋은 `change-id` 헤더가 있고(jj CLI로 확인: 빈 `@`·rewrite한 커밋 모두), git으로 만든 커밋엔 없다.
+/// `refs/jj/` 아래 그 밖의 ref(`refs/jj/root` 등)는 세지 않는다. 읽지 못하면 보수적으로 true.
+fn git_has_commits(root: &Path) -> bool {
+    let Ok(r) = gix::open(root) else { return true };
+    let is_commit = |id: gix::Id<'_>| id.object().and_then(|o| o.peel_to_commit()).is_ok();
+    let jj_made = |id: gix::Id<'_>| match id.object().and_then(|o| o.peel_to_commit()) {
+        Ok(c) => c.decode().map(|d| d.extra_headers().find("change-id").is_some()).unwrap_or(false),
+        Err(_) => true,
+    };
+    if r.head_id().is_ok_and(|id| is_commit(id) && !jj_made(id)) {
+        return true;
+    }
+    let Ok(refs) = r.references() else { return true };
+    let Ok(all) = refs.all() else { return true };
+    for reference in all {
+        let Ok(mut reference) = reference else { return true };
+        let name = reference.name().as_bstr().to_string();
+        let Ok(id) = reference.peel_to_id() else { continue };
+        let counted = if name.starts_with("refs/jj/keep/") {
+            !jj_made(id)
+        } else if name.starts_with("refs/jj/") {
+            false
+        } else {
+            is_commit(id)
+        };
+        if counted {
+            return true;
+        }
+    }
+    false
+}
+
+/// 되돌릴 대상 operation의 **view**로 판정한다(op 위치·설명·개수는 켠 방법·jj 버전마다 달라 쓰지 않는다):
+/// - 그 시점에 이 작업 공간의 `@`가 없으면 거절.
+/// - jj가 git에서 가져온 ref 기록(`git_refs`)과 git HEAD 기록이 둘 다 비어 있는데(= 아직 git을 가져오기 전: `add workspace` 시점) 현재 git에는
+///   커밋이 있으면 거절한다(그 상태로 가면 git HEAD가 `refs/jj/root`로 가고 추적 파일이 사라진다). 원래 커밋이 없던 저장소는 허용한다.
+///
+/// `import git refs`(jj CLI 켜기의 두 번째 op)부터는 `jj new 'root()'` 뒤와 view 모양이 같아서(`@` 부모=루트·git_head 없음·git_refs 있음) 구분할 수 없고,
+/// jj CLI도 그 시점을 허용한다. 고아 브랜치·detached HEAD 저장소도 git_refs나 git_head가 채워져 허용된다.
+/// 거절 코드는 모두 `jj.cannotUndo`(막혀서 못 감). 되돌릴 대상 자체가 없으면 `jj.nothingToUndo`(plan_undo).
+async fn check_restorable(root: &Path, target: &Operation, name: &WorkspaceName) -> Result<(), Coded> {
+    let view = target.view().await.map_err(|e| fail("op-view", e))?;
+    if view.get_wc_commit_id(name).is_none() {
+        return Err(coded!("jj.cannotUndo", "Cannot go back to before this workspace was created"));
+    }
+    if view.git_refs().is_empty() && view.git_head(name).is_absent() && git_has_commits(root) {
+        return Err(coded!("jj.cannotUndo", "Cannot go back to before jj was enabled"));
+    }
+    Ok(())
+}
+
+/// `jj undo`(0.47.1)와 같게: 되돌릴 operation X = head(head가 `undo: restore to operation H`면 H), 새 operation은 X의 부모 시점으로 view를 되돌린다
+/// (`undo: restore to operation <부모 ID>`; 부모가 undo operation이면 그것이 되돌려 간 대상 ID). 작업 사본에 변경이 있어 먼저
+/// snapshot operation이 만들어질 때(`snapshotted`)는 그 snapshot operation이 X다 — CLI도 같다(미저장 변경이 있는 채 undo하면 snapshot만 취소된다).
+async fn plan_undo(repo: &ReadonlyRepo, root: &Path, snapshotted: bool, name: &WorkspaceName) -> Result<Rewind, Coded> {
+    let mut p = if snapshotted {
+        repo.operation().clone()
+    } else {
+        let mut x = repo.operation().clone();
+        if let Some(h) = undo_target_id(&x.metadata().description) {
+            if let Ok(o) = resolve_op(repo, h).await {
+                x = o;
+            }
+        }
+        let mut ps = x.parents().await.map_err(|e| fail("op-parent", e))?;
+        match ps.len() {
+            0 => return Err(coded!("jj.nothingToUndo", "There is no operation to undo")),
+            1 => ps.remove(0),
+            _ => return Err(coded!("jj.cannotUndo", "Cannot undo a merge operation")),
+        }
+    };
+    if let Some(h) = undo_target_id(&p.metadata().description) {
+        if let Ok(o) = resolve_op(repo, h).await {
+            p = o;
+        }
+    }
+    check_restorable(root, &p, name).await?;
+    Ok(Rewind { desc: format!("{UNDO_PREFIX}{}", p.id().hex()), target: p })
+}
+
+async fn plan_restore(repo: &ReadonlyRepo, root: &Path, id: &str, name: &WorkspaceName) -> Result<Rewind, Coded> {
+    let t = resolve_op(repo, id).await?;
+    check_restorable(root, &t, name).await?;
+    Ok(Rewind { desc: format!("restore to operation {}", t.id().hex()), target: t })
+}
+
+/// 3-way 병합(`현재 += 목표 - 현재 기준`)으로 view를 목표 operation 시점으로 되돌린다(현재가 기준과 같으면 목표와 같아진다).
+/// git ref·HEAD 기록(view의 git_refs·git_heads)은 병합 전 값을 유지한다: 그래야 뒤따르는 export가 되돌려진 북마크·태그를 실제 git ref에 반영한다
+/// (jj CLI의 op restore도 현재 view의 git_refs를 유지).
+async fn rewind_view(m: &mut MutableRepo, name: &WorkspaceName, base: &ReadonlyRepo, other: &ReadonlyRepo) -> Result<(), Coded> {
+    let saved = m.view().store_view().clone();
+    m.merge(base, other).await.map_err(|e| fail("merge-op", e))?;
+    let mut data = m.view().store_view().clone();
+    data.git_refs = saved.git_refs;
+    data.git_heads = saved.git_heads;
+    m.set_view(data);
+    if m.view().get_wc_commit_id(name).is_none() {
+        return Err(coded!("jj.cannotUndo", "Cannot go back to before this workspace was created"));
+    }
+    Ok(())
 }

@@ -4,8 +4,12 @@
 //! `.git`·`.jj`가 실제 디렉터리(심볼릭 링크·gitfile 아님)일 때만 연다.
 //! gix 버전은 `jj-lib`가 쓰는 것(0.90)과 `gc-core`가 같아야 한다.
 
+mod disable;
 mod ops;
-pub use ops::{abandon, describe, edit, new_commit, split, squash};
+mod read;
+pub use disable::{disable, disable_check, DisableCheck, Orphan, KEEP_PREFIX};
+pub use ops::{abandon, bookmark_delete, bookmark_set, bookmark_track, describe, edit, new_commit, op_restore, split, squash, undo};
+pub use read::{bookmarks, op_log, Bookmark, BookmarkRemote, OpLogEntry};
 pub(crate) use ops::repo_lock;
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
