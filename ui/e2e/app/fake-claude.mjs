@@ -4,6 +4,11 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+// 앱의 설치 감지(`claude --version`, 빈 임시 폴더에서 수시로 실행)에는 버전만 답한다 — 아래 대본을 돌리면 로그 파일을 덮어쓰고 엉뚱한 곳에서 git을 실행한다
+if (process.argv[2] === "--version") {
+  console.log("0.0.0 (fake)");
+  process.exit(0);
+}
 const out = (o) => console.log(JSON.stringify(o));
 if (process.env.FAKE_CLAUDE_LOG) writeFileSync(process.env.FAKE_CLAUDE_LOG, JSON.stringify({ argv: process.argv.slice(2), cwd: process.cwd() }));
 const git = (...a) => {

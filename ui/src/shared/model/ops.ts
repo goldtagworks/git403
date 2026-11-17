@@ -1920,9 +1920,11 @@ export const ops = {
     setPref(key, value);
     if (key === "graphLimit") ctx.reload();
   },
-  /** 자동 fetch 한 번: 활성 탭만. 다른 작업·저장소 로딩 중이거나 시트가 열려 있으면 건너뜀. 인증 창 없이(quiet) 돌고 실패는 상태바에만 */
+  /** 자동 fetch 한 번: 활성 탭만. 다른 작업·저장소 로딩 중이거나 시트가 열려 있으면 건너뜀. 인증 창 없이(quiet) 돌고 실패는 상태바에만.
+   *  그 저장소에서 AI 차례가 도는 중이어도 건너뛴다: AI가 실행하는 `git pull`과 겹치면 `fetch --all`이 FETCH_HEAD를 비워
+   *  pull의 병합 단계가 "Already up to date"·"no candidates for merging"으로 끝난다(사용자 작업을 한 번에 하나만 돌리는 것과 같은 이유) */
   autoFetch: () => {
-    if (!ctx.repo || ctx.busy() || ctx.loading() || document.querySelector(".sheet-backdrop")) return;
+    if (!ctx.repo || ctx.busy() || ctx.loading() || aiChat.chat(ctx.repo)?.running || document.querySelector(".sheet-backdrop")) return;
     ctx.job(t("ops.autoFetch"), FETCH_ARGS, { quiet: true });
   },
 

@@ -426,8 +426,8 @@ try {
       eq(log.cwd.includes(basename(repo)), true, "저장소 폴더에서 실행");
       const prompt = log.argv.join(" ");
       if (!prompt.includes("git pull") || !prompt.includes("fast-forward")) throw new Error("오류 내용을 담은 입력이 아님: " + prompt.slice(0, 300));
-      await until(() => git("log", "-1", "--format=%P").split(" ").length === 2, "병합 커밋(부모 둘)").catch((e) => {
-        throw new Error(`${e.message} — ${git("log", "--oneline", "--graph", "--all", "-8").replace(/\n/g, " / ")} — status: ${git("status", "-sb").replace(/\n/g, " / ")}`); // 흔들림 진단용
+      await until(() => git("log", "-1", "--format=%P").split(" ").length === 2, "병합 커밋(부모 둘)").catch(async (e) => {
+        throw new Error(`${e.message} — AI: ${(await aside()).replace(/\n/g, " / ")} — ${git("log", "--oneline", "--graph", "--all", "-8").replace(/\n/g, " / ")} — status: ${git("status", "-sb").replace(/\n/g, " / ")}`); // 흔들림 진단용
       });
       eq(readFileSync(join(repo, "a.txt"), "utf8"), "합친 결과\n", "충돌이 해결된 내용");
       eq(git("status", "--porcelain").includes("a.txt"), false, "a.txt 정리됨");
