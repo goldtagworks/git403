@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.8
+
+- jj (Jujutsu) mode: switch between git and jj views with change IDs, the working-copy commit (@) and conflict badges. new, describe, edit, squash, abandon from the context menu, squash/split in the changes view, operation log with undo, bookmarks.
+- Branch comparison view and drag-and-drop cherry-pick.
+- Faster start (only the active language is loaded) and lighter on large repositories (graph layout, commit search, diffs, fewer git/gh processes).
+- Fixed the file list or diff of a previous commit showing when moving quickly between commits.
+- Fixed graph badge connectors not updating after creating or hiding branches and tags.
+- Fixed staging thousands of files at once failing (especially on Windows).
+- Linked worktrees and submodules now pick up commits and checkouts made outside the app.
+
 ## 1.0.6
 
 - AI chat (full graph view): open the right-hand column from the toolbar or ⌘J/Ctrl+J and ask in plain words ("pull from origin", "rebase qa onto dev"); Claude Code CLI runs the git work and resolves conflicts. Failed Pull/rebase/merge notifications can hand the error to AI chat.
