@@ -1,0 +1,12 @@
+[package]
+name = "gc-jj"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+gc-i18n = { path = "../i18n" }
+jj-lib = "=0.47.1"
+pollster = "1"
+
+[dev-dependencies]
+tempfile = "3"

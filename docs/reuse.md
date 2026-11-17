@@ -11,6 +11,7 @@ crates/core    gc-core   git 실행, 저장소 데이터 읽기 (UI 의존 없�
 crates/graph   gc-graph  커밋 그래프 레이아웃 계산 (git 의존 없음)
 crates/hosting gc-hosting GitHub·GitLab·Bitbucket·Gitea 계정·PR (git 의존 없음)
 crates/ai      gc-ai      git 작업용 AI: 공급자 4곳(Anthropic·OpenAI·Google·xAI)의 CLI 위임·API 키 (git 의존 없음, 키체인만 gc-hosting 재사용)
+crates/jj      gc-jj      jj(Jujutsu) 연동: `jj-lib` 0.47.1로 기존 git 저장소에 jj 켜기·상태 읽기 (UI·IPC 아직 없음)
 crates/backend gc-backend Tauri 비의존 백엔드: 모든 IPC 명령 본문·앱 상태·감시·askpass + stdio 서버 `git403-server`
 src-tauri      Tauri 셸: `gc_backend::Backend`를 IPC·이벤트로 연결만 한다 (창·메뉴·업데이터·e2e만 자체)
 ui             React + Canvas 화면
@@ -29,6 +30,15 @@ Rust에는 번역 문구가 없다. 사용자에게 보이는 오류·경고는 
 - locale 상태: `set(locale)`(`ko-KR`·`ko_KR.UTF-8`·`zh-TW` 등 `SUPPORTED_LOCALES` 23개로 정규화 — `pt*`→pt-BR, `fil`→tl, 모르면 en), `locale() -> &str`, `language_name() -> "Korean"|…`(AI 시스템 지시의 응답 언어), `init_from_os()`(앱 시작 직후 `LC_ALL`·`LC_MESSAGES`·`LANG`, macOS는 `defaults read -g AppleLanguages`).
 - IPC `set_locale(locale: String)`: UI가 시작 시와 언어 변경 시 호출. 네이티브 메뉴·askpass 창·OS 확인창은 Rust에 문구가 없다(askpass는 git 프롬프트 원문을 UI로 중계).
 - AI 시스템 지시(`gc_ai::Task::system`)는 영어로 쓰고, 모델이 쓰는 자연어의 언어를 locale에 맞춰 지정한다(커밋·PR은 최근 커밋·제목의 언어 우선).
+
+## gc-jj (jj 모드 코어, `crates/jj`)
+
+`jj-lib =0.47.1`(+`pollster`) 래퍼. jj-lib가 쓰는 gix 0.90과 `gc-core`의 gix는 **같은 버전이어야** 한다(올릴 때 같이). 아직 IPC·UI 없음(30b). 오류는 `gc_i18n::Coded`(`jj.failed`·`jj.notRepo`·`jj.notEnabled`·`jj.partial`).
+
+- `enable(repo_path: &Path) -> Result<(), Coded>`: `Workspace::init_external_git`(기존 `.git` 그대로) → `.jj/.gitignore`(`/*\n`, jj CLI와 같게; `git status`에 `.jj/` 안 보임) → git HEAD·브랜치·태그를 jj로 가져오고 `@`를 HEAD 위 빈 커밋으로(작업 폴더·index·HEAD·기존 ref 불변, jj가 `refs/jj/keep/*`만 추가). 이미 켜져 있으면 통과(멱등).
+- `is_enabled(repo_path: &Path) -> bool`
+- `status(repo_path: &Path) -> Result<JjStatus, Coded>`: `JjStatus{working_copy: Option<String>(@ SHA), change_ids: BTreeMap<SHA, ChangeId{short(12자), full(32자, jj 역 hex k-z)}>, conflicted: Vec<SHA>, truncated: bool}`. `@`와 visible heads에서 부모로 `MAX_COMMITS`(2000)까지.
+- 보안: 경로는 정규화하고 `.git`·`.jj`·`.jj/repo`·`.jj/working_copy`가 실제 디렉터리(심볼릭 링크·gitfile 거절)일 때만 연다. 사용자·저장소 jj 설정은 읽지 않는다(`StackedConfig::with_defaults`).
 
 ## gc-core
 
