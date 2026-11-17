@@ -9,7 +9,8 @@
 공개 저장소 [`goldtagworks/git403`](https://github.com/goldtagworks/git403) 하나에 소스·릴리스·캐스크(`main`의 `Casks/git403.rb`)를 둔다. 릴리스 노트도 공개되므로 `CHANGELOG.md`에는 사용자에게 보여도 되는 내용만 적는다.
 
 1. `src-tauri/tauri.conf.json`의 `version`을 올린다.
-2. Mac에서 `scripts/release-mac.sh`: Apple Silicon(`aarch64`)·Intel(`x64`) dmg를 따로 빌드(유니버설 아님, `rustup target`은 스크립트가 추가) → 릴리스 `v<version>`(없으면 생성)에 업로드 → `Casks/git403.rb`(`on_arm`·`on_intel`별 url·sha256) 갱신·push. 활성 gh 계정과 상관없이 goldtagworks 토큰(`gh auth token -u goldtagworks`)을 쓴다.
+2. Mac에서 `scripts/release-mac.sh`: Apple Silicon(`aarch64`)·Intel(`x64`) dmg를 따로 빌드(유니버설 아님, `rustup target`은 스크립트가 추가) → 릴리스 `v<version>`(없으면 `--latest=false`로 생성)에 업로드 → 파일이 다 올라간 뒤에 최신으로 표시 → `Casks/git403.rb`(`on_arm`·`on_intel`별 url·sha256) 갱신·push.
+   - dmg는 Tauri `dmg` 번들 대신 `hdiutil makehybrid`(마운트 없음)로 만든다(앱 + `Applications` 링크, 창 배치 꾸밈 없음). Tauri의 `bundle_dmg.sh`는 임시 볼륨을 마운트하는데, 보안 에이전트(EDR)가 새 앱을 검사하며 붙잡으면 해제가 안 돼 `hdiutil: create failed - 리소스 사용 중`으로 실패한다. 활성 gh 계정과 상관없이 goldtagworks 토큰(`gh auth token -u goldtagworks`)을 쓴다.
    - Windows PC에서 `powershell -ExecutionPolicy Bypass -File scripts\windows\release.ps1`: `build.ps1` 빌드 → 같은 릴리스에 `git403_<version>_x64-setup.exe` 업로드. 그 PC의 gh에도 goldtagworks 계정이 로그인돼 있어야 한다. 순서는 상관없다(먼저 도는 쪽이 릴리스를 만든다).
 3. Windows 설치: 릴리스의 `-setup.exe`를 받아 실행(SmartScreen → 추가 정보 → 실행). macOS 설치: `brew tap goldtagworks/git403 https://github.com/goldtagworks/git403 && brew trust goldtagworks/git403 && brew install --cask git403`. 업데이트: `brew update && brew upgrade --cask git403`. 캐스크 `postflight`가 격리 속성을 지워 Gatekeeper 경고 없이 열린다.
 

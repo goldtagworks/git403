@@ -17,7 +17,7 @@ pnpm install --frozen-lockfile && pnpm --dir ui install --frozen-lockfile
 
 # Apple Silicon·Intel을 따로 빌드한다(유니버설 대신 아키텍처별 dmg). 이름의 아키텍처는 Tauri 규칙(aarch64·x64)을 따른다.
 # Windows가 먼저 만들었을 수 있다.
-gh release view "v$VERSION" -R $RELEASES >/dev/null 2>&1 || gh release create "v$VERSION" -R $RELEASES --title "git403 v$VERSION" --notes "$(node scripts/release-notes.mjs "$VERSION")"
+gh release view "v$VERSION" -R $RELEASES >/dev/null 2>&1 || gh release create "v$VERSION" -R $RELEASES --title "git403 v$VERSION" --latest=false --notes "$(node scripts/release-notes.mjs "$VERSION")"
 TMPD=$(mktemp -d)
 rm -rf out
 gh release download "v$VERSION" -R $RELEASES -p latest.json -D "$TMPD" 2>/dev/null || true
@@ -25,8 +25,15 @@ for T in aarch64-apple-darwin:aarch64:darwin-aarch64 x86_64-apple-darwin:x64:dar
   IFS=: read -r TRIPLE ARCH PLATFORM <<<"$T"
   rustup target add "$TRIPLE" >/dev/null
   # 앱 안 업데이트용 .app.tar.gz·.sig도 만든다.
-  TAURI_SIGNING_PRIVATE_KEY="$KEY" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" pnpm tauri build --target "$TRIPLE" --bundles app,dmg
+  TAURI_SIGNING_PRIVATE_KEY="$KEY" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" pnpm tauri build --target "$TRIPLE" --bundles app
+  # dmg는 마운트 없이 만든다: Tauri의 bundle_dmg.sh는 임시 볼륨을 마운트하는데, 보안 에이전트(EDR)가 새 앱을 검사하며 붙잡으면 해제가 안 돼 "리소스 사용 중"으로 실패한다.
   DMG=target/$TRIPLE/release/bundle/dmg/git403_${VERSION}_${ARCH}.dmg
+  SRC=$(mktemp -d)
+  cp -R "target/$TRIPLE/release/bundle/macos/git403.app" "$SRC/" && ln -s /Applications "$SRC/Applications"
+  mkdir -p "$(dirname "$DMG")" && rm -f "$DMG" "$SRC.dmg"
+  hdiutil makehybrid -quiet -hfs -default-volume-name git403 -o "$SRC.dmg" "$SRC"
+  hdiutil convert -quiet -format UDZO -o "$DMG" "$SRC.dmg"
+  rm -rf "$SRC" "$SRC.dmg"
   APP=target/$TRIPLE/release/bundle/macos/git403.app.tar.gz
   [ -f "$DMG" ] || { echo "$DMG 가 없습니다."; exit 1; }
   printf -v "SHA_$ARCH" %s "$(shasum -a 256 "$DMG" | cut -d' ' -f1)"
@@ -39,6 +46,8 @@ for T in aarch64-apple-darwin:aarch64:darwin-aarch64 x86_64-apple-darwin:x64:dar
   rm -rf "target/$TRIPLE/release/bundle"
 done
 gh release upload "v$VERSION" "$TMPD/latest.json" -R $RELEASES --clobber
+# 파일이 다 올라간 뒤에 최신으로 표시한다(중간에 실패해 빈 릴리스가 최신으로 남으면 앱 업데이트 확인이 깨진다)
+gh release edit "v$VERSION" -R $RELEASES --latest >/dev/null
 rm -rf "$TMPD"
 
 TMP=$(mktemp -d)
