@@ -644,13 +644,13 @@ test("정적 점검: 새 오류 코드 18개의 변수 이름이 23개 locale �
   }
 });
 
-test("정적 점검: 일반 빌드 결과물에는 실제 앱 E2E 훅(__e2eDomMenu)이 없고, VITE_E2E_APP=1 빌드에만 있다", async () => {
+test("정적 점검: 일반 빌드 결과물에는 실제 앱 E2E 훅(__e2eDomMenu·__e2eAsk)이 없고, VITE_E2E_APP=1 빌드에만 있다", async () => {
   test.setTimeout(120_000);
   const build = (e2e: boolean) => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), "git403-dist-"));
     const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("VITE_")));
     execSync(`pnpm exec vite build --outDir ${out} --emptyOutDir`, { cwd: process.cwd(), env: { ...env, ...(e2e ? { VITE_E2E_APP: "1" } : {}) }, stdio: "ignore" });
-    const hit = (dir: string): boolean => fs.readdirSync(dir, { withFileTypes: true }).some((f) => (f.isDirectory() ? hit(path.join(dir, f.name)) : f.name.endsWith(".js") && fs.readFileSync(path.join(dir, f.name), "utf8").includes("__e2eDomMenu")));
+    const hit = (dir: string): boolean => fs.readdirSync(dir, { withFileTypes: true }).some((f) => (f.isDirectory() ? hit(path.join(dir, f.name)) : f.name.endsWith(".js") && fs.readFileSync(path.join(dir, f.name), "utf8").includes("__e2eDomMenu") || fs.readFileSync(path.join(dir, f.name), "utf8").includes("__e2eAsk")));
     const found = hit(out);
     fs.rmSync(out, { recursive: true, force: true });
     return found;

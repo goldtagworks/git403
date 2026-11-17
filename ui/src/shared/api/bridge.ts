@@ -173,7 +173,12 @@ export const listen = <T>(event: string, handler0: (e: { payload: T }) => void):
 
 export const pickOpen = (options: OpenOpts) => (vscode ? request<string | null>({ type: "dialog", kind: "open", options }) : (tauriOpen(options) as Promise<string | null>));
 export const pickSave = (options: SaveOpts) => (vscode ? request<string | null>({ type: "dialog", kind: "save", options }) : (tauriSave(options) as Promise<string | null>));
-export const ask = (message: string, options: AskOpts) => (vscode ? request<boolean>({ type: "dialog", kind: "ask", message, options }) : tauriAsk(message, options));
+/** 실제 앱 E2E(`VITE_E2E_APP=1` 빌드에서만): OS 확인창은 JS로 못 누르고 `__TAURI_INTERNALS__.invoke`도 덮어쓸 수 없어서, `window.__e2eAsk(message, options)`가 있으면 그 결과(boolean)로 대신한다 */
+const e2eAsk = (): ((m: string, o: AskOpts) => boolean) | undefined => (import.meta.env.VITE_E2E_APP ? (window as unknown as { __e2eAsk?: (m: string, o: AskOpts) => boolean }).__e2eAsk : undefined);
+export const ask = (message: string, options: AskOpts) => {
+  const e2e = e2eAsk();
+  return e2e ? Promise.resolve(e2e(message, options)) : vscode ? request<boolean>({ type: "dialog", kind: "ask", message, options }) : tauriAsk(message, options);
+};
 export const openUrl = (url: string) => (vscode ? request<void>({ type: "openUrl", url }) : tauriOpenUrl(url));
 /** VS Code 확장은 마켓플레이스가 업데이트하므로 항상 null(새 버전 없음), 재시작은 하지 않는다 */
 export const checkUpdate = () => (vscode ? Promise.resolve(null) : tauriCheck());

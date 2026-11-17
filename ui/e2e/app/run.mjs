@@ -426,7 +426,9 @@ try {
       eq(log.cwd.includes(basename(repo)), true, "저장소 폴더에서 실행");
       const prompt = log.argv.join(" ");
       if (!prompt.includes("git pull") || !prompt.includes("fast-forward")) throw new Error("오류 내용을 담은 입력이 아님: " + prompt.slice(0, 300));
-      await until(() => git("log", "-1", "--format=%P").split(" ").length === 2, "병합 커밋(부모 둘)");
+      await until(() => git("log", "-1", "--format=%P").split(" ").length === 2, "병합 커밋(부모 둘)").catch((e) => {
+        throw new Error(`${e.message} — ${git("log", "--oneline", "--graph", "--all", "-8").replace(/\n/g, " / ")} — status: ${git("status", "-sb").replace(/\n/g, " / ")}`); // 흔들림 진단용
+      });
       eq(readFileSync(join(repo, "a.txt"), "utf8"), "합친 결과\n", "충돌이 해결된 내용");
       eq(git("status", "--porcelain").includes("a.txt"), false, "a.txt 정리됨");
       // 이력에 남고, 그 백업으로 되돌리면 병합 전(내 커밋)으로 돌아간다
@@ -554,12 +556,13 @@ try {
   });
 
   // ---- jj 30f: 실제 UI 경로(빠른 실행 팔레트·우클릭 메뉴·prompt·시트·OS ask)로 진행한다. IPC 직접 호출은 준비·검증(상태 읽기, 밖에서 jj가 바뀐 상황)에만 쓴다.
-  // 네이티브 메뉴는 JS로 못 누르므로 `window.__e2eDomMenu = true`로 우클릭 메뉴를 DOM 메뉴로 띄운다(menu.tsx). OS 확인창은 invoke를 가로채 문구를 모으고 승인한다(window.__asked).
+  // 네이티브 메뉴는 JS로 못 누르므로 `window.__e2eDomMenu = true`로 우클릭 메뉴를 DOM 메뉴로 띄운다(menu.tsx). OS 확인창은 `window.__e2eAsk`(bridge.ts `ask`의 E2E 훅, VITE_E2E_APP 빌드 전용; `__TAURI_INTERNALS__.invoke`는 덮어쓸 수 없다)로 문구를 모으고 승인한다(window.__asked).
   const jjInv = (cmd, args = {}) => js(`try { return { ok: await window.__TAURI_INTERNALS__.invoke(${JSON.stringify(cmd)}, ${JSON.stringify({ repo, ...args })}) }; } catch (e) { return { err: String(e) }; }`);
   const jjOk = async (cmd, args) => { const r = await jjInv(cmd, args); if (r.err) throw new Error(`${cmd}: ${r.err}`); return r.ok; };
-  const hookAsk = () => js(`window.__e2eDomMenu = true; if (!window.__askHooked) { window.__askHooked = true; window.__asked = []; const inv = window.__TAURI_INTERNALS__.invoke.bind(window.__TAURI_INTERNALS__); window.__TAURI_INTERNALS__.invoke = (cmd, args, opts) => cmd === "plugin:dialog|message" ? (window.__asked.push(args.message), Promise.resolve(window.__askNo ? "No" : args.buttons?.OkCancelCustom?.[0] ?? "Yes")) : inv(cmd, args, opts); }`);
+  const hookAsk = () => js(`window.__e2eDomMenu = true; if (!window.__e2eAsk) { window.__asked = []; window.__e2eAsk = (message) => (window.__asked.push(message), !window.__askNo); }`);
   const dlgJs = (name) => `$$('[role=dialog]').find((d) => d.getAttribute("aria-label") === ${JSON.stringify(name)})`;
-  const esc = () => js(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));`);
+  // Esc는 열린 시트(role=dialog)에서 올라가야 React의 시트 핸들러가 받는다(document에 보내면 시트가 안 닫힌다)
+  const esc = () => js(`($('[role=dialog]') ?? document).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));`);
   const quick = (label) => js(`
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "p", metaKey: true, ctrlKey: true, bubbles: true }));
     const input = await waitFor(() => $('[role=dialog] input'), "빠른 실행 입력");
@@ -581,12 +584,31 @@ try {
   const asked = () => js(`return window.__asked ?? [];`);
   const opLog = async () => jjOk("jj_op_log", { limit: 200 });
   const toastHas = (text) => js(`return $$(".toast").some((t) => t.textContent.includes(${JSON.stringify(text)}));`);
-  const porcelainPaths = () => git("status", "--porcelain=v1", "-uall").split("\n").filter(Boolean).map((l) => l.slice(3).replace(/^"|"$/g, "")).sort();
+  // git()은 출력을 trim해 첫 줄의 앞 공백(" M a.txt")이 사라지므로 직접 실행한다
+  const porcelainPaths = () => execFileSync("git", ["status", "--porcelain=v1", "-uall"], { cwd: repo, encoding: "utf8" }).split("\n").filter(Boolean).map((l) => l.slice(3).replace(/^"|"$/g, "")).sort();
   const rev = (ref) => { try { return git("rev-parse", "--verify", "-q", ref); } catch { return ""; } };
   const bare = temp("bare");
+  /** 각 jj 단계의 독립 준비: 저장소가 열린 앱(앞 단계가 앱을 다시 띄웠거나 저장소 없이 시작했을 수 있다)·ask 가로채기·(withJj면) jj 켜짐+jj 보기. 이미 되어 있으면 아무것도 안 한다 */
+  const prep = async (withJj) => {
+    if (!(await js(`return !!$(".commits .row");`).catch(() => false))) {
+      await nat("@quit").catch(() => {});
+      await exited(app);
+      app = launch([repo]);
+      await js(`await waitFor(() => $$(".commits .row").length, "커밋 목록", 20000);`);
+    }
+    await hookAsk();
+    if (!withJj) return;
+    const on = await jjInv("jj_status");
+    if (on.err) {
+      await jjOk("jj_enable");
+      await js(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "r", metaKey: true, ctrlKey: true, bubbles: true }));`);
+    }
+    await until(async () => (await jjMarks()) > 0, "jj 보기 표시");
+  };
 
   await step("jj 30f: 빠른 실행으로 jj를 켜면(ask 승인) jj 보기가 되고, 앱 변경 목록이 새 파일을 보인 뒤 ctx.status 경로 집합이 git status와 같다 (새 파일은 ? 또는 A)", async () => {
-    await hookAsk();
+    await prep(false);
+    if (!(await jjInv("jj_status")).err) throw new Error("준비: jj가 이미 켜져 있음");
     await quick("jj 모드 켜기");
     await until(async () => (await jjMarks()) > 0, "jj 보기 표시");
     writeFileSync(join(repo, "a.txt"), "1\n2\n3\n");
@@ -600,6 +622,7 @@ try {
   });
 
   await step("jj 30f: ⌘⌥Z 한 번 → 확인창(N개 파일) 승인 → snapshot만 취소돼 파일이 되돌아가고 undo operation은 하나만 생긴다, 작업 기록에서 snapshot 시점으로 복구", async () => {
+    await prep(true);
     const before = (await opLog()).length;
     await js(`window.__asked = []; document.dispatchEvent(new KeyboardEvent("keydown", { key: "z", code: "KeyZ", metaKey: true, ctrlKey: true, altKey: true, bubbles: true }));`);
     await until(async () => (await asked()).length >= 1, "되돌리기 확인창");
@@ -620,18 +643,25 @@ try {
   });
 
   await step("jj 30f: 우클릭 → prompt로 북마크 만들기, 뒤로 옮기기는 '그래도 옮기기' ask → allowBackwards 재시도, operation 복원 뒤 git rev-parse로 ref가 되돌아가고, 시트에서 삭제하면 git 브랜치도 사라진다", async () => {
-    const head = git("rev-parse", "main");
-    const older = git("rev-parse", "main~1");
+    await prep(true);
+    // 앞 단계가 커밋을 더 쌓았을 수 있으니 main 끝이 아니라 제목으로 커밋을 찾는다("첫 커밋"은 "두 번째 커밋"의 조상이라 그쪽으로 옮기면 뒤로 옮기기)
+    const byTitle = (title) => git("log", "-1", "--format=%H", "--fixed-strings", `--grep=${title}`, "main");
+    const head = byTitle("두 번째 커밋");
+    const older = byTitle("첫 커밋");
     await rowMenu("두 번째 커밋", "북마크 만들기");
     await bookmarkPrompt("e2e-bm");
-    await until(() => rev("refs/heads/e2e-bm") === head, "북마크 = git 브랜치 ref");
-    const opBefore = (await opLog())[0].id;
+    await until(() => rev("refs/heads/e2e-bm") === head, "북마크 = git 브랜치 ref").catch(async (e) => {
+      throw new Error(`${e.message} — ref=${rev("refs/heads/e2e-bm").slice(0, 8)} head=${head.slice(0, 8)} asked=${JSON.stringify(await asked())} dialogs=${await js(`return $$("[role=dialog]").map((d) => d.getAttribute("aria-label")).join("|");`)} toasts=${await js(`return $$(".toast").map((t) => t.textContent).join("|");`)} menus=${await js(`return $$("[role=menuitem]").length;`)}`);
+    });
+    // git ref는 operation을 커밋하기 전에 내보내므로(export → 커밋) ref가 보여도 op log엔 아직 없을 수 있다: op가 보일 때까지 기다린 뒤 그 id를 잡는다
+    const opBefore = (await until(async () => { const o = (await opLog())[0]; return o.description.includes("e2e-bm") && o; }, "북마크 만들기 operation")).id;
     // 뒤로 옮기기: 거절 → ask → allowBackwards
     await js(`window.__asked = [];`);
     await rowMenu("첫 커밋", "북마크 만들기");
     await bookmarkPrompt("e2e-bm");
     await until(async () => (await asked()).some((m) => m.includes("뒤쪽이나 다른 가지")), "'그래도 옮기기' 확인창");
     await until(() => rev("refs/heads/e2e-bm") === older, "allowBackwards로 옮김");
+    await until(async () => (await opLog())[0].description.includes("point bookmark"), "옮기기 operation");
     // 작업 기록에서 옮기기 전 시점으로 복원 → ref가 되돌아간다
     await js(`window.__asked = [];`);
     await quick("작업 기록");
@@ -641,7 +671,10 @@ try {
       const rows = await waitFor(() => { const r = $$('[role=option]', d); return r.length > ${idx} && r; }, "행");
       press($$("button", rows[${idx}]).find((b) => b.textContent.includes("이 시점으로")));
     `);
-    await until(() => rev("refs/heads/e2e-bm") === head, "복원 뒤 브랜치 ref가 되돌아감");
+    await until(() => rev("refs/heads/e2e-bm") === head, "복원 뒤 브랜치 ref가 되돌아감").catch(async (e) => {
+      const log = (await opLog()).slice(0, 8).map((o) => `${o.id.slice(0, 8)} ${o.description.slice(0, 40)}`);
+      throw new Error(`${e.message} — idx=${idx} head=${head.slice(0, 8)} older=${older.slice(0, 8)} ref=${rev("refs/heads/e2e-bm").slice(0, 8)} opBefore=${opBefore.slice(0, 8)} log=${JSON.stringify(log)} asked=${JSON.stringify(await asked())} toasts=${await js(`return $$(".toast").map((t) => t.textContent).join("|");`)}`);
+    });
     await esc();
     // 북마크 시트에서 삭제
     await js(`window.__asked = [];`);
@@ -656,6 +689,7 @@ try {
   });
 
   await step("jj 30f: untracked 원격 북마크 '추적' → 로컬 생성, Cf 이름 원격 브랜치는 보이는 표기로 표시되고 추적이 jj CLI 안내로 거절되며 op log는 그대로", async () => {
+    await prep(true);
     execFileSync("git", ["init", "-q", "--bare", bare]);
     git("remote", "add", "origin", bare);
     git("push", "-q", "origin", "main", "main:refs/heads/rb");
@@ -680,6 +714,7 @@ try {
     if (!evil) { console.warn("(jj가 Cf 이름을 가져오지 않음: 표시·거절 단언 생략)"); await esc(); return; }
     await js(`await waitFor(() => ${dlgJs("북마크")}?.textContent.includes("⟦U+202E⟧"), "Cf가 보이는 표기로 표시");`);
     if (await js(`return ${dlgJs("북마크")}.textContent.includes("‮");`)) throw new Error("원문 Cf 문자가 그대로 렌더됨");
+    await until(async () => (await opLog())[0].description.includes("rb"), "rb 추적 operation"); // ref가 보여도 operation 커밋은 조금 뒤일 수 있다
     const logN = (await opLog()).length;
     await js(`
       const d = ${dlgJs("북마크")};
@@ -692,6 +727,7 @@ try {
   });
 
   await step("jj 30f: abandon 확인창에 그 커밋의 북마크 이름이 나오고, 승인하면 git 브랜치도 사라진다", async () => {
+    await prep(true);
     if (!rev("refs/heads/side/only")) throw new Error("준비: side/only 브랜치 없음");
     await js(`window.__asked = [];`);
     await rowMenu("숨길 브랜치만의 커밋", "버리기");
@@ -700,6 +736,7 @@ try {
   });
 
   await step("jj 30f: jj 끄기 시트 — 보기만 끄기(.jj 유지) → 삭제 확인(보존 목록·고지) → 확인 뒤 jj가 바뀌면 다시 확인 → 삭제 후 .jj·refs/jj 없음·보존 ref·HEAD 브랜치, 다시 켜면 jj 보기가 기본", async () => {
+    await prep(true);
     // (a) 보기만 끄기
     await quick("jj 끄기");
     await js(`
@@ -720,7 +757,7 @@ try {
     const text = await js(`return ${dlgJs("jj 끄기")}.textContent;`);
     for (const need of ["작업 기록(operation log)", "refs/git403/jj-orphans/"]) if (!text.includes(need)) throw new Error(`확인 화면에 '${need}' 없음`);
     // 확인 뒤 jj 상태가 밖에서 바뀌면(jj.disableChanged) 목록을 다시 불러온다
-    await jjOk("jj_new", { parents: [(await jjOk("jj_status")).workingCopy] });
+    await jjOk("jj_describe", { sha: (await jjOk("jj_status")).workingCopy, message: "e2e orphan 변경 (밖에서 다시 수정)" });
     await js(`press($$("button", ${dlgJs("jj 끄기")}).find((b) => b.textContent.trim() === "jj 삭제"));`);
     await js(`await waitFor(() => ${dlgJs("jj 끄기")}?.textContent.includes("저장소가 바뀌어 목록을 다시 불러왔습니다"), "disableChanged 안내");`);
     if ((await asked()).length !== 1) throw new Error("첫 시도의 확인창은 1번");
