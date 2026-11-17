@@ -7,6 +7,7 @@ import { api } from "../../shared/api/api";
 import { ask, errCode, CodedError } from "../../shared/api/bridge";
 import { dateFmt, t, tErr, useLocale } from "../../shared/i18n/i18n";
 import { ctx, ops } from "../../shared/model/ops";
+import { isRepoBusy } from "../../shared/lib/toast";
 import { jjEnabled, jjOn, setJjView } from "../../shared/lib/jjview";
 import { visibleText } from "../../shared/lib/safeText";
 import { relTime } from "../../shared/lib/reltime";
@@ -92,7 +93,7 @@ function JjOpLog({ repo, cur, onClose }: SheetProps) {
         setMore(l.length >= lim && lim < 1000);
       } catch (e) {
         if (s !== seq.current) return;
-        ctx.error(String(e));
+        ctx.error(e);
         if (errCode(e) === "jj.notEnabled") onClose();
       } finally {
         if (s === seq.current) stop();
@@ -183,7 +184,7 @@ function JjBookmarks({ repo, cur, onClose }: SheetProps) {
       if (s === seq.current) setList((prev) => keep(prev ?? [], l, (x) => x.name));
     } catch (e) {
       if (s !== seq.current) return;
-      ctx.error(String(e));
+      ctx.error(e);
       if (errCode(e) === "jj.notEnabled") onClose();
     } finally {
       if (s === seq.current) stop();
@@ -267,7 +268,7 @@ function JjDisable({ repo, cur, onClose }: SheetProps) {
       if (s !== seq.current) return;
       const code = errCode(e);
       if (code === "jj.notEnabled" || code === "jj.notRepo") {
-        ctx.error(String(e));
+        ctx.error(e);
         await gone();
         return onClose();
       }
@@ -287,14 +288,14 @@ function JjDisable({ repo, cur, onClose }: SheetProps) {
       go("confirm");
     } catch (e) {
       if (s !== seq.current) return;
-      ctx.error(String(e));
+      ctx.error(e);
       go("choose");
     }
   };
   const fail = async (e: unknown) => {
     const code = errCode(e);
     if (code === "jj.disableChanged" || code === "jj.otherWorkspaces") return recheck();
-    ctx.error(pre() + String(e));
+    ctx.error(isRepoBusy(e) ? e : pre() + String(e));
     if (code === "jj.disablePartial") {
       await ops.jjLoad(repo);
       if (jjEnabled(repo)) {

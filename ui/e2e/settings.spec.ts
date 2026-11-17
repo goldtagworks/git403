@@ -220,23 +220,47 @@ test("자동 fetch: 기본으로 켜져 있어 저장소를 열면 한 번 fetch
   await expect.poll(async () => (await callsOf(page, "start_job")).filter((c) => JSON.parse(c[1]).args[0] === "fetch").length).toBe(1);
 });
 
-test("자동 fetch가 도는 중 사용자가 Fetch를 누르면 자동 작업은 취소되고 사용자 작업이 실행된다", async ({ page }) => {
+test("자동 fetch가 도는 중 사용자가 Fetch를 누르면 자동 작업을 죽이지 않는다: 번호를 바로 받고 상태바에 '대기 중'이 보이며 대기만 취소할 수 있다", async ({ page }) => {
   await page.clock.install();
   await open(page, "일반", { __job: { ms: 8 * 60_000 } });
   await dlg(page).getByLabel("자동 Fetch 간격").selectOption("5");
   await page.keyboard.press("Escape");
   await page.clock.runFor(5 * 60_000 + 500);
   expect(await callsOf(page, "start_job")).toHaveLength(1);
-  // 툴바 Fetch 버튼은 잠기지 않는다
+  // 이후 사용자 작업은 백엔드 대기열에서 기다린다(mock 흉내): 요청은 바로 나가고 대기 이벤트가 온다
+  await page.evaluate(() => ((window as any).__jobQueue = true));
   await page.locator(".toolbar").getByRole("button", { name: "Fetch", exact: true }).click();
   await expect.poll(async () => (await callsOf(page, "start_job")).length).toBe(2);
-  expect(await callsOf(page, "cancel_job")).toHaveLength(1);
+  await page.clock.runFor(100);
+  await expect(page.locator(".statusbar")).toContainText("대기 중");
+  expect(await callsOf(page, "cancel_job")).toHaveLength(0); // 자동 작업은 죽이지 않는다
   const [auto, user] = (await callsOf(page, "start_job")).map((c) => JSON.parse(c[1]));
   expect(auto.interactive).toBe(false);
   expect(user.interactive).toBeUndefined(); // 사용자 작업은 인증 창을 쓴다
-  // 밀려난 자동 작업의 완료 이벤트가 와도 사용자 작업 상태를 건드리지 않는다
-  await page.evaluate(() => (window as any).__emit("job-done", [1, "Cancelled"]));
-  await expect(page.getByRole("button", { name: "Fetch 취소" })).toBeVisible();
+  // 대기 취소: 대기 중인 사용자 작업(번호 2)만 취소되고 자동 작업(1)은 그대로다
+  await page.getByRole("button", { name: "Fetch 취소" }).click();
+  expect((await callsOf(page, "cancel_job")).map((c) => c[1])).toEqual(["2"]);
+  await expect(page.getByRole("button", { name: "Fetch 취소" })).toHaveCount(0);
+});
+
+test("대기열에서 기다리는 사용자 작업이 있는 저장소 탭을 닫으면 그 작업을 취소해 나중에 시작하지 않게 한다", async ({ page }) => {
+  await open(page, "일반", { __jobQueue: true });
+  await page.keyboard.press("Escape"); // 설정 창 닫기
+  await page.locator(".toolbar").getByRole("button", { name: "Fetch", exact: true }).click();
+  await expect(page.locator(".statusbar")).toContainText("대기 중");
+  await page.keyboard.press("ControlOrMeta+w"); // 활성 저장소 탭 닫기
+  await expect.poll(async () => (await callsOf(page, "cancel_job")).map((c) => c[1])).toEqual(["1"]);
+});
+
+test("자동 fetch가 같은 저장소의 다른 작업과 겹쳐 건너뛰어지면(job.skipped) 경고 토스트 없이 조용히 넘어간다", async ({ page }) => {
+  await page.clock.install();
+  await open(page, "일반");
+  await dlg(page).getByLabel("자동 Fetch 간격").selectOption("5");
+  await page.keyboard.press("Escape");
+  await page.evaluate(() => ((window as any).__startFail = { code: "job.skipped", vars: {}, message: "skipped" }));
+  await page.clock.runFor(5 * 60_000 + 500);
+  expect(await callsOf(page, "start_job")).toHaveLength(0); // 시작이 거절돼 기록되지 않았다
+  await expect(page.locator(".toast")).toHaveCount(0);
 });
 
 test("자동 fetch: 저장소가 없으면 아무것도 하지 않는다", async ({ page }) => {

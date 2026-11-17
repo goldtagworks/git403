@@ -1,6 +1,6 @@
 import { StrictMode, memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
-import { COMPACT, DETAIL, hideWindow, listen, onOpenRepo, onSelect, openCommit, reportSelected } from "../shared/api/bridge";
+import { COMPACT, DETAIL, errCode, hideWindow, listen, onOpenRepo, onSelect, openCommit, reportSelected } from "../shared/api/bridge";
 import { api } from "../shared/api/api";
 import { locale, onLocale, t, useLocale } from "../shared/i18n/i18n";
 import { ChangesView } from "../widgets/changes/ChangesView";
@@ -30,7 +30,7 @@ import { useRatioSplit, useSplit } from "../shared/ui/Splitter";
 import { Notices } from "../shared/ui/Notices";
 import { gh, suggestOtherAccount } from "../shared/model/gh";
 import { StatusBar } from "../widgets/status-bar/StatusBar";
-import { toast, toastError } from "../shared/lib/toast";
+import { isRepoBusy, toast, toastError } from "../shared/lib/toast";
 import { Toasts } from "../shared/ui/Toasts";
 import { MobileShell } from "./mobile/MobileShell";
 import { Tabs } from "../widgets/tabs/Tabs";
@@ -128,7 +128,7 @@ function App() {
   // 작업 번호 → 정보. job-done이 start_job 응답보다 먼저 오면 결과를 early에 두었다가 등록 때 처리한다.
   const jobs = useRef(new Map<number, { name: string; repo: string; onDone?: () => void; remote?: boolean; quiet?: boolean; note?: ReturnType<typeof jobNote>; args?: string[]; shell?: string }>());
   const starting = useRef(new Map<string, string>()); // 시작 요청 중인 사용자 작업(저장소 → 이름). startJob 응답 전 두 번째 요청을 막는다
-  const ignored = useRef(new Set<number>()); // 사용자 작업에 밀려 취소한 자동 작업 (완료 이벤트 무시)
+  const waitingJobs = useRef(new Set<number>()); // 백엔드 대기열에서 앞선 작업을 기다리는 중인 작업 번호(`job` 이벤트 waiting → started). start_job 응답보다 먼저 올 수 있어 번호만 따로 둔다
   const toHead = useRef(false); // Pull 성공 뒤 다음 재조회에서 선택을 HEAD(받은 최신 커밋)로 옮긴다
   const quietFailed = useRef(false); // 자동 작업이 연속 실패 중인지 (안내는 한 번만)
   const early = useRef(new Map<number, [string | null, string | undefined]>());
@@ -305,6 +305,8 @@ function App() {
   );
 
   const closeTab = useCallback((path: string) => {
+    // 이 저장소에서 대기열에서 기다리는 사용자 작업은 취소한다(탭을 닫았는데 나중에 시작하지 않게). 이미 도는 작업·자동 작업은 건드리지 않는다
+    for (const [id, j] of jobs.current) if (j.repo === path && !j.quiet && waitingJobs.current.has(id)) api.cancelJob(id).catch(() => {});
     const i = ctx.tabs.indexOf(path);
     changeTabs((t) => t.filter((x) => x !== path));
     if (path !== repoRef.current) return;
@@ -321,12 +323,12 @@ function App() {
 
   /** 작업 완료. 다른 탭의 작업이면 다시 읽지 않고 문구에 저장소 이름을 붙인다. */
   const finish = useCallback((id: number, err: string | null, code?: string) => {
-    if (ignored.current.delete(id)) return;
     const j = jobs.current.get(id);
     if (!j) return void early.current.set(id, [err, code]);
     jobs.current.delete(id);
     setJob(null);
     setMessage("");
+    waitingJobs.current.delete(id);
     // fetch --tags: 원격에서 옮겨진 태그만 거부(would clobber)되고 나머지는 받았다 → 실패가 아니라 안내. 로컬 태그는 덮어쓰지 않는다
     const kept = err && j.args?.[0] === "fetch" ? clobberedTags(err) : null;
     if (kept) {
@@ -340,6 +342,7 @@ function App() {
       else if (!quietFailed.current) {
         quietFailed.current = true;
         toast(t("app.jobFailed", { name: j.name }), { kind: "warning", detail: err.trim().split("\n").pop(), action: connectAction(code) });
+        ops.offerLockRecovery(j.repo, err, () => ctx.job(j.name, j.args ?? [], { repo: j.repo, quiet: true }));
         // 연결 계정이 없어 다른 계정 저장소에 막힌 경우: 접근되는 계정에 연결하고 다시 받을지 묻는다 (연속 실패 중 한 번만)
         if (/repository not found/i.test(err)) suggestOtherAccount(j.repo, () => ctx.job(j.name, j.args ?? [], { repo: j.repo, quiet: true }));
       }
@@ -349,6 +352,8 @@ function App() {
     const prefix = here || j.onDone ? "" : `${j.repo.split(/[\\/]/).pop()}: `;
     if (err) {
       toast(prefix + t("app.jobFailed", { name: j.name }), { kind: "error", detail: err.trim(), action: connectAction(code) ?? aiHandoff(j.args?.[0], j.args ?? [], err, j.repo) });
+      // 예전 강제 종료가 남긴 `.lock` 파일이 원인이면 지우고 다시 시도하자고 제안한다(백엔드가 오래된 lock·작업 없음을 확인)
+      ops.offerLockRecovery(j.repo, err, () => ctx.job(j.name, j.args ?? [], { repo: j.repo, shell: j.shell, remote: j.remote, onDone: j.onDone, quiet: false }));
       // 다른 gh 계정이면 접근되는지 확인하고 연결·재시도를 제안한다
       if (/repository not found/i.test(err)) suggestOtherAccount(j.repo, () => ctx.job(j.name, j.args ?? [], { repo: j.repo, shell: j.shell, remote: j.remote, onDone: j.onDone }));
     }
@@ -368,16 +373,6 @@ function App() {
     ctx.busy = () => jobs.current.size > 0;
     ctx.loading = () => !!pendingRef.current;
     ctx.job = async (name, args, opts) => {
-      // 사용자 작업이 오면 돌고 있는 자동 작업은 취소하고 이어서 실행한다 (동시에 둘이 돌지 않게)
-      if (!opts?.quiet) {
-        for (const [id, j] of jobs.current) {
-          if (!j.quiet) continue;
-          jobs.current.delete(id);
-          ignored.current.add(id);
-          api.cancelJob(id).catch(() => {});
-          setJob(null);
-        }
-      }
       const repo = opts?.repo ?? repoRef.current;
       // 같은 저장소의 사용자 작업은 한 번에 하나만 — 둘이 동시에 돌면 FETCH_HEAD·index를 같이 써서 깨진다(Pull 두 번 → "not something we can merge")
       if (!opts?.quiet) {
@@ -387,6 +382,8 @@ function App() {
       }
       if (!opts?.quiet) setMessage(t("app.jobRunning", { name }));
       try {
+        // 같은 저장소의 앞선 작업(자동 fetch 포함)은 **죽이지 않는다**: 강제 종료하면 git이 `.lock`을 못 지워 이후 fetch가 계속 실패한다. 백엔드가 FIFO 대기열로 차례를 기다리게 하고(번호는 바로 돌려준다)
+        // 대기 중에는 `job` 이벤트 waiting이 와서 상태바에 "대기 중"이 보이며, 같은 취소 버튼으로 대기를 취소할 수 있다
         const id = opts?.shell ? await api.startShell(repo, opts.shell) : await api.startJob(repo, args, opts?.quiet, opts?.ghUser);
         jobs.current.set(id, { name, repo, onDone: opts?.onDone, remote: opts?.remote, quiet: opts?.quiet, args, shell: opts?.shell, note: opts?.track ? jobNote(name, repo, opts.track) : undefined });
         if (early.current.has(id)) {
@@ -395,7 +392,10 @@ function App() {
           finish(id, err, code);
         } else setJob({ id, name, quiet: opts?.quiet });
       } catch (e) {
-        toastError(String(e));
+        // 자동 fetch(quiet)가 AI 차례에 막힌 건 조용히 건너뛴다. 사용자 작업은 안내를 띄우고, 상태바의 "실행 중" 문구를 지운다
+        if (!opts?.quiet) setMessage("");
+        // 자동 작업은 AI 차례에 막히거나(`aiChat.repoBusy`) 같은 저장소의 다른 작업과 겹쳐 건너뛴 것(`job.skipped`)을 조용히 넘긴다
+        if (!(opts?.quiet && (isRepoBusy(e) || errCode(e) === "job.skipped"))) toastError(e);
       } finally {
         if (!opts?.quiet) starting.current.delete(repo);
       }
@@ -440,6 +440,10 @@ function App() {
         api.askpassReply(id, r ? String(r.answer) : null);
       }),
       listen<RepoChange>("repo-changed", ({ payload }) => (touch(), payload.refs ? loadAll() : loadStatus())),
+      listen<{ job: number; event: { kind: string } }>("job", ({ payload: { job, event } }) => {
+        if (event.kind === "waiting") waitingJobs.current.add(job);
+        else if (event.kind === "started") waitingJobs.current.delete(job);
+      }),
       listen<[number, string | null, string?]>("job-done", ({ payload: [id, err, code] }) => finish(id, err, code)),
       // macOS 메뉴 "닫기"(⌘W, src-tauri lib.rs — 메뉴 막대가 만들어지기 전의 기본 메뉴): 같은 처리
       listen("close-key", closeKey),

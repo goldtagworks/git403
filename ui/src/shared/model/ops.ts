@@ -10,7 +10,7 @@ import { showAll, toggleHidden } from "../lib/hidden";
 import { jjEnabled, jjOn, jjWorking, setJjStatus, setJjView } from "../lib/jjview";
 import { visibleText } from "../lib/safeText";
 import { prompt, type Field } from "../ui/prompt";
-import { toast, toastError, type ToastOpts } from "../lib/toast";
+import { isRepoBusy, toast, toastError, type ToastOpts } from "../lib/toast";
 import type { MenuEntry } from "../ui/menu";
 import { autoRule, jiraCfg, jiraEffective, jiraRule, jiraSuggest, parseRules, type IssueRule, type JiraSuggestion } from "../lib/issues";
 import { GIT_SETTINGS_RE, JIRA_RE, parseConfig, pref, setPref, validEmail, type Prefs } from "../lib/settings";
@@ -63,7 +63,7 @@ export const ctx = {
   /** 토스트(성공·정보). 문구가 "…완료/…됨"이면 성공, 아니면 정보. 종류·설명은 opts로 (toast.ts) */
   notify: (msg: string, opts?: ToastOpts) => toast(msg, opts),
   /** 오류 토스트(닫을 때까지 유지). detail이 없으면 여러 줄 메시지의 첫 줄이 제목, 나머지는 "자세히" */
-  error: (msg: string, detail?: string) => toastError(msg, detail),
+  error: (msg: unknown, detail?: string) => toastError(msg, detail),
   /** 긴 작업(네트워크). 이름은 상태바·완료 문구에 쓴다. opts.shell을 주면 args 대신 그 셸 명령을 실행한다. opts.remote는 원격 ref가 바뀌는 작업(성공하면 PR 목록 갱신 신호). */
   job: (_name: string, _args: string[], _opts?: { repo?: string; onDone?: () => void; shell?: string; remote?: boolean; quiet?: boolean; track?: JobTrack; ghUser?: string }) => {},
   /** 저장소를 여는 중(탭 전환·로딩)인지 (App이 등록) */
@@ -265,6 +265,7 @@ async function git(args: string[], done?: string, detail?: string) {
     if (done) ctx.notify(done, { detail });
     return true;
   } catch (e) {
+    if (isRepoBusy(e)) return ctx.error(e), false; // AI 차례 중 백엔드가 막음: 안내만(AI 위임 버튼 없음)
     const text = String(e);
     const action = aiHandoff(args[0], args, text);
     action ? toast(text, { kind: "error", action }) : ctx.error(text);
@@ -286,7 +287,8 @@ async function stashGit(args: string[], done: string) {
     ctx.notify(done);
   } catch (e) {
     const m = String(e);
-    if (/is not a valid reference|No stash entries found/.test(m)) ctx.notify(t("ops.stash.gone"), { kind: "info" });
+    if (isRepoBusy(e)) ctx.error(e);
+    else if (/is not a valid reference|No stash entries found/.test(m)) ctx.notify(t("ops.stash.gone"), { kind: "info" });
     // 충돌: 변경은 작업 트리에 들어왔고 스태시는 남는다(pop도 지우지 않음) / 미해결 충돌이 있으면 git이 index를 못 써서 거부
     else if (/^CONFLICT /m.test(m)) ctx.notify(t("ops.stash.conflict"), { kind: "info" });
     else if (/needs merge|could not write index/.test(m)) ctx.error(t("ops.stash.unresolved"));
@@ -302,25 +304,35 @@ async function switchKeep(args: string[], detail: string) {
     await api.git(ctx.repo, args);
     return ctx.notify(t("ops.checkout.done"), { detail });
   } catch (e) {
-    if (!/would be overwritten by checkout/.test(String(e))) return ctx.error(String(e));
+    if (!/would be overwritten by checkout/.test(String(e))) return ctx.error(e);
   }
   try {
     await api.git(ctx.repo, ["stash", "push", "--include-untracked", "-m", `autostash: ${head() ?? "HEAD"} → ${args.at(-1)}`]);
   } catch (e) {
-    return ctx.error(String(e));
+    return ctx.error(e);
   }
   try {
     await api.git(ctx.repo, args);
   } catch (e) {
-    await api.git(ctx.repo, ["stash", "pop"]).catch(() => {});
+    // AI 차례가 그새 시작돼 이동이 거절됐다면 pop도 거절된다: 시도하지 않고 변경이 스태시에 있다는 것을 분명히 알린다(차례가 끝난 뒤 직접 꺼낸다)
+    if (isRepoBusy(e)) {
+      ctx.error(t("ops.checkout.stashKeptBusy"));
+      ctx.reload();
+      return;
+    }
+    const pop = await api.git(ctx.repo, ["stash", "pop"]).then(() => null, (x) => x);
     ctx.reload();
-    return ctx.error(String(e));
+    if (pop) ctx.error(isRepoBusy(pop) ? t("ops.checkout.stashKeptBusy") : t("ops.checkout.stashKeptPopFailed", { err: String(pop) }));
+    return ctx.error(e);
   }
   try {
     await api.git(ctx.repo, ["stash", "pop"]);
     ctx.notify(t("ops.checkout.done"), { detail: `${detail} · ${t("ops.checkout.autostash")}` });
-  } catch {
-    ctx.notify(t("ops.checkout.stashKept"), { kind: "info", detail });
+  } catch (e) {
+    const m = String(e);
+    // 충돌이면 이동은 됐고 변경은 작업 트리에 일부 들어왔으며 스태시는 남는다. 그 밖의 실패(AI 차례 중 거절 포함)는 변경이 스태시에 있다고 알린다
+    if (/^CONFLICT /m.test(m) || /conflict/i.test(m)) ctx.notify(t("ops.checkout.stashKept"), { kind: "info", detail });
+    else ctx.error(isRepoBusy(e) ? t("ops.checkout.stashKeptBusy") : t("ops.checkout.stashKeptPopFailed", { err: m }));
   }
   ctx.reload();
 }
@@ -418,7 +430,7 @@ async function openIn(what: "terminal" | "folder" | "reveal" | "open", extra: { 
   try {
     await api.openIn(ctx.repo, what, extra);
   } catch (e) {
-    ctx.error(String(e));
+    ctx.error(e);
   }
 }
 
@@ -450,7 +462,7 @@ async function detached(name: string, args: string[], after?: () => void) {
     await api.runDetached(repo, args, token);
   } catch (e) {
     detachedWaiting.delete(token);
-    ctx.error(String(e));
+    ctx.error(e);
   }
 }
 
@@ -639,7 +651,7 @@ export const ops = {
       ctx.notify(t("ops.deleted", { name }));
     } catch (e) {
       // 머지 안 된 브랜치면 강제 삭제할지 다시 묻는다
-      if (!/not fully merged/.test(String(e))) ctx.error(String(e));
+      if (!/not fully merged/.test(String(e))) ctx.error(e);
       else if (await confirm(t("ops.branch.unmergedMsg", { name }), t("ops.branch.delete"))) await git(["branch", "-D", name], t("ops.deleted", { name }));
     }
     ctx.reload();
@@ -798,7 +810,7 @@ export const ops = {
       ctx.notify(t("ops.tool.saved"));
       return true;
     } catch (e) {
-      ctx.error(String(e));
+      ctx.error(e);
       return false;
     }
   },
@@ -847,7 +859,7 @@ export const ops = {
       await api.trashFiles(ctx.repo, paths);
       ctx.notify(t("ops.trash.done"));
     } catch (e) {
-      ctx.error(String(e));
+      ctx.error(e);
     }
     ctx.reload();
   },
@@ -858,7 +870,7 @@ export const ops = {
       await api.restoreFile(ctx.repo, rev, [path]);
       ctx.notify(t("ops.restore.done", { path }));
     } catch (e) {
-      ctx.error(String(e));
+      ctx.error(e);
     }
     ctx.reload();
   },
@@ -873,7 +885,7 @@ export const ops = {
     if (!r) return;
     // git에는 이름 변경이 없어서: 같은 커밋을 새 메시지로 다시 저장하고 원래 항목을 지운다.
     // 먼저 저장하고(실패해도 원본이 남는다) 그 뒤 한 칸 밀린 원래 항목을 지운다.
-    const sha = (await api.git(ctx.repo, ["rev-parse", name]).catch((e) => (ctx.error(String(e)), ""))).trim();
+    const sha = (await api.git(ctx.repo, ["rev-parse", name]).catch((e) => (ctx.error(e), ""))).trim();
     const n = /^stash@\{(\d+)\}$/.exec(name)?.[1];
     if (sha && n && (await git(["stash", "store", "-m", String(r.message), sha]))) git(["stash", "drop", `stash@{${Number(n) + 1}}`], t("ops.stash.renamed"));
   },
@@ -891,7 +903,7 @@ export const ops = {
       await api.git(ctx.repo, ["stash", "store", "-m", `Snapshot: ${when}`, sha]);
       ctx.notify(t("ops.snap.saved"));
     } catch (e) {
-      ctx.error(String(e));
+      ctx.error(e);
     }
   },
 
@@ -901,11 +913,11 @@ export const ops = {
     let args = ["-1", id];
     if (toHead) {
       // 조상 ⇔ merge-base(id, HEAD) == id (공통 조상 없음 = 종료 1). git 실패는 "브랜치에 없음"으로 오판하지 않고 알린다
-      const base = await api.git(ctx.repo, ["merge-base", id, "HEAD"], [1]).catch((e) => (ctx.error(String(e)), null));
+      const base = await api.git(ctx.repo, ["merge-base", id, "HEAD"], [1]).catch((e) => (ctx.error(e), null));
       if (base === null) return;
       if (base.trim() !== id) return ctx.notify(t("ops.patch.notInBranch"));
       // 루트 커밋이면 `id^`가 없다(종료 1): 이때만 --root (전체 이력이 곧 id부터의 범위)
-      const parent = await api.git(ctx.repo, ["rev-parse", "--verify", "-q", `${id}^`], [1]).catch((e) => (ctx.error(String(e)), null));
+      const parent = await api.git(ctx.repo, ["rev-parse", "--verify", "-q", `${id}^`], [1]).catch((e) => (ctx.error(e), null));
       if (parent === null) return;
       const hasParent = !!parent.trim();
       args = hasParent ? [`${id}^..HEAD`] : ["--root", "HEAD"];
@@ -916,7 +928,7 @@ export const ops = {
       const files = (await api.git(ctx.repo, ["format-patch", "-o", dir, ...args])).split("\n").filter(Boolean);
       ctx.notify(t("ops.patch.savedN", { n: files.length, dir }), { kind: "success" });
     } catch (e) {
-      ctx.error(String(e));
+      ctx.error(e);
     }
   },
   /** 작업 디렉터리 변경을 .patch 파일로(diff --binary). 담을 변경이 없으면 파일을 만들지 않고 안내한다. 추적 안 하는 파일은 담기지 않는다. paths를 주면 그 파일만. */
@@ -957,7 +969,7 @@ export const ops = {
     try {
       await api.git(ctx.repo, ["apply", "--check", ...opt, file]);
     } catch (e) {
-      return ctx.error(t("ops.patch.cantApply", { e: String(e), hint: r.threeway ? "" : t("ops.patch.hint3way") }));
+      return ctx.error(isRepoBusy(e) ? e : t("ops.patch.cantApply", { e: String(e), hint: r.threeway ? "" : t("ops.patch.hint3way") }));
     }
     await git(["apply", ...opt, file], t("ops.patch.applied"));
   },
@@ -966,7 +978,7 @@ export const ops = {
   ignore: async (path: string) => {
     const r = await prompt({ title: t("ops.ignore.title"), fields: [{ kind: "text", name: "pattern", label: t("ops.ignore.pattern"), value: path }], submit: t("ops.add") });
     if (!r) return;
-    await api.appendLine(ctx.repo, ".gitignore", String(r.pattern)).then(() => ctx.notify(t("ops.ignore.done", { pattern: String(r.pattern) })), (e) => ctx.error(String(e)));
+    await api.appendLine(ctx.repo, ".gitignore", String(r.pattern)).then(() => ctx.notify(t("ops.ignore.done", { pattern: String(r.pattern) })), (e) => ctx.error(e));
   },
 
   // ---- 저장소 관리 ----
@@ -996,7 +1008,7 @@ export const ops = {
     if (!root) store("cloneDir", dir);
     const user = users.find((a) => label(a) === r.account)?.user;
     const open = () => ctx.open(join(dir, name));
-    ctx.job(t("ops.clone"), ["clone", "--progress", "--", url, name], { repo: dir, ghUser: user, onDone: user ? () => void api.ghBind(join(dir, name), user).catch((e) => ctx.error(String(e))).finally(open) : open });
+    ctx.job(t("ops.clone"), ["clone", "--progress", "--", url, name], { repo: dir, ghUser: user, onDone: user ? () => void api.ghBind(join(dir, name), user).catch((e) => ctx.error(e)).finally(open) : open });
   },
   init: async () => {
     const r = await prompt({
@@ -1013,7 +1025,7 @@ export const ops = {
       await api.git(dir, ["init", name]);
       ctx.open(join(dir, name));
     } catch (e) {
-      ctx.error(String(e));
+      ctx.error(e);
     }
   },
   scan: async () => {
@@ -1024,7 +1036,7 @@ export const ops = {
       ctx.addRepos(found);
       ctx.notify(t("ops.scan.found", { n: found.length }));
     } catch (e) {
-      ctx.error(String(e));
+      ctx.error(e);
     }
   },
   /** 모바일 시작 때 앱 전용 저장소 폴더의 저장소를 목록에 올린다 (알림·선택 없음) */
@@ -1089,7 +1101,7 @@ export const ops = {
       if (name) await api.removeGitDir(ctx.repo, (await api.git(ctx.repo, ["rev-parse", "--git-path", `modules/${name}`])).trim());
       ctx.notify(t("ops.sub.removed", { path }));
     } catch (e) {
-      ctx.error(String(e));
+      ctx.error(e);
     }
     ctx.reload();
   },
@@ -1153,7 +1165,7 @@ export const ops = {
       setJjView(repo, "jj");
       await ops.jjLoad(repo);
     } catch (e) {
-      return ctx.error(String(e));
+      return ctx.error(e);
     }
     if (repo === ctx.repo) {
       ctx.notify(t("ops.jj.enabled"));
@@ -1180,7 +1192,7 @@ export const ops = {
       const code = errCode(e);
       if (code === "jj.stale") stale = true;
       else if (code && opts?.soft?.includes(code)) ctx.notify(pre() + String(e), { kind: "info" });
-      else ctx.error(pre() + String(e), code ? opts?.hint?.[code] : undefined);
+      else ctx.error(isRepoBusy(e) ? e : pre() + String(e), isRepoBusy(e) ? undefined : code ? opts?.hint?.[code] : undefined);
     }
     if (repo === ctx.repo) await ctx.reload();
     if (stale && repo === ctx.repo) ctx.error(t("ops.jj.staleReloaded")); // 다시 읽은 뒤에 안내
@@ -1536,24 +1548,24 @@ export const ops = {
       prBus.emit();
       return true;
     } catch (e) {
-      ctx.error(String(e));
+      ctx.error(e);
       return false;
     }
   },
   /** 커밋을 원격 호스트 웹에서 연다. 원격이 여럿이면 현재 브랜치의 추적 원격(없으면 origin) 우선 */
   openCommitWeb: async (sha: string) => {
-    const infos = await api.remoteInfo(ctx.repo).catch((e) => (ctx.error(String(e)), null));
+    const infos = await api.remoteInfo(ctx.repo).catch((e) => (ctx.error(e), null));
     if (!infos) return; // 조회 실패는 "원격 없음"이 아니라 그 원인을 알린다
     const want = ctx.status?.upstream?.split("/")[0] ?? "origin";
     const i = infos.find((x) => x.provider && x.remote === want) ?? infos.find((x) => x.provider);
     if (!i?.provider) return ctx.error(t("ops.web.none"));
-    ops.openUrl(await api.commitWebUrl(i.provider, i.repo, sha).catch((e) => (ctx.error(String(e)), "")) || "");
+    ops.openUrl(await api.commitWebUrl(i.provider, i.repo, sha).catch((e) => (ctx.error(e), "")) || "");
   },
   /** PR 시트에 넣을 초기값을 모은다. 브랜치를 안 주면 현재 브랜치. into(`원격/브랜치`)를 주면 그 브랜치가 base. 연결할 수 있는 원격이 없으면 안내만 */
   createPr: async (branch?: string, into?: string) => {
     const head = branch ?? ops.head();
     if (!head) return ctx.error(t("ops.pr.pickBranch"));
-    const all = await api.remoteInfo(ctx.repo).catch((e) => (ctx.error(String(e)), null));
+    const all = await api.remoteInfo(ctx.repo).catch((e) => (ctx.error(e), null));
     if (!all) return; // 조회 실패는 "원격 없음"이 아니라 그 원인을 알린다
     const infos = all.filter((i) => i.provider);
     if (!infos.length) return ctx.error(t("ops.pr.noRemote"));
@@ -1597,7 +1609,7 @@ export const ops = {
   pushThenPr: (remote: string, head: string, track: boolean, create: () => Promise<unknown>) =>
     ctx.job("Push", ["push", "--progress", ...(track ? ["-u"] : []), remote, head], {
       remote: true,
-      onDone: () => void create().catch((e) => ctx.error(t("ops.pr.createFail", { e }))),
+      onDone: () => void create().catch((e) => ctx.error(isRepoBusy(e) ? e : t("ops.pr.createFail", { e }))),
     }),
   /** PR의 head 브랜치를 체크아웃한다 (원격 추적 브랜치 생성). 아직 받지 못한 브랜치(포크 등)면 안내 */
   checkoutPr: (remote: string, branch: string) => {
@@ -1685,7 +1697,7 @@ export const ops = {
           ctx.notify(t("ops.issue.saved"));
         }
       } catch (e) {
-        ctx.error(String(e));
+        ctx.error(e);
       }
       ctx.setIssues(await ops.issueLoad(ctx.repo));
     }
@@ -1705,7 +1717,7 @@ export const ops = {
     });
     if (!r) return writeDeclined([...declined.filter((d) => d !== repo), repo]);
     writeDeclined(declined.filter((d) => d !== repo));
-    await api.appendLine(repo, ".gitattributes", EOL_RULE).then(() => ctx.notify(t("ops.eol.added"), { kind: "success", detail: t("ops.eol.addedDetail") }), (e) => ctx.error(String(e)));
+    await api.appendLine(repo, ".gitattributes", EOL_RULE).then(() => ctx.notify(t("ops.eol.added"), { kind: "success", detail: t("ops.eol.addedDetail") }), (e) => ctx.error(e));
   },
   /** 커밋 직전 검사: 스테이지된 파일에 CRLF가 있으면 LF 변환 여부를 묻는다. false = 커밋 취소 */
   eolCommitCheck: async (repo: string): Promise<boolean> => {
@@ -1842,7 +1854,7 @@ export const ops = {
       ctx.notify(t("ops.ai.wrote", { path }), { kind: "success" });
       return true;
     } catch (e) {
-      ctx.error(String(e));
+      ctx.error(e);
       return false;
     }
   },
@@ -1920,7 +1932,36 @@ export const ops = {
     setPref(key, value);
     if (key === "graphLimit") ctx.reload();
   },
-  /** 자동 fetch 한 번: 활성 탭만. 다른 작업·저장소 로딩 중이거나 시트가 열려 있으면 건너뜀. 인증 창 없이(quiet) 돌고 실패는 상태바에만.
+  /** git 오류가 "`….lock`: File exists"면(예전 강제 종료가 남긴 lock) 지우고 다시 시도하자는 토스트를 띄운다. 오래된 lock인지·작업이 없는지는 백엔드가 확인한다(`stale_lock_check`) — 아니면 아무것도 안 띄운다 */
+  offerLockRecovery: (repo: string, err: string, retry: () => void) => {
+    // 원격 서버가 보낸 줄(`remote: …`)은 믿지 않는다: 이 컴퓨터의 git이 직접 낸 줄에서만 lock 경로를 찾는다(서버가 지울 경로를 주입하지 못하게). 백엔드도 git 폴더 안의 git lock 이름만 지운다
+    const m = err.split("\n").filter((l) => !/^\s*remote:/i.test(l)).map((l) => /Unable to create '([^']+\.lock)': File exists/.exec(l)).find(Boolean);
+    if (!m) return;
+    const lock = m[1];
+    api.staleLockCheck(repo, lock).then(
+      (info) =>
+        toast(t("app.lockLeft"), {
+          kind: "warning",
+          detail: info.path,
+          action: {
+            label: t("app.lockClearBtn"),
+            run: async () => {
+              if (!(await confirm(t("app.lockClearAsk", { path: info.path }), t("app.lockClearBtn")))) return;
+              try {
+                await api.staleLockRemove(repo, lock);
+                retry();
+              } catch (e) {
+                ctx.error(e);
+              }
+            },
+          },
+        }),
+      () => {},
+    );
+  },
+  /** 이 저장소에서 AI 차례가 도는 중인가(자동 fetch를 예약·실행하지 않는다 — 백엔드는 AI 시작 전에 이미 도는 자동 fetch를 잠깐 기다려 주지만 AI 차례 중에 새 자동 fetch를 시작하지는 않는다) */
+  aiRunning: (repo: string) => !!aiChat.chat(repo)?.running,
+  /** 자동 fetch 한 번: 활성 탭만. 다른 작업·저장소 로딩 중이거나 시트가 열려 있으면 건너뜀. 인증 창 없이(quiet) 돌고 실패는 상태바에만. 같은 저장소의 다른 작업과 겹치면 백엔드가 `job.skipped`로 조용히 건너뛴다.
    *  그 저장소에서 AI 차례가 도는 중이어도 건너뛴다: AI가 실행하는 `git pull`과 겹치면 `fetch --all`이 FETCH_HEAD를 비워
    *  pull의 병합 단계가 "Already up to date"·"no candidates for merging"으로 끝난다(사용자 작업을 한 번에 하나만 돌리는 것과 같은 이유) */
   autoFetch: () => {

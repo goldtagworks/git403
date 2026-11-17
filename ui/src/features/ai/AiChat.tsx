@@ -125,7 +125,7 @@ function AiChat({ repo, operation, behind, width }: { repo: string; operation: s
         { x: r.left, y: r.bottom + 2 },
       );
     } catch (err) {
-      toastError(String(err));
+      toastError(err);
     }
   };
 

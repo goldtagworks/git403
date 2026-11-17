@@ -28,6 +28,15 @@ const tool = (name, command, run) => {
 };
 
 out({ type: "system", subtype: "init", session_id: "fake-sess" });
+// 시험이 `<로그>.hold`를 만들어 두면 저장소를 건드리지 않고 그 파일이 지워질 때까지 차례를 붙잡아 둔다(AI 차례 중 쓰기 거절 시험)
+const holdFile = process.env.FAKE_CLAUDE_LOG ? `${process.env.FAKE_CLAUDE_LOG}.hold` : "";
+if (holdFile && existsSync(holdFile)) {
+  text("대기 중입니다.");
+  for (let i = 0; i < 600 && existsSync(holdFile); i++) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+  text("끝났습니다.");
+  out({ type: "result", subtype: "success", is_error: false, result: "끝났습니다.", session_id: "fake-sess" });
+  process.exit(0);
+}
 text("원격 변경을 병합합니다.");
 // 시험이 `<로그>.pull`에 원격 경로를 두면 그 경로로 직접 pull한다(AI 차례는 로컬 경로 원격을 거절하므로 원격 설정 없이 실행한다)
 const pullFile = process.env.FAKE_CLAUDE_LOG ? `${process.env.FAKE_CLAUDE_LOG}.pull` : "";

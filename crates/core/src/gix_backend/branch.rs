@@ -174,7 +174,7 @@ fn delete(r: &gix::Repository, name: &str, force: bool) -> Result<Vec<u8>> {
     };
     let id = reference.peel_to_id().map_err(fail)?.detach();
     if r.head_name().ok().flatten().is_some_and(|h| h == full) {
-        let path = r.workdir().map(|p| p.canonicalize().unwrap_or_else(|_| p.to_owned()).display().to_string()).unwrap_or_default();
+        let path = r.workdir().map(|p| gc_pathkey::real(p).display().to_string()).unwrap_or_default();
         return Err(exit(1, format!("error: cannot delete branch '{name}' used by worktree at '{path}'")));
     }
     if !force {

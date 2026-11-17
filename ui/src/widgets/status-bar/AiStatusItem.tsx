@@ -25,7 +25,7 @@ export const AiStatusItem = memo(function AiStatusItem() {
       await api.aiSettingsSet({ provider: p, select: true });
       await ops.aiLoad(ctx.repo || undefined);
     } catch (e) {
-      ctx.error(String(e));
+      ctx.error(e);
     }
   };
   const open = (e: React.MouseEvent<HTMLButtonElement>) => {

@@ -53,6 +53,7 @@ required-features = ["cli", "gix"]
 [dependencies]
 async-trait = "0.1"
 gc-i18n = { path = "../i18n" }
+gc-pathkey = { path = "../pathkey" }
 tokio.workspace = true
 serde.workspace = true
 ssh-key = { optional = true, version = "0.6.7", default-features = false, features = ["ed25519", "encryption", "getrandom"] }

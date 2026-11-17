@@ -51,7 +51,7 @@ export const CommitPane = memo(function CommitPane({ repo, commit, rules, file, 
     setCoAuthors([]);
     if (!commit) return;
     let live = true;
-    api.changedFiles(repo, commit.id).then((f) => live && setFiles(f), (e) => ctx.error(String(e)));
+    api.changedFiles(repo, commit.id).then((f) => live && setFiles(f), (e) => ctx.error(e));
     api.commitMessage(repo, commit.id).then((m) => live && setBody(m), () => {});
     api.coAuthors(repo, commit.id).then((l) => live && setCoAuthors(parseCoAuthors(l)), () => {});
     requestAvatars(repo, [commit]);
@@ -62,7 +62,7 @@ export const CommitPane = memo(function CommitPane({ repo, commit, rules, file, 
     setDiff("");
     if (!id || !file) return;
     let live = true;
-    api.fileDiff(repo, id, file).then((d) => live && setDiff(d), (e) => ctx.error(String(e)));
+    api.fileDiff(repo, id, file).then((d) => live && setDiff(d), (e) => ctx.error(e));
     return () => void (live = false);
   }, [repo, id, file, ignoreEol, ignoreWs]);
 

@@ -118,7 +118,7 @@ async fn shell_job_streams_stdout_and_reports_exit_code() {
         match ev {
             JobEvent::Stdout { line } => out.push(line),
             JobEvent::Progress { line } => err.push(line),
-            JobEvent::Finished { .. } => {}
+            JobEvent::Finished { .. } | JobEvent::Waiting | JobEvent::Started => {}
         }
     }
     assert_eq!(out[0].trim_end(), "a b");
@@ -564,4 +564,125 @@ async fn jj_refs_hidden_in_git_view_and_shown_in_jj_view() {
     git(d, &["reset", "-q", "--hard", "HEAD~1"]);
     assert!(gc_core::search_content(&g, d, "needle", &[]).await.unwrap().is_empty());
     assert_eq!(gc_core::search_content(&g, d, "needle", &["+jj".into()]).await.unwrap().len(), 1);
+}
+
+/// 읽기 조회(`run_query`)는 index.lock이 있어도(다른 쓰기·AI 차례가 index를 잡은 중) 실패하지 않고 잠금·index를 건드리지 않는다
+/// (optional lock을 끈다는 것 자체는 runner.rs 단위 테스트가 환경 변수로 확인한다).
+#[tokio::test]
+async fn run_query_reads_status_diff_describe_while_index_is_locked() {
+    use gc_core::{CliBackend, GitBackend};
+    let (_tmp, repo) = setup();
+    git(&repo, &["tag", "v1"]);
+    std::fs::write(repo.join("f.txt"), "x\n").unwrap();
+    git(&repo, &["add", "f.txt"]);
+    std::fs::write(repo.join("f.txt"), "y\n").unwrap();
+    let lock = repo.join(".git/index.lock");
+    std::fs::write(&lock, "held by someone else").unwrap();
+    let before = std::fs::read(repo.join(".git/index")).unwrap();
+    let b = CliBackend::new(GitRunner::default());
+    for argv in [&["status", "--porcelain"][..], &["diff", "--stat"], &["describe", "--dirty", "--always"], &["diff", "--cached", "--raw"]] {
+        let out = b.run_query(&repo, argv, &[]).await.unwrap_or_else(|e| panic!("git {argv:?}: {e}"));
+        assert!(!out.is_empty(), "git {argv:?}");
+    }
+    assert!(String::from_utf8_lossy(&b.run_query(&repo, &["describe", "--dirty", "--always"], &[]).await.unwrap()).contains("dirty"));
+    // 다른 쓰기의 잠금 파일은 그대로, index도 그대로
+    assert_eq!(std::fs::read_to_string(&lock).unwrap(), "held by someone else");
+    assert_eq!(std::fs::read(repo.join(".git/index")).unwrap(), before);
+    // `run_query`는 종료 코드 허용(`ok`)도 `run`과 같다
+    assert!(b.run_query(&repo, &["rev-parse", "--verify", "-q", "nope"], &[1]).await.unwrap().is_empty());
+    assert!(b.run_query(&repo, &["rev-parse", "--verify", "-q", "nope"], &[]).await.is_err());
+    // 쓰기는 여전히 잠금에 막힌다(optional lock이 아니다)
+    assert!(b.run(&repo, &["commit", "-q", "-m", "x"], &[]).await.is_err());
+}
+
+/// 취소가 SIGKILL이 아니라 SIGTERM 먼저라서 git이 fetch 도중 잡은 ref `.lock`을 스스로 지운다. (SIGKILL은 lock을 남긴다 — 그래서 자동 fetch를 죽이면 이후 fetch가 계속 실패했다.)
+/// fetch 도중은 `reference-transaction` 훅(prepared 상태에서 ref lock을 쥔 채 호출됨)을 느리게 만들어 재현한다
+#[cfg(unix)]
+#[tokio::test]
+async fn cancel_lets_git_remove_its_ref_lock_but_kill_now_leaves_it() {
+    use std::os::unix::fs::PermissionsExt;
+    let (_tmp, repo) = setup();
+    // 훅: ref 트랜잭션이 prepared가 되면(= lock을 쥔 채) 오래 잔다
+    let hook = repo.join(".git/hooks/reference-transaction");
+    std::fs::write(&hook, "#!/bin/sh\nif [ \"$1\" = prepared ]; then sleep 30; fi\ncat >/dev/null\n").unwrap();
+    std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let locks = |repo: &Path| -> Vec<std::path::PathBuf> {
+        let mut out = vec![];
+        let mut stack = vec![repo.join(".git/refs")];
+        while let Some(d) = stack.pop() {
+            for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+                let p = e.path();
+                if p.is_dir() { stack.push(p) } else if p.extension().is_some_and(|x| x == "lock") { out.push(p) }
+            }
+        }
+        out
+    };
+    let runner = GitRunner::default();
+    for (graceful, expect_left) in [(true, false), (false, true)] {
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let (handle, task) = runner.spawn(&repo, &["fetch", "origin"], tx).unwrap();
+        let t = Instant::now();
+        while locks(&repo).is_empty() {
+            assert!(t.elapsed() < Duration::from_secs(15), "ref lock이 생기지 않음(재현 실패)");
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        if graceful { handle.cancel() } else { handle.kill_now() }
+        let r = task.await.unwrap();
+        assert!(matches!(r, Err(Error::Cancelled)), "{r:?}");
+        let left = locks(&repo);
+        assert_eq!(!left.is_empty(), expect_left, "graceful={graceful}: {left:?}");
+        for l in left {
+            std::fs::remove_file(l).unwrap(); // 다음 반복을 위해 치운다
+        }
+    }
+}
+
+/// 앱 종료 정리(`JobHandle::stop_all`): 모든 자식에 SIGTERM을 한꺼번에 보내 스스로 정리(여기서는 `trap`이 표지 파일을 씀)할 시간을 준 뒤 안 끝난 것만 SIGKILL로 끝낸다.
+/// (자식 `sleep`은 SIGTERM을 무시하게 둔다 — 셸과 자식이 동시에 죽으면 셸이 trap을 돌리기 전에 끝나는 경합이 생겨 시험이 흔들린다)
+#[cfg(unix)]
+#[tokio::test]
+async fn stop_all_sends_sigterm_first_so_children_can_clean_up_then_kills_the_stubborn() {
+    use gc_core::{GitRunner, JobHandle};
+    let dir = std::env::temp_dir().join(format!("stopall-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let r = GitRunner::default();
+    let mut hs = vec![];
+    for i in 0..4 {
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let script = if i == 3 {
+            format!("trap '' TERM; (trap '' TERM; exec sleep 60) & echo $! > p{i}; wait") // SIGTERM을 무시: SIGKILL이 필요하다
+        } else {
+            format!("(trap '' TERM; exec sleep 60) & P=$!; trap 'echo cleaned > t{i}; kill -9 $P; exit 0' TERM; echo $P > p{i}; wait")
+        };
+        let (h, _t) = r.spawn_shell(&dir, &script, tx).unwrap();
+        hs.push(h);
+    }
+    for i in 0..4 {
+        for _ in 0..200 {
+            if std::fs::read_to_string(dir.join(format!("p{i}"))).is_ok_and(|s| !s.trim().is_empty()) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let t = Instant::now();
+    let hh = hs.clone();
+    tokio::task::spawn_blocking(move || JobHandle::stop_all(&hh, Duration::from_secs(2))).await.unwrap();
+    assert!(t.elapsed() >= Duration::from_millis(1900), "SIGTERM을 무시하는 자식 때문에 유예를 다 기다린다: {:?}", t.elapsed());
+    for i in 0..3 {
+        assert!(dir.join(format!("t{i}")).exists(), "{i}: SIGTERM 정리가 돌지 않음");
+    }
+    assert!(!dir.join("t3").exists());
+    let alive = |p: i32| unsafe { libc::kill(p, 0) == 0 };
+    for i in 0..4 {
+        let pid: i32 = std::fs::read_to_string(dir.join(format!("p{i}"))).unwrap().trim().parse().unwrap();
+        for _ in 0..100 {
+            if !alive(pid) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+        assert!(!alive(pid), "자식 {pid}가 남음");
+    }
 }

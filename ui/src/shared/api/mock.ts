@@ -287,6 +287,12 @@ const AI_SOURCES: AiSource[] = [{ kind: "skill", path: ".claude/skills/commit-me
 const chatCfg = { save: true, retentionDays: 90 };
 const chatHist = new Map<string, any[]>();
 const chatRun = new Map<string, (cancel: boolean) => void>();
+/** 진행 중인 AI 차례의 저장소(대화 → 저장소). 백엔드(crates/backend/src/repo_gate.rs)는 그 저장소로 가는 쓰기를 `aiChat.repoBusy`로 거절한다 — 같은 거절을 흉내 낸다.
+ *  판정 규칙(읽기 허용 목록·git 인자)은 Rust 단위·통합 테스트가 검증하고, 여기 목록은 UI가 그 오류를 받았을 때의 동작(안내·상태 정리)을 보려는 근사다 */
+const chatRepo = new Map<string, string>();
+const queuedJobs = new Set<number>(); // 대기열에서 기다리는 척하는 작업(`__jobQueue`)
+const MOCK_WRITE = /^(start_job|start_shell|stage|unstage|discard|trash_files|restore_file|apply_partial|commit|fix_crlf|rebase_interactive|jj_(enable|disable|new|describe|edit|squash|split|abandon|undo|op_restore|bookmark_(set|delete|track)))$/;
+const MOCK_GIT_WRITE = new Set(["commit", "checkout", "switch", "stash", "branch", "tag", "merge", "rebase", "cherry-pick", "revert", "reset", "push", "pull", "fetch"]);
 let chatSeq = 0;
 /** 위험 확인을 마친 대화(`대화\0저장소`) — 백엔드와 같은 규칙 */
 const chatConfirmed = new Set<string>();
@@ -383,6 +389,9 @@ const jjLater = (j: { delay?: number }, f: () => unknown) => (j.delay ? new Prom
 function handle(cmd: string, args: any): any {
   {
     if (cmd === "initial_repo") return null;
+    if (chatRepo.size && [...chatRepo.values()].includes(args?.repo) && (MOCK_WRITE.test(cmd) || (cmd === "git" && MOCK_GIT_WRITE.has(args.args?.find((a: string) => !a.startsWith("-")))))) {
+      throw JSON.stringify({ code: "aiChat.repoBusy", vars: {}, message: "The AI is working in this repository. Try again when it finishes." });
+    }
     // E2E: window.__unsupported = [명령…] 이면 그 명령은 gix 백엔드처럼 git.unsupported 오류로 거절한다 (mobile.spec.ts)
     if ((window as any).__unsupported?.includes(cmd)) throw JSON.stringify({ code: "git.unsupported", vars: { op: cmd }, message: `not supported in this environment: ${cmd}` });
     // 저장소 열기는 데모 저장소, 그 밖의 폴더 선택(복제 위치·스캔)은 /demo
@@ -468,7 +477,13 @@ function handle(cmd: string, args: any): any {
     }
     if (cmd === "file_diff") return (eolSeen(args), (window as any).__fileDiff ?? diff((args as { path: string }).path));
     if (cmd === "set_locale") return void gitCalls.push(["set_locale", (args as { locale: string }).locale]);
-    if (cmd === "cancel_job") return void gitCalls.push(["cancel_job", String((args as { job: number }).job)]);
+    if (cmd === "cancel_job") {
+      const job = (args as { job: number }).job;
+      gitCalls.push(["cancel_job", String(job)]);
+      // 대기열에서 기다리던 작업(`__jobQueue`)은 취소하면 백엔드처럼 git.cancelled로 끝난다
+      if (queuedJobs.delete(job)) return void emit("job-done", [job, JSON.stringify({ code: "git.cancelled", vars: {}, message: "Cancelled" })]);
+      return;
+    }
     // E2E: window.__noUpstream = true 면 추적 브랜치가 없는 상태
     // window.__clean = true 면 변경 파일이 없는 깨끗한 작업 트리
     if (cmd === "load_status") {
@@ -709,6 +724,7 @@ function handle(cmd: string, args: any): any {
       const end = (last: any) => {
         timers.forEach(clearTimeout);
         chatRun.delete(conversation);
+        chatRepo.delete(conversation);
         const status = last.kind === "done" ? (last.isError ? "error" : "done") : last.kind === "cancelled" ? "cancelled" : "error";
         const answer = script.filter((e) => e.kind === "text").map((e) => e.text).join("");
         if (chatCfg.save) {
@@ -718,6 +734,9 @@ function handle(cmd: string, args: any): any {
         emit("ai-chat", { conversation, event: last });
       };
       chatRun.set(conversation, () => end({ kind: "cancelled" }));
+      chatRepo.set(conversation, repo);
+      // E2E: window.__chatWaitFetch = true 면 백엔드처럼 "자동 fetch가 끝나기를 기다리는 중" 알림 이벤트를 먼저 보낸다
+      if (w.__chatWaitFetch) setTimeout(() => emit("ai-chat", { conversation, event: { kind: "note", code: "aiChat.waitFetch", message: "Waiting for the automatic fetch to finish…" } }), 20);
       script.forEach((event, i) => timers.push(window.setTimeout(() => (i === script.length - 1 ? end(event) : emit("ai-chat", { conversation, event })), (i + 1) * (w.__chatSlow ?? 30))));
       return backup;
     }
@@ -1151,6 +1170,14 @@ function handle(cmd: string, args: any): any {
       gitCalls.push(a);
       if (a[0] === "format-patch") return `${a[2]}/0001-patch.patch\n`;
       if (a[0] === "config" && a[1]?.startsWith("gitflow.")) flow[a[1]] = a[2];
+      // E2E: window.__gitSeq = [{prefix, err?, busy?}…] 면 그 접두로 시작하는 git 호출을 순서대로 한 번씩 실패시킨다(busy = AI 차례 중 거절 aiChat.repoBusy, err = 그 문구)
+      const seq = (window as any).__gitSeq as { prefix: string; err?: string; busy?: boolean }[] | undefined;
+      const at = seq?.findIndex((x) => a.join(" ").startsWith(x.prefix)) ?? -1;
+      if (seq && at >= 0) {
+        const x = seq.splice(at, 1)[0];
+        if (x.busy) throw JSON.stringify({ code: "aiChat.repoBusy", vars: {}, message: "The AI is working in this repository. Try again when it finishes." });
+        if (x.err) throw x.err;
+      }
       // E2E: window.__gitFail = {prefix: "merge", conflict: true} 면 그 명령에서 실패(충돌이면 status.operation 설정)
       const fail = (window as any).__gitFail;
       if (fail && a.join(" ").startsWith(fail.prefix)) {
@@ -1159,8 +1186,24 @@ function handle(cmd: string, args: any): any {
       }
       return "";
     }
+    // 남은 .lock 복구: window.__staleLock = { refuse: true } 면 백엔드가 거절한 것처럼(`lock.refused`) 동작. 호출은 [cmd, repo, path]로 기록
+    if (cmd === "stale_lock_check" || cmd === "stale_lock_remove") {
+      const a = args as { repo: string; path: string };
+      gitCalls.push([cmd, a.repo, a.path]);
+      if ((window as any).__staleLock?.refuse) throw JSON.stringify({ code: "lock.recent", vars: {}, message: "The lock file is recent; Git may still be using it" });
+      return { path: a.path, ageSecs: 3600 };
+    }
     if (cmd === "start_job" || cmd === "start_shell") {
+      // E2E: window.__startFail = {code, vars, message} 면 자동(quiet) 작업 시작을 그 코드 오류로 거절한다(백엔드의 `job.skipped` 등)
+      if ((window as any).__startFail && (args as { interactive?: boolean }).interactive === false) throw JSON.stringify((window as any).__startFail);
       const job = ++jobs;
+      // E2E: window.__jobQueue = true 면 사용자 작업(quiet 아님)이 백엔드 대기열에서 기다리는 것처럼 번호를 바로 돌려주고 `job` 이벤트 waiting을 보낸다(완료는 오지 않는다 — 취소로만 끝난다)
+      if ((window as any).__jobQueue && (args as { interactive?: boolean }).interactive !== false) {
+        gitCalls.push(["start_job", JSON.stringify(args)]);
+        queuedJobs.add(job);
+        setTimeout(() => emit("job", { job, event: { kind: "waiting" } }), 30);
+        return job;
+      }
       gitCalls.push(cmd === "start_job" ? ["start_job", JSON.stringify(args)] : ["start_shell", (args as { command: string }).command]);
       // E2E 조작: window.__job = { early: 응답 전에 완료 이벤트, err: 실패 메시지, ms: 걸리는 시간 }
       const o = (window as any).__job ?? {};

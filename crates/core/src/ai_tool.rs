@@ -194,7 +194,7 @@ pub fn resolve(repo: &Path, p: &str) -> Res<PathBuf> {
     if p.is_empty() || p.contains('\0') {
         return bad("empty path");
     }
-    let root = repo.canonicalize().map_err(|e| e.to_string())?;
+    let root = gc_pathkey::canonical(repo).map_err(|e| e.to_string())?;
     let given = Path::new(p);
     let rel: PathBuf = if given.is_absolute() {
         let r = given.strip_prefix(repo).or_else(|_| given.strip_prefix(&root)).map_err(|_| format!("path outside the repository: {p:?}"))?;
@@ -242,7 +242,7 @@ pub fn resolve(repo: &Path, p: &str) -> Res<PathBuf> {
             break;
         }
     }
-    let real = probe.canonicalize().map_err(|e| e.to_string())?;
+    let real = gc_pathkey::canonical(&probe).map_err(|e| e.to_string())?;
     let Ok(real_rel) = real.strip_prefix(&root) else { return bad(format!("path outside the repository: {p:?}")) };
     if real_rel.components().any(|c| matches!(c, Component::Normal(n) if forbidden_name(&n.to_string_lossy()))) {
         return bad(format!("not allowed: {p:?}"));
@@ -648,7 +648,7 @@ const EDIT_LIMIT: u64 = 1024 * 1024;
 /// 저장소 안 파일 읽기(텍스트, 256KB까지). `.git`·`.claude`·저장소 밖·심볼릭 링크로 나가는 경로는 거절
 pub fn read_file(repo: &Path, path: &str) -> Res<String> {
     let rel = resolve(repo, path)?;
-    let full = repo.canonicalize().map_err(|e| e.to_string())?.join(rel);
+    let full = gc_pathkey::canonical(repo).map_err(|e| e.to_string())?.join(rel);
     let meta = std::fs::metadata(&full).map_err(|e| format!("cannot read {path:?}: {e}"))?;
     if !meta.is_file() {
         return bad(format!("not a file: {path:?}"));
@@ -664,7 +664,7 @@ pub fn read_file(repo: &Path, path: &str) -> Res<String> {
 pub fn write_confined(repo: &Path, rel: &str, bytes: &[u8], create_new: bool) -> Res<()> {
     use std::io::Write;
     let norm = resolve(repo, rel)?;
-    let root = repo.canonicalize().map_err(|e| e.to_string())?;
+    let root = gc_pathkey::canonical(repo).map_err(|e| e.to_string())?;
     let full = root.join(&norm);
     if let Some(dir) = full.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
@@ -701,7 +701,7 @@ pub fn edit_file(repo: &Path, path: &str, old: &str, new: &str, all: bool) -> Re
     if write_protected(&rel) {
         return bad(format!("writing {path:?} is not allowed (editor/agent/hook configuration is read by other tools automatically)"));
     }
-    let full = repo.canonicalize().map_err(|e| e.to_string())?.join(&rel);
+    let full = gc_pathkey::canonical(repo).map_err(|e| e.to_string())?.join(&rel);
     let rel_s = rel.to_string_lossy().into_owned();
     if old.is_empty() {
         write_confined(repo, &rel_s, new.as_bytes(), true)?;

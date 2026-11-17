@@ -555,7 +555,7 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
             onKeyDown={(e) => {
               if (e.key === "Escape") setSearch(COMPACT ? { q: "", content: false, hits: null } : null);
               else if (e.key === "Enter" && search.content && !search.hits)
-                api.searchContent(ctx.repo, search.q).then((ids) => setSearch((s) => s && { ...s, hits: new Set(ids) }), (er) => ctx.error(String(er)));
+                api.searchContent(ctx.repo, search.q).then((ids) => setSearch((s) => s && { ...s, hits: new Set(ids) }), (er) => ctx.error(er));
               else if (e.key === "Enter") jump(e.shiftKey ? -1 : 1);
             }}
           />

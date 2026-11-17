@@ -132,6 +132,18 @@ impl GitRunner {
         self.output_env(repo, args, &[("GIT_OPTIONAL_LOCKS", "0")]).await
     }
 
+    /// `query`와 같지만 `ok_codes`에 있는 종료 코드도 성공으로 본다(`git` IPC의 읽기 명령: `status`·`diff`·`describe`가 `index.lock`을 잡지 않는다).
+    pub async fn query_allow(&self, repo: &Path, args: &[&str], ok_codes: &[i32]) -> Result<Vec<u8>> {
+        let mut cmd = self.command(repo, args);
+        cmd.env("GIT_OPTIONAL_LOCKS", "0");
+        let out = cmd.output().await?;
+        let allowed = out.status.code().is_some_and(|c| ok_codes.contains(&c));
+        if !out.status.success() && !allowed {
+            return Err(exit_error(&out));
+        }
+        Ok(out.stdout)
+    }
+
     /// 이번 실행에만 환경 변수를 더해서 실행한다 (예: interactive rebase의 편집기 대체).
     pub async fn output_env(&self, repo: &Path, args: &[&str], envs: &[(&str, &str)]) -> Result<Vec<u8>> {
         let mut cmd = self.command(repo, args);
@@ -246,6 +258,16 @@ mod tests {
         let args = ["-c", "alias.e=!echo lock=$GIT_OPTIONAL_LOCKS", "e"];
         assert_eq!(String::from_utf8_lossy(&git.query(&dir, &args).await.unwrap()).trim(), "lock=0");
         assert_eq!(String::from_utf8_lossy(&git.output(&dir, &args).await.unwrap()).trim(), "lock=");
+    }
+
+    #[tokio::test]
+    async fn query_allow도_optional_locks를_끄고_허용_종료_코드를_받는다() {
+        let dir = tempfile_dir("query-allow");
+        let git = GitRunner::default();
+        let args = ["-c", "alias.e=!echo lock=$GIT_OPTIONAL_LOCKS; exit 3", "e"];
+        assert!(git.query_allow(&dir, &args, &[]).await.is_err());
+        assert_eq!(String::from_utf8_lossy(&git.query_allow(&dir, &args, &[3]).await.unwrap()).trim(), "lock=0");
+        assert_eq!(String::from_utf8_lossy(&git.output_allow(&dir, &args, &[3]).await.unwrap()).trim(), "lock=");
     }
 
     #[tokio::test]

@@ -139,13 +139,15 @@ fn remove_jj_dir(root: &Path, trash_parent: &Path) -> Result<Option<Coded>, Code
 
 /// `.jj`가 저장소 루트 바로 아래의 실제 디렉터리(링크 아님)이고 `.jj/repo`가 파일(다른 작업 공간과 저장소 공유)이 아님을 확인하고 그 경로를 돌려준다.
 fn require_jj_dir(root: &Path) -> Result<PathBuf, Coded> {
+    // 비교는 양쪽이 정규화된 경로일 때만 맞는다: 호출 경로가 어디든 여기서 `real`을 거치게 한다(윈도 접두·링크·`..`)
+    let root = &gc_pathkey::real(root);
     let jj = root.join(".jj");
     let md = fs::symlink_metadata(&jj).map_err(|_| coded!("jj.notEnabled", "jj is not enabled for this repository"))?;
     let invalid = || coded!("jj.partial", "A .jj entry exists but is not a valid jj workspace");
     if !md.is_dir() {
         return Err(invalid());
     }
-    let canon = fs::canonicalize(&jj).map_err(|_| invalid())?;
+    let canon = gc_pathkey::canonical(&jj).map_err(|_| invalid())?;
     if !is_direct_jj_child(&canon, root) {
         return Err(invalid());
     }
@@ -157,18 +159,9 @@ fn require_jj_dir(root: &Path) -> Result<PathBuf, Coded> {
     Ok(jj)
 }
 
-/// 윈도 `canonicalize`는 `\\?\C:\...` 접두를 붙인다. `check_root`가 정규화한 루트도 같은 방식이라 보통 같지만, 어느 한쪽만 접두가 있어도 맞도록 비교 전에 접두를 뗀다.
-pub(crate) fn strip_verbatim(p: &Path) -> String {
-    let s = p.to_string_lossy();
-    s.strip_prefix(r"\\?\UNC\").map(|r| format!(r"\\{r}")).or_else(|| s.strip_prefix(r"\\?\").map(String::from)).unwrap_or_else(|| s.into_owned())
-}
-
-/// `canon_jj`가 `root` 바로 아래의 `.jj`인가(구분자는 `/`·`\` 모두, 접두 무시)
+/// `canon_jj`가 `root` 바로 아래의 `.jj`인가(윈도 접두·구분자·대소문자 차이는 `gc_pathkey`가 흡수)
 pub(crate) fn is_direct_jj_child(canon_jj: &Path, root: &Path) -> bool {
-    let (a, b) = (strip_verbatim(canon_jj), strip_verbatim(root));
-    let norm = |s: &str| s.replace('\\', "/").trim_end_matches('/').to_string();
-    let (a, b) = (norm(&a), norm(&b));
-    a.strip_prefix(&b).is_some_and(|rest| rest == "/.jj")
+    gc_pathkey::rel_strict(root, canon_jj).is_some_and(|r| r == ".jj")
 }
 
 /// jj 저장소를 읽어 확인창 정보와 보존 대상을 만든다. 판정할 수 없으면 거절(`jj.disableUnknown`).
@@ -425,13 +418,15 @@ mod tests {
 
     #[test]
     fn verbatim_prefix_is_ignored_when_comparing_locations() {
-        assert_eq!(strip_verbatim(Path::new(r"\\?\C:\repo")), r"C:\repo");
-        assert_eq!(strip_verbatim(Path::new(r"\\?\UNC\srv\share\r")), r"\\srv\share\r");
-        assert_eq!(strip_verbatim(Path::new("/tmp/r")), "/tmp/r");
         // 접두가 한쪽에만 있어도, 구분자가 달라도 같은 곳
         assert!(is_direct_jj_child(Path::new(r"\\?\C:\repo\.jj"), Path::new(r"C:\repo")));
         assert!(is_direct_jj_child(Path::new(r"C:\repo\.jj"), Path::new(r"\\?\C:\repo")));
         assert!(is_direct_jj_child(Path::new(r"\\?\UNC\srv\share\r\.jj"), Path::new(r"\\srv\share\r")));
+        assert!(is_direct_jj_child(Path::new(r"C:\Repo\.jj"), Path::new(r"\\?\C:\Repo\")));
+        // 허용 판정이라 대소문자는 구분한다(양쪽을 정규화해서 넘기므로 같은 곳이면 철자도 같다)
+        assert!(!is_direct_jj_child(Path::new(r"c:\Repo\.JJ"), Path::new(r"\\?\C:\repo\")));
+        assert!(!is_direct_jj_child(Path::new(r"C:\repo\.JJ"), Path::new(r"C:\repo")));
+        assert!(!is_direct_jj_child(Path::new(r"C:foo\.jj"), Path::new(r"C:foo")));
         assert!(is_direct_jj_child(Path::new("/tmp/r/.jj"), Path::new("/tmp/r")));
         assert!(is_direct_jj_child(Path::new("/tmp/r/.jj"), Path::new("/tmp/r/")));
         // 바로 아래의 `.jj`만
@@ -441,6 +436,8 @@ mod tests {
         assert!(!is_direct_jj_child(Path::new("/tmp/r2/.jj"), Path::new("/tmp/r")));
         assert!(!is_direct_jj_child(Path::new("/tmp/r/.jjx"), Path::new("/tmp/r")));
         assert!(!is_direct_jj_child(Path::new(r"D:\repo\.jj"), Path::new(r"C:\repo")));
+        assert!(!is_direct_jj_child(Path::new(r"C:\repo2\.jj"), Path::new(r"C:\repo")));
+        assert!(!is_direct_jj_child(Path::new("/tmp/R/.jj"), Path::new("/tmp/r")));
     }
 }
 

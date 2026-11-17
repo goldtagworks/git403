@@ -34,7 +34,8 @@ export const StatusBar = memo(function StatusBar({
   useEffect(() => {
     const un = listen<{ job: number; event: JobEvent }>("job", ({ payload: { event } }) => {
       // 끝나면 비운다: 자동 fetch처럼 문구가 안 바뀌는 작업의 마지막 줄(오류)이 탭을 옮겨도 남지 않게
-      setProgress(event.kind === "finished" ? "" : event.line);
+      // 대기 중이면 "대기 중"(취소 버튼은 그대로 있다), 시작하면 비운다
+      setProgress(event.kind === "waiting" ? t("status.queued") : event.kind === "finished" || event.kind === "started" ? "" : event.line);
     });
     return () => void un.then((f) => f());
   }, []);

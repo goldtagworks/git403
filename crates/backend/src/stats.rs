@@ -41,9 +41,8 @@ impl StatsTasks {
         });
     }
 
-    pub fn kill_all(&self) {
-        for (_, (_, h)) in self.0.lock().drain() {
-            h.kill_now();
-        }
+    /// 종료 정리용: 실행 중인 통계 작업의 핸들을 모두 꺼낸다(정리는 `Backend::shutdown`이 한꺼번에 `JobHandle::stop_all`로)
+    pub fn take_all(&self) -> Vec<gc_core::JobHandle> {
+        self.0.lock().drain().map(|(_, (_, h))| h).collect()
     }
 }

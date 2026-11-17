@@ -699,7 +699,7 @@ export const SettingsHost = memo(function SettingsHost({ theme, onTheme }: { the
 export function AutoFetch({ repo }: { repo: string }) {
   const minutes = useSyncExternalStore(onPrefs, () => pref("autoFetch"));
   useEffect(() => {
-    if (!pref("autoFetch") || !repo) return; // 간격 설정을 바꿀 때는 돌지 않게 repo에만 반응한다
+    if (!pref("autoFetch") || !repo || ops.aiRunning(repo)) return; // 간격 설정을 바꿀 때는 돌지 않게 repo에만 반응한다. AI 차례가 도는 저장소에는 예약하지 않는다
     const id = setTimeout(ops.autoFetch, 1500);
     return () => clearTimeout(id);
   }, [repo]);

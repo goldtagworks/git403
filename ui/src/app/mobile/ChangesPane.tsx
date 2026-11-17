@@ -55,7 +55,7 @@ export const ChangesPane = memo(function ChangesPane({ repo, status, file, back,
   useEffect(() => {
     if (!selFile) return;
     let live = true;
-    api.worktreeDiff(repo, selFile.path, side === "staged", selFile.untracked).then((d) => live && setDiff(d), (e) => ctx.error(String(e)));
+    api.worktreeDiff(repo, selFile.path, side === "staged", selFile.untracked).then((d) => live && setDiff(d), (e) => ctx.error(e));
     return () => void (live = false);
   }, [repo, side, selFile?.path, selFile?.untracked, fp, ignoreEol, ignoreWs]);
   // 보던 파일이 목록에서 사라지면(스테이지됨·되돌려짐) 목록으로 — status가 또 갱신돼도 한 번만(두 번이면 폰은 커밋 목록·저장소까지 닫힌다)
@@ -91,7 +91,7 @@ export const ChangesPane = memo(function ChangesPane({ repo, status, file, back,
       try {
         await (s === "staged" ? api.unstage(repo, paths) : api.stage(repo, paths));
       } catch (e) {
-        ctx.error(String(e));
+        ctx.error(e);
       } finally {
         working.current = false;
         setBusy(false);
@@ -164,7 +164,7 @@ const CommitBox = memo(function CommitBox({ repo, canCommit, onDone }: { repo: s
       drafts.delete(repo);
       onDone();
     } catch (e) {
-      ctx.error(String(e));
+      ctx.error(e);
     } finally {
       sending.current = false;
       setBusy(false);

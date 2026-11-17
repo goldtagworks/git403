@@ -12,6 +12,9 @@ use crate::{files, graph, open, Backend};
 impl Backend {
     /// 명령 하나를 실행한다.
     pub async fn dispatch(&self, cmd: &str, args: Value) -> Res<Value> {
+        // AI 차례가 도는 저장소에 대한 쓰기는 여기서 거절한다(repo_gate.rs, docs/security.md)
+        #[cfg(feature = "cli")]
+        let _write = self.begin_write(cmd, &args).await?; // 쓰기는 작업으로 등록해 요청이 끝날 때까지 들고 있는다(AI 시작의 겹침 확인이 본다)
         let mut a = Args(args);
         let a = &mut a;
         let git = &*self.backend;
@@ -255,7 +258,12 @@ impl Backend {
             "git" => {
                 let (repo, args, ok) = (a.repo()?, a.get::<Vec<String>>("args")?, a.get::<Option<Vec<i32>>>("ok")?.unwrap_or_default());
                 let argv: Vec<&str> = args.iter().map(String::as_str).collect();
-                let out = git.run(&repo, &argv, &ok).await.map_err(err)?;
+                // 읽기 명령(repo_gate::git_writes)은 `--no-optional-locks`와 같게 돈다: status·diff·describe가 index.lock을 잡지 않는다
+                #[cfg(feature = "cli")]
+                let read = !crate::repo_gate::git_writes(&args);
+                #[cfg(not(feature = "cli"))]
+                let read = false;
+                let out = if read { git.run_query(&repo, &argv, &ok).await } else { git.run(&repo, &argv, &ok).await }.map_err(err)?;
                 json(String::from_utf8_lossy(&out))
             }
             // ---- 파일 ----
@@ -498,7 +506,7 @@ impl Backend {
             // ---- 긴 작업 ----
             "run_detached" => {
                 let (repo, args, token) = (a.repo()?, a.get::<Vec<String>>("args")?, a.get::<String>("token")?);
-                self.run_detached(repo, args, token)?;
+                self.run_detached(repo, args, token).await?;
                 Ok(Value::Null)
             }
             "cancel_detached" => {
@@ -515,7 +523,7 @@ impl Backend {
             }
             "start_shell" => {
                 let (repo, command) = (a.repo()?, a.get::<String>("command")?);
-                json(self.start_shell(repo, command)?)
+                json(self.start_shell(repo, command).await?)
             }
             "cancel_job" => {
                 self.jobs.cancel(a.get("job")?);
@@ -523,8 +531,19 @@ impl Backend {
             }
             // 저장소를 열 때 부른다. 바로 돌아오고 commit-graph는 백그라운드로 만든다.
             "ensure_commit_graph" => {
-                crate::jobs::spawn_commit_graph(self.backend.clone(), a.repo()?);
+                crate::jobs::spawn_commit_graph(self.clone(), a.repo()?);
                 Ok(Value::Null)
+            }
+            // 남은 `.lock` 파일 복구(feature `cli`, stale_lock.rs): check는 읽기(지워도 되는지만 확인), remove는 같은 검증을 다시 거쳐 지운다
+            #[cfg(feature = "cli")]
+            "stale_lock_check" => {
+                let (repo, path) = (a.repo()?, a.get::<String>("path")?);
+                self.stale_lock_check(repo, path).await
+            }
+            #[cfg(feature = "cli")]
+            "stale_lock_remove" => {
+                let (repo, path) = (a.repo()?, a.get::<String>("path")?);
+                self.stale_lock_remove(repo, path, _write.as_ref().map(crate::jobs::JobReg::id)).await
             }
             "askpass_reply" => {
                 let (id, answer) = (a.get::<u64>("id")?, a.get::<Option<String>>("answer")?);

@@ -39,8 +39,12 @@ mod graph;
 mod hosting;
 mod jobs;
 mod open;
+#[cfg(feature = "cli")]
+mod repo_gate;
 mod settings_io;
 mod stats;
+#[cfg(feature = "cli")]
+mod stale_lock;
 mod util;
 pub mod watch;
 
@@ -199,6 +203,12 @@ impl Backend {
     }
 }
 
+/// 앱 종료 때 자식이 스스로 정리하도록 기다려 주는 시간(약 1초). 시험은 CPU가 몰려 신호를 받은 셸이 늦게 돌아도 흔들리지 않게 길게 잡는다
+#[cfg(not(test))]
+const SHUTDOWN_GRACE: std::time::Duration = std::time::Duration::from_secs(1);
+#[cfg(test)]
+const SHUTDOWN_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
+
 impl Inner {
     /// gh·ai·외부 앱 실행에 쓸 PATH (로그인 셸에서 얻은 값). `cli`가 아니면 보정 없음.
     pub(crate) fn path_env(&self) -> Option<&str> {
@@ -211,9 +221,12 @@ impl Inner {
     /// 종료 때 자식 프로세스를 전부 정리한다. 종료가 `process::exit`로 끝나면 tokio 태스크 drop·`kill_on_drop`이
     /// 돌지 않고, 자식은 별도 프로세스 그룹이라 터미널 신호도 못 받는다. 그래서 동기로 직접 죽인다. 여러 번 불려도 안전하다.
     pub fn shutdown(&self) {
-        self.jobs.kill_all();
-        self.stats.kill_all();
+        // 모든 자식에 SIGTERM(Windows는 CTRL_C)을 한꺼번에 보내고 약 1초 기다린 뒤 안 끝난 것만 SIGKILL — git이 `.lock`을 스스로 지우게 한다
+        let mut all = self.jobs.take_all();
+        all.extend(self.stats.take_all());
+        all.extend(self.ai.take_chats());
         self.ai.abort_all();
+        gc_core::JobHandle::stop_all(&all, SHUTDOWN_GRACE);
         self.watch.stop();
     }
 }
@@ -229,20 +242,26 @@ mod tests {
         unsafe { libc::kill(pid, 0) == 0 }
     }
 
-    /// 종료 정리: jobs·detached·stats의 자식(손자 포함)을 동기로 모두 죽인다.
+    /// 종료 정리: jobs·detached·stats의 자식(손자 포함)에 **먼저 SIGTERM**을 보내 스스로 정리(여기서는 `trap`이 표지 파일을 씀 — 실제로는 git이 `.lock`을 지움)하게 하고,
+    /// 약 1초 유예 안에 안 끝나는 것(SIGTERM을 무시하는 자식)은 **그 뒤 SIGKILL**로 끝낸다. 전부 한꺼번에 처리해서 총 시간은 유예를 크게 넘지 않는다.
     #[tokio::test]
-    async fn shutdown은_모든_자식_프로세스를_죽인다() {
+    async fn shutdown은_먼저_sigterm으로_정리할_시간을_주고_안_끝나면_sigkill로_모든_자식을_끝낸다() {
         let dir = std::env::temp_dir().join(format!("git403-shutdown-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let state = Backend::with_parts(GitRunner::default(), Default::default(), Arc::new(NullEmit), dir.clone(), None);
         let mut pids = Vec::new();
-        for (i, kind) in ["jobs", "detached", "stats"].into_iter().enumerate() {
+        for (i, kind) in ["jobs", "detached", "stats", "stubborn"].into_iter().enumerate() {
             let (tx, _rx) = mpsc::unbounded_channel();
-            let script = format!("sleep 60 & echo $! > pid{i}; wait");
+            let script = if kind == "stubborn" {
+                format!("trap '' TERM; (trap '' TERM; exec sleep 60) & echo $! > pid{i}; wait") // SIGTERM 무시: 유예 뒤 SIGKILL이 필요하다
+            } else {
+                // 자식 sleep은 SIGTERM을 무시하게 둔다(셸과 자식이 동시에 죽으면 셸이 trap을 돌리기 전에 끝나는 경합이 생긴다). trap이 표지를 쓴 뒤 자식을 정리한다
+                format!("(trap '' TERM; exec sleep 60) & P=$!; trap 'echo cleaned > term{i}; kill -9 $P; exit 0' TERM; echo $P > pid{i}; wait")
+            };
             let (h, _task) = state.git.spawn_shell(&dir, &script, tx).unwrap();
             match kind {
                 "jobs" => drop(state.jobs.running.lock().insert(1, h)),
-                "detached" => drop(state.jobs.detached.lock().insert("t".into(), h)),
+                "detached" | "stubborn" => drop(state.jobs.detached.lock().insert(kind.into(), h)),
                 _ => drop(state.stats.0.lock().insert("r".into(), ("t".into(), h))),
             }
             let f = dir.join(format!("pid{i}"));
@@ -254,8 +273,13 @@ mod tests {
             }
             pids.push(std::fs::read_to_string(&f).unwrap().trim().parse::<i32>().unwrap());
         }
+        tokio::time::sleep(Duration::from_millis(200)).await; // trap이 설치될 시간
         assert!(pids.iter().all(|p| alive(*p)));
-        state.shutdown();
+        let t = std::time::Instant::now();
+        let st = state.clone();
+        tokio::task::spawn_blocking(move || st.shutdown()).await.unwrap();
+        // SIGTERM을 무시하는 자식 때문에 유예(시험은 2초)를 다 기다린 뒤 SIGKILL로 끝냈고, 그보다 한참 더 걸리지는 않는다
+        assert!(t.elapsed() >= Duration::from_millis(1900) && t.elapsed() < Duration::from_secs(8), "{:?}", t.elapsed());
         for p in pids {
             let mut gone = false;
             for _ in 0..100 {
@@ -267,6 +291,11 @@ mod tests {
             }
             assert!(gone, "자식 {p}가 남음");
         }
+        // SIGTERM을 받은 자식들은 스스로 정리했다(= SIGKILL이 아니었다). 무시한 자식은 정리하지 못했다
+        for i in 0..3 {
+            assert!(dir.join(format!("term{i}")).exists(), "{i}: SIGTERM 정리가 돌지 않음 {:?} elapsed={:?}", std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name()).collect::<Vec<_>>(), t.elapsed());
+        }
+        assert!(!dir.join("term3").exists());
         assert!(state.jobs.running.lock().is_empty() && state.jobs.detached.lock().is_empty() && state.stats.0.lock().is_empty());
     }
 }

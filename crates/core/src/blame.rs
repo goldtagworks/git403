@@ -26,7 +26,7 @@ pub async fn blame(git: &GitRunner, repo: &Path, path: &str, rev: Option<&str>) 
         args.push(crate::reject_option(r)?);
     }
     args.extend(["--", path]);
-    let out = git.output(repo, &args).await?;
+    let out = git.query(repo, &args).await?;
     Ok(parse(&String::from_utf8_lossy(&out)))
 }
 

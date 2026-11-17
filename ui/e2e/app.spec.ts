@@ -143,6 +143,91 @@ test("빠른 실행으로 브랜치를 체크아웃한다", async ({ page }) => 
   expect((await gitCalls(page)).filter((c) => c[0] === "switch").at(-1)).toEqual(["switch", "feature/graph"]);
 });
 
+const checkoutGraph = async (page: Page) => {
+  await page.keyboard.press("ControlOrMeta+p");
+  const palette = page.getByRole("dialog", { name: "빠른 실행" });
+  await palette.getByRole("textbox").fill("체크아웃 graph");
+  await expect(palette.getByRole("option").first()).toContainText("feature/graph");
+  await page.keyboard.press("Enter");
+};
+const OVERWRITE = "error: Your local changes to the following files would be overwritten by checkout:\n\ta.txt";
+
+test("자동 스태시 뒤 체크아웃이 AI 차례 중 거절되면 stash pop을 시도하지 않고 '변경이 스태시에 있음'을 오류로 알린다", async ({ page }) => {
+  await openRepo(page);
+  await page.evaluate((o) => ((window as any).__gitSeq = [{ prefix: "switch", err: o }, { prefix: "switch", busy: true }]), OVERWRITE);
+  await checkoutGraph(page);
+  const err = page.locator(".toast.error", { hasText: "스태시에 보관돼 있습니다" });
+  await expect(err).toBeVisible();
+  await expect(err).toContainText("AI가 작업을 시작해서 이동하지 못했습니다");
+  const calls = await gitCalls(page);
+  expect(calls.filter((c) => c[0] === "stash" && c[1] === "push")).toHaveLength(1);
+  expect(calls.filter((c) => c[0] === "stash" && c[1] === "pop")).toHaveLength(0);
+  expect(calls.filter((c) => c[0] === "switch")).toHaveLength(2);
+});
+
+test("자동 스태시 뒤 이동이 다른 이유로 실패하면 pop하고, pop이 실패해도 삼키지 않고 변경이 스태시에 있다고 알린다", async ({ page }) => {
+  await openRepo(page);
+  await page.evaluate((o) => ((window as any).__gitSeq = [{ prefix: "switch", err: o }, { prefix: "switch", err: "fatal: invalid reference" }, { prefix: "stash pop", err: "error: could not restore untracked files from stash" }]), OVERWRITE);
+  await checkoutGraph(page);
+  await expect(page.locator(".toast.error", { hasText: "다시 적용하지 못해 스태시에 남아 있습니다" })).toContainText("could not restore untracked files");
+  await expect(page.locator(".toast.error", { hasText: "invalid reference" })).toBeVisible();
+  expect(((await gitCalls(page)).filter((c) => c[0] === "stash" && c[1] === "pop"))).toHaveLength(1);
+});
+
+test("자동 스태시 뒤 이동은 됐는데 pop이 거절·실패하면 충돌이 아닌 한 오류로 알린다(충돌이면 기존 안내)", async ({ page }) => {
+  await openRepo(page);
+  await page.evaluate((o) => ((window as any).__gitSeq = [{ prefix: "switch", err: o }, { prefix: "stash pop", busy: true }]), OVERWRITE);
+  await checkoutGraph(page);
+  await expect(page.locator(".toast.error", { hasText: "스태시에 보관돼 있습니다" })).toBeVisible();
+  await page.evaluate((o) => ((window as any).__gitSeq = [{ prefix: "switch", err: o }, { prefix: "stash pop", err: "CONFLICT (content): Merge conflict in a.txt" }]), OVERWRITE);
+  await checkoutGraph(page);
+  await expect(page.locator(".toast.info", { hasText: "충돌했습니다" })).toBeVisible();
+});
+
+test("Fetch가 남은 .lock 때문에 실패하면 지우고 다시 시도하자는 토스트가 뜨고, 확인창에서 경로를 보인 뒤 지우고 다시 실행한다", async ({ page }) => {
+  await openRepo(page);
+  const lock = "/demo/git403/.git/refs/remotes/origin/main.lock";
+  await page.evaluate((l) => {
+    (window as any).__asked = [];
+    (window as any).__job = { once: true, early: true, err: `error: cannot lock ref 'refs/remotes/origin/main': Unable to create '${l}': File exists.` };
+  }, lock);
+  await page.locator(".toolbar").getByRole("button", { name: "Fetch", exact: true }).click();
+  const offer = page.locator(".toast.warning", { hasText: "남은 잠금 파일이 Git을 막고 있습니다" });
+  await expect(offer).toBeVisible();
+  await expect(offer).toContainText(lock);
+  expect((await gitCalls(page)).filter((c) => c[0] === "stale_lock_check")[0].slice(1)).toEqual(["/demo/git403", lock]);
+  expect((await gitCalls(page)).filter((c) => c[0] === "stale_lock_remove")).toHaveLength(0); // 확인 전에는 지우지 않는다
+  await offer.getByRole("button", { name: "잠금 파일 지우고 다시 시도" }).click();
+  expect(await page.evaluate(() => (window as any).__asked as string[])).toEqual([expect.stringContaining(lock)]); // 확인창이 경로를 보인다
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "stale_lock_remove").length).toBe(1);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "start_job").length).toBe(2); // 지운 뒤 같은 작업을 다시 시작
+});
+
+test("원격 서버가 보낸 `remote:` 줄의 lock 경로는 지울 후보로 삼지 않는다(서버가 지울 경로를 주입하지 못한다)", async ({ page }) => {
+  await openRepo(page);
+  await page.evaluate(() => {
+    (window as any).__job = { once: true, early: true, err: "fatal: unable to access\nremote: Unable to create '/Users/me/.ssh/authorized_keys.lock': File exists.\nremote:   Unable to create '/home/u/Cargo.lock': File exists." };
+  });
+  await page.locator(".toolbar").getByRole("button", { name: "Fetch", exact: true }).click();
+  await expect(page.locator(".toast.error")).toBeVisible();
+  await page.waitForTimeout(300);
+  expect((await gitCalls(page)).filter((c) => c[0] === "stale_lock_check")).toHaveLength(0);
+  await expect(page.locator(".toast.warning", { hasText: "잠금 파일" })).toHaveCount(0);
+});
+
+test("백엔드가 지울 수 없다고 하면(최근 lock·작업 중 등) 복구 제안 토스트를 띄우지 않는다", async ({ page }) => {
+  await openRepo(page);
+  await page.evaluate(() => {
+    (window as any).__staleLock = { refuse: true };
+    (window as any).__job = { once: true, early: true, err: "fatal: Unable to create '/demo/git403/.git/index.lock': File exists." };
+  });
+  await page.locator(".toolbar").getByRole("button", { name: "Fetch", exact: true }).click();
+  await expect(page.locator(".toast.error")).toBeVisible();
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "stale_lock_check").length).toBe(1);
+  await page.waitForTimeout(200);
+  await expect(page.locator(".toast.warning", { hasText: "잠금 파일" })).toHaveCount(0);
+});
+
 test("⌘W는 열린 팝업 → 저장소 탭 → 창 숨기기 순으로 하나만 닫는다", async ({ page }) => {
   await openRepo(page);
   const palette = page.getByRole("dialog", { name: "빠른 실행" });

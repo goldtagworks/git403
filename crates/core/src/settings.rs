@@ -49,15 +49,15 @@ pub fn home_ignore_path(home: &Path, path: &str, configured: Option<&str>) -> Re
     if path.is_empty() || p.components().any(|c| matches!(c, std::path::Component::ParentDir)) || !allowed {
         return Err(bad(gc_i18n::coded!("settings.pathNotEditable", "path cannot be edited: {path} (only core.excludesfile, ~/.gitignore_global, ~/.config/git/ignore)", path = path)));
     }
-    let base = home.canonicalize()?;
+    let base = gc_pathkey::canonical(home)?;
     let mut probe = p.as_path();
     let real = loop {
-        match probe.canonicalize() {
+        match gc_pathkey::canonical(probe) {
             Ok(r) => break r,
             Err(_) => probe = probe.parent().ok_or_else(|| bad(gc_i18n::coded!("settings.pathUnresolvable", "cannot resolve path: {path}", path = path)))?,
         }
     };
-    if !real.starts_with(&base) {
+    if !gc_pathkey::contains_strict(&base, &real) {
         return Err(bad(gc_i18n::coded!("settings.pathOutsideHome", "path points outside the home folder: {path}", path = path)));
     }
     Ok(p)
@@ -94,14 +94,14 @@ pub fn write_in_repo(repo: &Path, rel: &str, text: &str, expected: Option<&str>)
             return Err(bad(gc_i18n::coded!("settings.fileChanged", "{path}: the file changed after the AI request. Not overwritten. Please request again", path = rel)));
         }
     }
-    write_text(&repo.canonicalize()?.join(real), text)
+    write_text(&gc_pathkey::canonical(repo)?.join(real), text)
 }
 
 /// 작업 폴더 파일 내용의 지문(같은 프로세스 안에서 변경 감지용 해시). 저장소 안 파일만(`canonical_in_repo`).
 pub fn fingerprint(repo: &Path, rel: &str) -> Result<String> {
     use std::hash::{Hash, Hasher};
     let real = canonical_in_repo(repo, rel)?;
-    let bytes = std::fs::read(repo.canonicalize()?.join(real))?;
+    let bytes = std::fs::read(gc_pathkey::canonical(repo)?.join(real))?;
     let mut h = std::collections::hash_map::DefaultHasher::new();
     bytes.hash(&mut h);
     Ok(format!("{:016x}-{}", h.finish(), bytes.len()))

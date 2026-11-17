@@ -103,6 +103,8 @@ function onEvent(conversation: string, ev: AiChatEvent) {
       return finish({ ...c, items: [...c.items, { k: "note", text, error: true }] }, b, false, text);
     }
     case "note":
+      // 시작 전 자동 fetch가 끝나기를 기다리는 중(백엔드가 최대 10초): 패널에 안내 줄로 보인다. 그 밖의 알림은 오류 토스트
+      if (ev.code === "aiChat.waitFetch") return put({ ...c, items: [...c.items, { k: "note", text: tErr(ev.code, undefined, ev.message) }] });
       toastError(tErr(ev.code, undefined, ev.message));
       return;
     case "cancelled": {
@@ -235,7 +237,7 @@ export const aiChat = {
       ]);
       put({ id: conversation, repo, sessionId: [...entries].reverse().find((e) => e.sessionId)?.sessionId ?? null, items, running: false, confirmed: false });
     } catch (e) {
-      toastError(String(e));
+      toastError(e);
     }
   },
   /** 이 차례의 작업을 되돌린다 (OS 확인창 → 진행 중인 git 작업이 있으면 중단 여부를 한 번 더 묻는다) */
@@ -256,7 +258,7 @@ export const aiChat = {
         await run(true);
       }
     } catch (e) {
-      return toastError(String(e));
+      return toastError(e);
     }
     const c = chats.get(repo);
     if (c) put({ ...c, items: c.items.map((i) => (i.k === "undo" && i.backup.id === backup.id ? { ...i, done: true } : i)) });

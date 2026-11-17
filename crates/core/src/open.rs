@@ -32,10 +32,10 @@ pub fn path_in_repo(repo: &Path, rel: &str) -> Result<PathBuf> {
 /// 파일이 없거나 링크가 저장소 밖을 가리키면 오류. (디스크 접근이라 호출 측에서 블로킹 스레드로)
 pub fn canonical_in_repo(repo: &Path, rel: &str) -> Result<String> {
     let full = path_in_repo(repo, rel)?;
-    let real = full.canonicalize().map_err(|_| Error::from(gc_i18n::coded!("open.notInWorktree", "file is not in the working folder")))?;
-    let base = repo.canonicalize()?;
-    let inner = real.strip_prefix(&base).map_err(|_| Error::from(gc_i18n::coded!("open.pointsOutside", "path points outside the repository: {path}", path = rel)))?;
-    Ok(inner.to_string_lossy().into_owned())
+    let real = gc_pathkey::canonical(&full).map_err(|_| Error::from(gc_i18n::coded!("open.notInWorktree", "file is not in the working folder")))?;
+    let base = gc_pathkey::canonical(repo)?;
+    let inner = real.strip_prefix(&base).map(|p| p.to_string_lossy().into_owned()).ok().or_else(|| gc_pathkey::rel_strict(&base, &real)).ok_or_else(|| Error::from(gc_i18n::coded!("open.pointsOutside", "path points outside the repository: {path}", path = rel)))?;
+    Ok(inner)
 }
 
 /// what: `terminal` | `folder` | `reveal`(파일을 탐색기에서 선택) | `open`(기본 앱).

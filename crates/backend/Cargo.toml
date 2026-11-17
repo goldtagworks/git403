@@ -16,6 +16,7 @@ gix = ["gc-core/gix"]
 
 [dependencies]
 gc-i18n = { path = "../i18n" }
+gc-pathkey = { path = "../pathkey" }
 gc-core = { path = "../core", default-features = false }
 gc-graph = { path = "../graph" }
 gc-hosting = { path = "../hosting" }

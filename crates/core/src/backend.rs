@@ -56,6 +56,11 @@ pub trait GitBackend: Send + Sync {
         no("run")
     }
 
+    /// `run`과 같지만 읽기 명령용: index를 새로 고치는 조회(`status`·`diff`·`describe`)도 `index.lock`을 잡지 않는다(AI 차례·다른 쓰기와 안 겹치게). 순수 Rust 백엔드는 잠금이 없어 `run` 그대로.
+    async fn run_query(&self, repo: &Path, argv: &[&str], ok: &[i32]) -> Result<Vec<u8>> {
+        self.run(repo, argv, ok).await
+    }
+
     /// 긴 argv 작업(pull·fetch·push…). `ssh_batch`가 `None`이면 평소대로, `Some(b)`면 인증 창 없는 백그라운드 실행
     /// (`GitRunner::spawn_batch`, `b`는 ssh BatchMode 여부). 진행은 `events`로 흐른다.
     fn spawn_job(&self, _repo: &Path, _argv: &[&str], _ssh_batch: Option<bool>, _events: mpsc::UnboundedSender<JobEvent>) -> Result<Spawned> {
@@ -191,6 +196,9 @@ impl GitBackend for CliBackend {
     }
     async fn run(&self, repo: &Path, argv: &[&str], ok: &[i32]) -> Result<Vec<u8>> {
         self.0.output_allow(repo, argv, ok).await
+    }
+    async fn run_query(&self, repo: &Path, argv: &[&str], ok: &[i32]) -> Result<Vec<u8>> {
+        self.0.query_allow(repo, argv, ok).await
     }
     fn spawn_job(&self, repo: &Path, argv: &[&str], ssh_batch: Option<bool>, events: mpsc::UnboundedSender<JobEvent>) -> Result<Spawned> {
         match ssh_batch {

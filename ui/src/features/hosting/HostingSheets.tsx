@@ -53,7 +53,7 @@ export function AccountsPanel() {
   const [busy, setBusy] = useState(false);
   const [restore, setRestore] = useState(pref("ghRestore"));
   const [autoSw, setAutoSw] = useState(pref("ghAutoSwitch"));
-  const refresh = () => api.accountsList().then(setList, (e) => ctx.error(String(e)));
+  const refresh = () => api.accountsList().then(setList, (e) => ctx.error(e));
   useEffect(() => void refresh(), []);
 
   const s = SERVICES[svc];

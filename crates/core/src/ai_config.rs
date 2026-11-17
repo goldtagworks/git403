@@ -80,17 +80,7 @@ pub fn is_local_url(u: &str) -> bool {
 
 /// 경로를 정규화(심볼릭 링크 해석, 아직 없으면 있는 조상까지)
 fn canon(p: &Path) -> PathBuf {
-    let mut probe = p.to_path_buf();
-    let mut tail: Vec<std::ffi::OsString> = Vec::new();
-    while probe.symlink_metadata().is_err() {
-        match (probe.file_name().map(|n| n.to_owned()), probe.pop()) {
-            (Some(n), true) => tail.push(n),
-            _ => break,
-        }
-    }
-    let mut real = probe.canonicalize().unwrap_or(probe);
-    real.extend(tail.iter().rev());
-    real
+    gc_pathkey::real(p)
 }
 
 /// 설정 키 하나를 **하위 키 단위 허용 목록**으로 판정한다(묶음 단위 허용 없음 — `gc.recentObjectsHook` 같은 실행형 하위 키가 묶음에 숨지 못하게).
@@ -118,7 +108,7 @@ fn judge_entry(key: &str, value: &str, src: &Source, repo: &Path) -> J {
                 // 상대 경로는 그 설정 파일이 있는 git 폴더 기준. 상위 저장소는 이 저장소 폴더와 같아야 하고, 서브모듈은 저장소 안이어야 한다
                 let abs = if Path::new(value).is_absolute() { PathBuf::from(value) } else { base.clone().unwrap_or_else(|| repo.join(".git")).join(value) };
                 let (abs, root) = (canon(&abs), canon(repo));
-                let allowed = if base.is_none() { abs == root } else { abs.starts_with(&root) };
+                let allowed = if base.is_none() { gc_pathkey::same_strict(&abs, &root) } else { gc_pathkey::contains_strict(&root, &abs) };
                 if allowed { J::Safe } else { J::Refuse(format!("core.worktree points outside the repository folder ({value})")) }
             }
             "repositoryformatversion" => v(Vk::Int),
@@ -428,7 +418,7 @@ pub fn check(repo: &Path, git: &str) -> Verdict {
         return Verdict { refuse: vec!["not a usable git repository".into()], ..Default::default() };
     };
     let mut refuse = Vec::new();
-    if canon(Path::new(top.trim())) != root {
+    if !gc_pathkey::same_strict(canon(Path::new(top.trim())), &root) {
         refuse.push(format!("the git working tree is {} instead of the repository folder (core.worktree or a crafted .git file)", top.trim()));
     }
     let gitdir = run(git, repo, &["rev-parse", "--absolute-git-dir"]).map(|s| PathBuf::from(s.trim())).unwrap_or_default();
@@ -438,7 +428,7 @@ pub fn check(repo: &Path, git: &str) -> Verdict {
     match dotgit.symlink_metadata() {
         Ok(m) if m.is_dir() => {
             let dg = canon(&dotgit);
-            if !canon(&gitdir).starts_with(&dg) || !canon(&common).starts_with(&dg) {
+            if !gc_pathkey::contains_strict(&dg, canon(&gitdir)) || !gc_pathkey::contains_strict(&dg, canon(&common)) {
                 refuse.push(format!("the git directory ({}) is outside <repo>/.git (commondir/gitdir redirect)", gitdir.display()));
             }
             if let Ok(rd) = std::fs::read_dir(&dotgit) {
@@ -503,7 +493,7 @@ pub fn check(repo: &Path, git: &str) -> Verdict {
                 let t = std::fs::read_to_string(&sub).unwrap_or_default();
                 let target = t.trim().strip_prefix("gitdir:").map(|x| x.trim().to_string()).unwrap_or_default();
                 let abs = canon(&root.join(path).join(&target));
-                if !abs.starts_with(canon(&dotgit.join("modules"))) {
+                if !gc_pathkey::contains_strict(canon(&dotgit.join("modules")), &abs) {
                     refuse.push(format!("submodule {path} has a .git file pointing outside <repo>/.git/modules"));
                 }
             }
@@ -668,6 +658,31 @@ mod tests {
         sh(&victim, &["config", "core.worktree", &o.to_string_lossy()]);
         assert!(!check(&c, "git").refuse.is_empty(), "{:?}", check(&c, "git"));
         let _ = crafted;
+    }
+
+    /// `없는폴더/../링크/…`로 저장소 밖을 가리키는 core.worktree: `..`로 돌아온 뒤에도 링크를 풀어야 밖으로 판정된다(상위·서브모듈 모두).
+    /// 실제 git은 없는 폴더를 지나는 경로를 못 풀어 거절하므로, 판정 함수(`judge`)를 직접 시험해 우리 쪽 해석을 고정한다
+    #[cfg(unix)]
+    #[test]
+    fn core_worktree_through_dotdot_after_a_missing_component_is_judged_by_its_real_location() {
+        let (_d, r) = repo();
+        let outside = tempfile::tempdir().unwrap();
+        let o = outside.path().canonicalize().unwrap();
+        std::os::unix::fs::symlink(&o, r.join("link")).unwrap();
+        std::fs::create_dir(r.join("inside")).unwrap();
+        let refused = |src: Source, value: String| {
+            let v = judge(&[(src, "core.worktree".into(), value)], &r);
+            !v.refuse.is_empty()
+        };
+        // 상위 저장소: 작업 트리는 저장소 폴더와 같아야 한다
+        assert!(refused(Source::Top, format!("{}/nope/../link", r.display())), "밖을 가리키는 링크");
+        assert!(refused(Source::Top, format!("{}/nope/../inside", r.display())), "저장소 폴더 자신이 아니면 거절");
+        assert!(!refused(Source::Top, format!("{}/nope/..", r.display())), "저장소 폴더로 돌아오면 안전");
+        // 서브모듈: 저장소 안이어야 한다
+        let modules = r.join(".git/modules/sm");
+        assert!(refused(Source::Other(modules.clone()), format!("{}/nope/../link", r.display())), "서브모듈 core.worktree가 링크로 밖");
+        assert!(refused(Source::Other(modules.clone()), format!("{}/a/b/../../link/x", r.display())));
+        assert!(!refused(Source::Other(modules), format!("{}/nope/../inside", r.display())), "링크가 아닌 저장소 안 폴더는 안전");
     }
 
     /// 서브모듈 설정(modules/*/config)의 filter가 상위 설정 판정에서 빠지던 길

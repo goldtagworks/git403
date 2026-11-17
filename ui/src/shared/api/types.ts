@@ -32,7 +32,10 @@ export interface GraphView {
 export type JobEvent =
   | { kind: "stdout"; line: string }
   | { kind: "progress"; line: string }
-  | { kind: "finished"; code: number | null };
+  | { kind: "finished"; code: number | null }
+  /** 같은 저장소의 앞선 작업이 끝나길 기다리는 중(백엔드 대기열) / 대기가 끝나 시작함 */
+  | { kind: "waiting" }
+  | { kind: "started" };
 
 export type RefKind = "local" | "remote" | "tag" | "stash";
 

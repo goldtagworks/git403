@@ -34,7 +34,7 @@ export const GhStatusItem = memo(function GhStatusItem() {
   const title = differs ? t("gh.tipBound", { bound: s.bound!, active: s.active ?? "-" }) : s.bound ? t("gh.tipBoundSame", { user: s.bound }) : t("gh.tip", { user: s.active ?? "-" });
 
   const withWho = (f: () => Promise<unknown>) => async () => { try { await f(); } finally { whoCache.delete(s.repo); } };
-  const fail = (e: unknown) => ctx.error(String(e));
+  const fail = (e: unknown) => ctx.error(e);
   const act = (f: () => Promise<unknown>) => () => void f().catch(fail);
   type Who = { name: string; email: string; local: boolean };
   const build = (probe: Record<string, boolean> | null, who?: Who): MenuEntry[] => [
@@ -74,7 +74,7 @@ export const GhStatusItem = memo(function GhStatusItem() {
           const changed = !cached || JSON.stringify(cached) !== JSON.stringify(who);
           whoCache.set(s.repo, who);
           if (changed) showMenu(build(null, who), at.current);
-        }, (err) => { ctx.error(String(err)); if (!cached) showMenu(build(null), at.current); });
+        }, (err) => { ctx.error(err); if (!cached) showMenu(build(null), at.current); });
       }}
     />
   );

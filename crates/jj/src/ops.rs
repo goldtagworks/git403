@@ -237,12 +237,12 @@ fn reserved_component(c: &str) -> bool {
 
 /// 저장소별 직렬화(프로세스 안). 다른 프로세스(jj CLI)는 작업 사본 파일 잠금이 막는다.
 pub(crate) fn repo_lock(root: &Path) -> MutexGuard<'static, ()> {
-    static LOCKS: OnceLock<Mutex<HashMap<PathBuf, &'static Mutex<()>>>> = OnceLock::new();
+    static LOCKS: OnceLock<Mutex<HashMap<String, &'static Mutex<()>>>> = OnceLock::new();
     let m: &'static Mutex<()> = LOCKS
         .get_or_init(Default::default)
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .entry(root.to_path_buf())
+        .entry(gc_pathkey::real_key(root))
         .or_insert_with(|| Box::leak(Box::new(Mutex::new(()))));
     m.lock().unwrap_or_else(|e| e.into_inner())
 }

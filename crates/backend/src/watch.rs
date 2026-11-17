@@ -66,7 +66,7 @@ fn debounce(rx: mpsc::Receiver<PathBuf>, mut flush: impl FnMut(Vec<PathBuf>)) {
 impl RepoWatcher {
     pub fn start(repo: &Path, on_change: impl Fn(RepoChange) + Send + 'static) -> notify_debouncer_mini::notify::Result<Self> {
         // macOS FSEvents는 심링크를 푼 경로(/var → /private/var)로 알린다. 두 형태 모두 .git으로 알아본다.
-        let roots: Vec<PathBuf> = [Some(repo.to_path_buf()), repo.canonicalize().ok()].into_iter().flatten().collect();
+        let roots: Vec<PathBuf> = [Some(repo.to_path_buf()), gc_pathkey::canonical(repo).ok()].into_iter().flatten().collect();
         let git_dirs: Vec<PathBuf> = roots.iter().map(|r| r.join(".git")).collect();
         let root = repo.to_path_buf();
         let repo_str = repo.to_string_lossy().into_owned();
@@ -176,17 +176,17 @@ impl Many {
 }
 
 fn key(repo: &Path) -> PathBuf {
-    repo.canonicalize().unwrap_or_else(|_| repo.to_path_buf())
+    gc_pathkey::real(repo)
 }
 
 /// 감시할 수 있는 경로인지: 존재하는 디렉터리이고 작업 트리 최상위(`.git` 폴더 또는 파일)여야 한다.
 /// 파일 시스템 루트와 홈 디렉터리 자체는 거부한다. 통과하면 정규화한 경로를 돌려준다.
 fn check_repo(repo: &Path) -> Result<PathBuf, String> {
-    let k = repo.canonicalize().map_err(|e| format!("{}: {e}", repo.display()))?;
+    let k = gc_pathkey::canonical(repo).map_err(|e| format!("{}: {e}", repo.display()))?;
     if !k.is_dir() {
         return Err(format!("not a directory: {}", repo.display()));
     }
-    if k.parent().is_none() || gc_core::home_dir().ok().and_then(|h| h.canonicalize().ok()).is_some_and(|h| h == k) {
+    if k.parent().is_none() || gc_core::home_dir().ok().and_then(|h| gc_pathkey::canonical(h).ok()).is_some_and(|h| gc_pathkey::same_folded(h, &k)) {
         return Err(format!("refusing to watch: {}", repo.display()));
     }
     if !k.join(".git").exists() {

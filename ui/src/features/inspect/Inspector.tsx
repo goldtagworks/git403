@@ -70,10 +70,10 @@ function History({ path, onSelect }: { path: string; onSelect: (id: string) => v
   const [sel, setSel] = useState<string | null>(null);
   const [diff, setDiff] = useState("");
   useEffect(() => {
-    api.fileLog(ctx.repo, path).then((c) => (setCommits(c), setSel(c[0]?.id ?? null)), (e) => ctx.error(String(e)));
+    api.fileLog(ctx.repo, path).then((c) => (setCommits(c), setSel(c[0]?.id ?? null)), (e) => ctx.error(e));
   }, [path]);
   useEffect(() => {
-    if (sel) api.fileDiff(ctx.repo, sel, path).then(setDiff, (e) => (setDiff(""), ctx.error(String(e)))); // 빈 diff("변경 없음")로만 두지 않는다
+    if (sel) api.fileDiff(ctx.repo, sel, path).then(setDiff, (e) => (setDiff(""), ctx.error(e))); // 빈 diff("변경 없음")로만 두지 않는다
   }, [sel, path]);
   return (
     <div className="inspector-body hist">
@@ -94,7 +94,7 @@ function History({ path, onSelect }: { path: string; onSelect: (id: string) => v
 function Blame({ path, rev, onSelect }: { path: string; rev: string | null; onSelect: (id: string) => void }) {
   const [lines, setLines] = useState<BlameLine[]>([]);
   useEffect(() => {
-    api.blame(ctx.repo, path, rev).then(setLines, (e) => ctx.error(String(e)));
+    api.blame(ctx.repo, path, rev).then(setLines, (e) => ctx.error(e));
   }, [path, rev]);
   // 같은 커밋이 이어지는 줄은 정보를 한 번만 보여 준다.
   return (
@@ -135,7 +135,7 @@ function LfsPanel() {
   const [lfs, setLfs] = useState<Lfs | null>(null);
   const [tick, setTick] = useState(0);
   useEffect(() => {
-    api.lfsStatus(ctx.repo).then(setLfs, (e) => ctx.error(String(e)));
+    api.lfsStatus(ctx.repo).then(setLfs, (e) => ctx.error(e));
   }, [tick]);
   if (!lfs) return <div className="inspector-body" />;
   if (!lfs.installed)

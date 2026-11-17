@@ -100,7 +100,7 @@ fn private_tmp() -> PathBuf {
         let _ = std::fs::create_dir_all(&d);
         #[cfg(unix)]
         let _ = std::fs::set_permissions(&d, std::os::unix::fs::PermissionsExt::from_mode(0o700));
-        d.canonicalize().unwrap_or(d)
+        gc_pathkey::canonical(&d).unwrap_or(d)
     })
     .clone()
 }
@@ -141,7 +141,7 @@ fn policy(repo: &Path, net: bool) -> Policy {
     });
     // LFS 저장소(아래)의 네트워크 없는 단계만 셸을 연다. 원격 명령에는 절대 열지 않는다(`sandbox`가 net이면 무시)
     let lfs = lfs_shell_needed(repo);
-    Policy { repo: repo.canonicalize().unwrap_or_else(|_| repo.to_path_buf()), tmp: private_tmp(), net, allow_sh: lfs && !net, askpass_exe: exe.clone(), askpass_port: *port, ssh_sock: std::env::var_os("SSH_AUTH_SOCK").map(PathBuf::from), helpers: helpers.clone() }
+    Policy { repo: gc_pathkey::real(repo), tmp: private_tmp(), net, allow_sh: lfs && !net, askpass_exe: exe.clone(), askpass_port: *port, ssh_sock: std::env::var_os("SSH_AUTH_SOCK").map(PathBuf::from), helpers: helpers.clone() }
 }
 
 /// git 자식: **샌드박스 안에서**(설정된 방식, 실패하면 실행하지 않는다) + 보정된 환경(askpass 등) + 편집기·pager·프롬프트 차단, 저장소 밖을 가리키는 git 환경 변수 제거
@@ -388,7 +388,7 @@ fn safe_write(repo: &Path, rel: &str, bytes: &[u8]) -> bool {
 /// 일반 파일 삭제(경로에 심볼릭 링크 성분이 있으면 안 함)
 fn safe_remove(repo: &Path, rel: &str) -> bool {
     let Ok(norm) = ai_tool::resolve(repo, rel) else { return false };
-    let Ok(root) = repo.canonicalize() else { return false };
+    let Ok(root) = gc_pathkey::canonical(repo) else { return false };
     std::fs::remove_file(root.join(norm)).is_ok()
 }
 
@@ -399,7 +399,7 @@ fn safe_remove_link(repo: &Path, rel: &str) -> bool {
     if !parent.is_empty() && ai_tool::resolve(repo, &parent).is_err() {
         return false;
     }
-    let Ok(root) = repo.canonicalize() else { return false };
+    let Ok(root) = gc_pathkey::canonical(repo) else { return false };
     let full = root.join(rel);
     full.symlink_metadata().is_ok_and(|m| m.file_type().is_symlink()) && std::fs::remove_file(&full).is_ok()
 }
@@ -412,7 +412,7 @@ fn safe_make_link(repo: &Path, rel: &str, target: &str) -> bool {
     if !parent.is_empty() && ai_tool::resolve(repo, &parent).is_err() {
         return false;
     }
-    let Ok(root) = repo.canonicalize() else { return false };
+    let Ok(root) = gc_pathkey::canonical(repo) else { return false };
     let full = root.join(rel);
     if let Some(d) = full.parent() {
         if std::fs::create_dir_all(d).is_err() {
@@ -667,7 +667,7 @@ pub fn handle_with(repo: &Path, line: &str, conf: &Confirmed) -> Option<Value> {
 }
 
 fn serve(repo: &Path, input: impl BufRead, mut out: impl Write) {
-    let repo = repo.canonicalize().unwrap_or_else(|_| repo.to_path_buf());
+    let repo = gc_pathkey::real(repo);
     for line in input.lines().map_while(Result::ok) {
         if let Some(r) = handle(&repo, &line) {
             if writeln!(out, "{r}").and_then(|()| out.flush()).is_err() {

@@ -25,9 +25,9 @@ pub(crate) fn remove_git_dir(repo: &Path, path: &Path) -> Res<()> {
     if !full.exists() {
         return Ok(());
     }
-    let full = full.canonicalize().map_err(|e| e.to_string())?;
-    let base = repo.join(".git/modules").canonicalize().map_err(|e| e.to_string())?;
-    if !full.starts_with(&base) || full == base {
+    let full = gc_pathkey::canonical(&full).map_err(|e| e.to_string())?;
+    let base = gc_pathkey::canonical(repo.join(".git/modules")).map_err(|e| e.to_string())?;
+    if !gc_pathkey::contains_strict(&base, &full) || gc_pathkey::same_strict(&full, &base) {
         return Err(gc_i18n::coded!("files.notSubmoduleDir", "Not a submodule metadata folder").json());
     }
     std::fs::remove_dir_all(full).map_err(|e| e.to_string())

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { errCode } from "../api/bridge";
 import { t } from "../i18n/i18n";
 
 export type ToastKind = "success" | "info" | "warning" | "error";
@@ -48,8 +49,10 @@ export function toast(title: string, opts: ToastOpts = {}) {
     set([...items, { id: ++seq, kind, title, detail, action: opts.action, n: 1, rev: 0 }].slice(-MAX_TOASTS));
   }
 }
-/** 오류 토스트. detail이 없으면 여러 줄 메시지의 첫 줄이 제목이 된다. */
-export const toastError = (title: string, detail?: string) => toast(title, { kind: "error", detail });
+/** AI 차례 중 백엔드가 막은 쓰기 오류인가(`aiChat.repoBusy`, crates/backend/src/repo_gate.rs). 판정은 백엔드가 하고 UI는 코드만 본다 */
+export const isRepoBusy = (e: unknown) => errCode(e) === "aiChat.repoBusy";
+/** 오류 토스트. detail이 없으면 여러 줄 메시지의 첫 줄이 제목이 된다. 오류 값(`e`)이 AI 차례 중 막힌 쓰기(`isRepoBusy`)면 오류가 아니라 안내(정보)로 띄운다 */
+export const toastError = (e: unknown, detail?: string) => (isRepoBusy(e) ? toast(String(e), { kind: "info" }) : toast(String(e), { kind: "error", detail }));
 
 export const dismissToast = (id: number) => set(items.filter((t) => t.id !== id));
 export const useToasts = () => useSyncExternalStore(subscribe, () => items);

@@ -468,6 +468,72 @@ try {
     }
   });
 
+  if (process.platform !== "win32") await step("AI 차례 중 쓰기 거절(진짜 백엔드): 같은 저장소의 쓰기 IPC·git 쓰기·툴바 Fetch가 aiChat.repoBusy로 거절되고 저장소는 그대로, 읽기·다른 저장소는 허용, 경로 변형은 우회 못 함, 차례가 끝나면 다시 된다", async () => {
+    const inv = (cmd, args) => js(`try { return { ok: await window.__TAURI_INTERNALS__.invoke(${JSON.stringify(cmd)}, ${JSON.stringify(args)}) }; } catch (e) { return { err: String(e) }; }`);
+    const busy = async (what, cmd, args) => {
+      const r = await inv(cmd, args);
+      if (!String(r.err ?? "").includes("aiChat.repoBusy")) throw new Error(`${what}: 거절돼야 함: ${JSON.stringify(r).slice(0, 300)}`);
+    };
+    const hold = fakeLog + ".hold";
+    const other = temp("e2e-gate-other");
+    const head = git("rev-parse", "HEAD");
+    const tags0 = git("tag", "-l");
+    try {
+      execFileSync("git", ["init", "-q", "-b", "main", other]);
+      execFileSync("git", ["-C", other, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "o"]);
+      await js(`await window.__TAURI_INTERNALS__.invoke("ai_settings_set", { provider: "anthropic", consent: true });`);
+      rmSync(fakeLog, { force: true });
+      writeFileSync(hold, "");
+      const started = await inv("ai_chat_start", { repo, conversation: "gate-1", input: "대기" });
+      if (started.err) throw new Error("AI 차례 시작 실패: " + started.err);
+      await until(() => existsSync(fakeLog), "가짜 claude 시작");
+      // 쓰기 IPC 전부 거절
+      for (const [what, cmd, args] of [
+        ["stage", "stage", { repo, paths: ["a.txt"] }],
+        ["commit", "commit", { repo, message: "x", amend: false }],
+        ["discard", "discard", { repo, tracked: ["a.txt"], untracked: [] }],
+        ["start_job fetch", "start_job", { repo, args: ["fetch"] }],
+        ["jj_enable", "jj_enable", { repo }],
+        ["git tag", "git", { repo, args: ["tag", "gate-tag"] }],
+        ["git --no-pager commit", "git", { repo, args: ["--no-pager", "commit", "--allow-empty", "-m", "x"] }],
+        ["git remote -v update", "git", { repo, args: ["remote", "-v", "update"] }],
+        ["git symbolic-ref -d", "git", { repo, args: ["symbolic-ref", "-d", "refs/remotes/origin/HEAD"] }],
+        ["run_detached", "run_detached", { repo, args: ["fetch"], token: "t" }],
+        ["ensure_commit_graph", "ensure_commit_graph", { repo }],
+        ["gh_bind", "gh_bind", { repo, user: null }],
+        ["다른 저장소를 repo로 주고 -C로 가리킴", "git", { repo: other, args: ["-C", repo, "tag", "gate-tag"] }],
+        ["경로 변형(끝 /)", "git", { repo: repo + "/", args: ["tag", "gate-tag"] }],
+        ["경로 변형(/sub/..)", "git", { repo: join(repo, "sub", ".."), args: ["tag", "gate-tag"] }],
+      ]) await busy(what, cmd, args);
+      // 툴바 Fetch(실제 UI 경로): 안내(정보) 토스트만, 오류 토스트·"실행 중" 문구 없음
+      await js(`press(await waitFor(() => $$('.toolbar button[aria-label="Fetch"]').find((b) => !b.disabled), "Fetch 버튼", 20000));`);
+      await js(`await waitFor(() => $$(".toast.info").find((t) => t.textContent.includes("AI 작업 중이라")), "안내 토스트: " + $$(".toast").map((t) => t.textContent).join("|"), 9000);`);
+      eq(await js(`return $$(".toast.error").length`), 0, "오류 토스트 없음");
+      eq(await js(`return ($(".statusbar")?.innerText ?? "").includes("Fetch 중")`), false, "상태바에 실행 중 문구가 남지 않음");
+      // 막힌 쓰기는 저장소를 바꾸지 않았다
+      eq([git("rev-parse", "HEAD"), git("tag", "-l")], [head, tags0], "저장소 그대로");
+      // 읽기는 통과, 다른 저장소는 영향 없음, 같은 저장소의 두 번째 차례는 repoBusy가 아니라 aiChat.busy
+      for (const [cmd, args] of [["load_status", { repo }], ["load_refs", { repo }], ["git", { repo, args: ["status", "--porcelain"] }], ["git", { repo, args: ["log", "-1", "--format=%H"] }]]) {
+        const r = await inv(cmd, args);
+        if (r.err) throw new Error(`${cmd} 읽기가 거절됨: ${r.err}`);
+      }
+      const o = await inv("git", { repo: other, args: ["tag", "other-ok"] });
+      if (o.err) throw new Error("다른 저장소가 막힘: " + o.err);
+      const second = await inv("ai_chat_start", { repo, conversation: "gate-2", input: "또" });
+      if (!String(second.err ?? "").includes("aiChat.busy")) throw new Error("두 번째 차례: " + JSON.stringify(second));
+      // 차례를 끝내면(대기 해제) 다시 된다
+      rmSync(hold, { force: true });
+      await until(async () => ((await inv("ai_history_list", { repo })).ok ?? []).some((h) => h.conversation === "gate-1"), "차례 종료(이력)", 30000);
+      const t = await inv("git", { repo, args: ["tag", "gate-tag"] });
+      if (t.err) throw new Error("차례 뒤에도 막힘: " + t.err);
+      eq(git("tag", "-l", "gate-tag"), "gate-tag", "차례가 끝난 뒤 쓰기가 됨");
+    } finally {
+      rmSync(hold, { force: true });
+      try { git("tag", "-d", "gate-tag"); } catch {}
+      rmSync(other, { recursive: true, force: true });
+    }
+  });
+
   await step("상세 오른쪽 배치(기본값): 그래프 | 상세 열, 파일을 누르면 진짜 diff가 그래프 자리에 열리고 Esc로 돌아온다", async () => {
     await js(`localStorage.removeItem("detailLayout"); setTimeout(() => location.reload(), 0);`);
     await new Promise((r) => setTimeout(r, 1000));

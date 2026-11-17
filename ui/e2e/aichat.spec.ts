@@ -464,3 +464,77 @@ test("샌드박스가 있으면(macOS·Linux) 추가 경고 없이 로컬 저장
   await done(page);
   expect(await confirmAsks(page)).toHaveLength(0);
 });
+
+test("AI 차례 중 백엔드가 거절한 쓰기(Fetch·Pull·Push·스테이지·버리기·커밋·jj)는 안내(정보)만 띄우고 UI 상태가 남지 않으며, 끝나면 다시 된다", async ({ page }) => {
+  // 거절은 백엔드(crates/backend/src/repo_gate.rs)가 aiChat.repoBusy로 하고, mock이 같은 오류를 흉내 낸다. 여기서는 UI가 그 오류를 어떻게 다루는지 본다
+  await open(page, { __chatSlow: 60_000 }); // 차례가 끝나지 않게 붙잡아 둔다
+  await toggle(page);
+  await send(page, "원격 변경 가져와 줘");
+  await expect(col(page).getByRole("button", { name: "중지" })).toBeVisible();
+  const busy = page.locator(".toast.info", { hasText: "AI 작업 중이라 끝난 뒤 다시 시도하세요." });
+  const noError = () => expect(page.locator(".toast.error")).toHaveCount(0);
+  const bar = page.locator(".statusbar");
+  // Fetch·Pull·Push: 안내만, 상태바에 "실행 중" 문구·취소 버튼이 남지 않는다. 같은 토스트는 합쳐진다(쌓이지 않음)
+  for (const name of ["Fetch", "Pull", "Push"]) {
+    await page.locator(".toolbar").getByRole("button", { name, exact: true }).click();
+    await expect(busy).toBeVisible();
+    await noError();
+    await expect(bar.getByText(`${name} 중…`)).toHaveCount(0);
+    await expect(bar.getByRole("button", { name: `${name} 취소` })).toHaveCount(0);
+  }
+  await expect(busy).toHaveCount(1);
+  // 스테이지·버리기·커밋: 목록은 그대로(낙관적 갱신이 남지 않음), 입력은 그대로, 오류 토스트 없음
+  await page.getByText("로컬 변경사항").click();
+  const staged = page.getByRole("listbox", { name: "스테이지됨", exact: true });
+  const unstaged = page.getByRole("listbox", { name: "스테이지 안 됨" });
+  const [s0, u0] = [await staged.getByRole("option").count(), await unstaged.getByRole("option").count()];
+  await unstaged.getByRole("option").first().dblclick(); // 스테이지
+  await expect(busy).toBeVisible();
+  await unstaged.getByRole("option").first().click({ button: "right" });
+  await page.getByRole("menu").getByRole("menuitem", { name: "변경 버리기…" }).click();
+  await expect(busy).toBeVisible();
+  await page.getByLabel("커밋 제목").fill("막혀야 하는 커밋");
+  await page.getByRole("button", { name: "커밋", exact: true }).click();
+  await expect(busy).toBeVisible();
+  await noError();
+  await expect(page.getByLabel("커밋 제목")).toHaveValue("막혀야 하는 커밋");
+  await expect(page.getByRole("button", { name: "커밋", exact: true })).toBeEnabled(); // 커밋 버튼의 "진행 중" 상태가 풀렸다
+  expect([await staged.getByRole("option").count(), await unstaged.getByRole("option").count()]).toEqual([s0, u0]);
+  // 읽기는 그대로 된다: 커밋을 눌러 상세를 본다
+  await page.locator(".commits").getByText("Initial commit").click();
+  await expect(page.locator(".info-subject")).toHaveText("Initial commit");
+  // 차례를 멈추면 다시 된다
+  await col(page).getByRole("button", { name: "중지" }).click();
+  await expect(col(page).getByRole("button", { name: "중지" })).toHaveCount(0);
+  await page.locator(".toolbar").getByRole("button", { name: "Fetch", exact: true }).click();
+  await expect.poll(async () => (await callsOf(page, "start_job")).length).toBe(1);
+});
+
+test("AI 차례 중 jj 쓰기(되돌리기 ⌘⌥Z)도 안내(정보)만 띄우고 끝나면 다시 된다", async ({ page }) => {
+  const STATUS = { workingCopy: null, changeIds: {}, conflicted: [], truncated: false };
+  await open(page, { __chatSlow: 60_000, __jj: { enabled: true, status: STATUS } });
+  await toggle(page);
+  await send(page, "원격 변경 가져와 줘");
+  await expect(col(page).getByRole("button", { name: "중지" })).toBeVisible();
+  await page.evaluate(() => ((window as any).__clean = true)); // 저장 안 된 변경이 없으면 확인창 없이 바로 실행
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur()); // 입력창에서는 단축키를 무시한다
+  await page.keyboard.press("Control+r");
+  await page.waitForTimeout(300);
+  await page.keyboard.press("Control+Alt+Z");
+  await expect(page.locator(".toast.info", { hasText: "AI 작업 중이라 끝난 뒤 다시 시도하세요." })).toBeVisible();
+  await expect(page.locator(".toast.error")).toHaveCount(0);
+  await col(page).getByRole("button", { name: "중지" }).click();
+  await expect(col(page).getByRole("button", { name: "중지" })).toHaveCount(0);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press("Control+Alt+Z");
+  await expect.poll(async () => (await callsOf(page, "jj_undo")).length).toBe(1);
+});
+
+test("AI 시작이 자동 fetch를 기다리는 동안 패널에 안내 줄이 보이고 오류 토스트는 없다", async ({ page }) => {
+  await open(page, { __chatWaitFetch: true });
+  await toggle(page);
+  await send(page, "상태 알려줘");
+  await expect(col(page).getByText("자동 Fetch가 끝나기를 기다리는 중…")).toBeVisible();
+  await expect(page.locator(".toast.error")).toHaveCount(0);
+  await done(page);
+});

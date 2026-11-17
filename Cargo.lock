@@ -1666,6 +1666,7 @@ dependencies = [
  "gc-hosting",
  "gc-i18n",
  "gc-jj",
+ "gc-pathkey",
  "ignore",
  "libc",
  "notify-debouncer-mini",
@@ -1682,6 +1683,7 @@ version = "1.0.6"
 dependencies = [
  "async-trait",
  "gc-i18n",
+ "gc-pathkey",
  "gix",
  "gix-transport",
  "libc",
@@ -1731,12 +1733,17 @@ version = "1.0.6"
 dependencies = [
  "futures",
  "gc-i18n",
+ "gc-pathkey",
  "gix",
  "jj-lib",
  "pollster",
  "serde",
  "tempfile",
 ]
+
+[[package]]
+name = "gc-pathkey"
+version = "1.0.6"
 
 [[package]]
 name = "gdk"

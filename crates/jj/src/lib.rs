@@ -65,7 +65,7 @@ fn real_dir(p: &Path) -> bool {
 
 /// 저장소 루트 검증: 정규화되고 `.git`이 실제 디렉터리(링크·gitfile 아님)
 pub(crate) fn check_root(repo: &Path) -> Result<PathBuf, Coded> {
-    let root = fs::canonicalize(repo).map_err(|e| fail("path", e))?;
+    let root = gc_pathkey::canonical(repo).map_err(|e| fail("path", e))?;
     if !real_dir(&root.join(".git")) {
         return Err(coded!("jj.notRepo", "Not a plain git repository (.git must be a real directory)"));
     }
@@ -98,7 +98,7 @@ pub(crate) fn settings_with_identity(root: &Path) -> Result<UserSettings, Coded>
 
 /// `.jj`·`.jj/repo`·`.jj/working_copy`가 모두 실제 디렉터리(링크 아님)
 pub fn is_enabled(repo_path: &Path) -> bool {
-    let Ok(root) = fs::canonicalize(repo_path) else { return false };
+    let Ok(root) = gc_pathkey::canonical(repo_path) else { return false };
     let jj = root.join(".jj");
     real_dir(&root.join(".git")) && real_dir(&jj) && real_dir(&jj.join("repo")) && real_dir(&jj.join("working_copy"))
 }

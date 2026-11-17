@@ -126,7 +126,7 @@ fn floor(s: &str, max: usize) -> usize {
 
 /// 파일 기반 출처(스킬·문서·템플릿·플러그인 스킬). 블로킹이라 `spawn_blocking`에서 부른다.
 fn files(repo: &Path, commit: bool, template: Option<&str>, home: Option<&Path>) -> Vec<Item> {
-    let Ok(root) = std::fs::canonicalize(repo) else { return Vec::new() };
+    let Ok(root) = gc_pathkey::canonical(repo) else { return Vec::new() };
     let mut out = Vec::new();
     // 1순위: 규칙 문서가 커밋(PR) 문맥에서 지정한 스킬
     let docs = rule_docs(&root, home);
@@ -153,10 +153,10 @@ fn files(repo: &Path, commit: bool, template: Option<&str>, home: Option<&Path>)
             // 설정 값은 저장소가 정할 수 있어(.git/config) 임의 파일(예: ~/.ssh)을 프롬프트로 보내지 못하게 하는 장치.
             let p = PathBuf::from(t);
             let p = if p.is_absolute() { p } else { root.join(p) };
-            if let Ok(real) = std::fs::canonicalize(&p) {
+            if let Ok(real) = gc_pathkey::canonical(&p) {
                 let path = format!("commit.template ({t})");
-                let home_real = home.and_then(|h| std::fs::canonicalize(h).ok());
-                if !(real.starts_with(&root) || home_real.is_some_and(|h| real.starts_with(h))) {
+                let home_real = home.and_then(|h| gc_pathkey::canonical(h).ok());
+                if !(gc_pathkey::contains_strict(&root, &real) || home_real.is_some_and(|h| gc_pathkey::contains_strict(h, &real))) {
                     out.push(Item { prio: 2, kind: "template", path, skipped: true, ..Default::default() });
                 } else if let Some((text, truncated)) = read_file(None, &real) {
                     out.push(Item { prio: 2, kind: "template", path, text, truncated, ..Default::default() });
@@ -237,8 +237,8 @@ fn read_file(root: Option<&Path>, path: &Path) -> Option<(String, bool)> {
 }
 
 fn read_file_cap(root: Option<&Path>, path: &Path, cap: usize) -> Option<(String, bool)> {
-    let real = std::fs::canonicalize(path).ok()?;
-    if root.is_some_and(|r| !real.starts_with(r)) || !real.is_file() {
+    let real = gc_pathkey::canonical(path).ok()?;
+    if root.is_some_and(|r| !gc_pathkey::contains_strict(r, &real)) || !real.is_file() {
         return None;
     }
     let mut bytes = Vec::new();
@@ -309,10 +309,10 @@ fn active_plugins(repo_root: &Path, home: &Path) -> Vec<(String, PathBuf)> {
         for e in plugins[key].as_array().into_iter().flatten() {
             // project·local 범위 설치는 그 프로젝트에서만
             let scope = e["scope"].as_str().unwrap_or("user");
-            if matches!(scope, "project" | "local") && e["projectPath"].as_str().and_then(|p| std::fs::canonicalize(p).ok()).as_deref() != Some(repo_root) {
+            if matches!(scope, "project" | "local") && e["projectPath"].as_str().and_then(|p| gc_pathkey::canonical(p).ok()).as_deref() != Some(repo_root) {
                 continue;
             }
-            if let Some(install) = e["installPath"].as_str().and_then(|p| std::fs::canonicalize(p).ok()) {
+            if let Some(install) = e["installPath"].as_str().and_then(|p| gc_pathkey::canonical(p).ok()) {
                 out.push((key.clone(), install));
             }
         }
@@ -321,7 +321,7 @@ fn active_plugins(repo_root: &Path, home: &Path) -> Vec<(String, PathBuf)> {
 }
 
 fn tilde(home: &Path, p: &Path) -> String {
-    let h = std::fs::canonicalize(home).unwrap_or_else(|_| home.to_path_buf());
+    let h = gc_pathkey::canonical(home).unwrap_or_else(|_| home.to_path_buf());
     // 표시 경로는 OS와 관계없이 `/`로 (Windows의 `\` 섞임 방지)
     match p.strip_prefix(&h) {
         Ok(r) => format!("~/{}", r.to_string_lossy().replace('\\', "/")),
@@ -775,7 +775,7 @@ mod tests {
     #[test]
     fn binary_and_non_utf8_are_skipped_and_cut_char_is_trimmed() {
         let d = tempfile::tempdir().unwrap();
-        let r = std::fs::canonicalize(d.path()).unwrap();
+        let r = gc_pathkey::canonical(d.path()).unwrap();
         fs::write(r.join("nul.md"), b"abc\0def").unwrap();
         fs::write(r.join("latin.md"), [0xff, 0xfe, b'a']).unwrap();
         fs::write(r.join("dir.md"), "x").unwrap();

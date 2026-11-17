@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Sheet, SheetActions, SheetBody, SheetHead } from "../../shared/ui/Sheet";
 import { ctx } from "../../shared/model/ops";
+import { isRepoBusy } from "../../shared/lib/toast";
 import { api } from "../../shared/api/api";
 import { ask } from "../../shared/api/bridge";
 import { t, useLocale } from "../../shared/i18n/i18n";
@@ -44,7 +45,7 @@ export async function applyReword({ commit, chain }: RewordPlan, message: string
     ctx.notify(t("reword.done"), { kind: "success" });
     return true;
   } catch (e) {
-    ctx.error(t("reword.fail"), String(e));
+    isRepoBusy(e) ? ctx.error(e) : ctx.error(t("reword.fail"), String(e));
     return false;
   }
 }
@@ -110,7 +111,7 @@ export function RewordHost() {
       try {
         msg = await api.commitMessage(ctx.repo, sha);
       } catch (e) {
-        ctx.error(String(e)); // 읽지 못한 채 열면 빈 메시지로 설명이 지워질 수 있다
+        ctx.error(e); // 읽지 못한 채 열면 빈 메시지로 설명이 지워질 수 있다
         return null;
       }
       const [subject, body] = splitSubject(msg);

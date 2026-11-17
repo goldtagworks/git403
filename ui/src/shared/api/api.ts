@@ -196,4 +196,7 @@ export const api = {
   ghBind: (repo: string, user?: string) => invoke<void>("gh_bind", { repo, ...(user ? { user } : {}) }),
   ghProbe: (repo: string) => invoke<GhProbe[]>("gh_probe", { repo }),
   cancelJob: (job: number) => invoke<void>("cancel_job", { job }),
+  /** 남은 `.lock` 파일을 지워도 되는지 확인(백엔드가 git 폴더 안·일반 파일·1분 이상 지남·작업 없음을 검증). `path`는 확인창에 보일 정규화한 경로 */
+  staleLockCheck: (repo: string, path: string) => invoke<{ path: string; ageSecs: number }>("stale_lock_check", { repo, path }),
+  staleLockRemove: (repo: string, path: string) => invoke<{ path: string; ageSecs: number }>("stale_lock_remove", { repo, path }),
 };

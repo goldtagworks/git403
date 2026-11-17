@@ -34,7 +34,7 @@ export function StatsPanel() {
     setLoading(true);
     api.repoStats(repo, range, branch, withLines, token).then(
       (s) => !stale && (setStats(s), setLoading(false)),
-      (e) => !stale && (ctx.error(String(e)), setLoading(false)),
+      (e) => !stale && (ctx.error(e), setLoading(false)),
     );
     return () => {
       stale = true;

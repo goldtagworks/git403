@@ -44,7 +44,7 @@ export function RebaseSheet({ base, commits, onClose }: { base: Commit; commits:
       ctx.notify(t("rebase.done"));
       onClose();
     } catch (e) {
-      ctx.error(String(e));
+      ctx.error(e);
       onClose();
     }
   };

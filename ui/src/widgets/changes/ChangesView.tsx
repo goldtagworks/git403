@@ -42,7 +42,7 @@ export const ChangesView = memo(function ChangesView({
 }: {
   repo: string;
   status: Status;
-  onError: (e: string) => void;
+  onError: (e: unknown) => void;
 }) {
   countRender("ChangesView");
   const touched = useTouched();
@@ -104,12 +104,12 @@ export const ChangesView = memo(function ChangesView({
 
   useEffect(() => {
     if (!selFile || !sel) return setD({ text: "", eol: false, ws: false });
-    api.worktreeDiff(repo, selFile.path, diffStaged, selFile.untracked).then((text) => setD({ text, eol: ignoreEol, ws: ignoreWs }), (e) => onError(String(e)));
+    api.worktreeDiff(repo, selFile.path, diffStaged, selFile.untracked).then((text) => setD({ text, eol: ignoreEol, ws: ignoreWs }), (e) => onError(e));
   }, [repo, sel?.side, diffStaged, selFile?.path, selFile?.untracked, status, touched, ignoreEol, ignoreWs]);
 
   useEffect(() => bigView.setAvail(!!selFile), [!!selFile]);
   useEffect(() => () => bigView.setAvail(false), []);
-  const run = useCallback((p: Promise<unknown>) => void p.catch((e) => onError(String(e))), [onError]);
+  const run = useCallback((p: Promise<unknown>) => void p.catch((e) => onError(e)), [onError]);
 
   const discard = async (files: StatusFile[]) => {
     const names = files.length === 1 ? files[0].path : t("changes.nFiles", { n: files.length });
@@ -271,7 +271,7 @@ export const ChangesView = memo(function ChangesView({
   );
 });
 
-const CommitBox = memo(function CommitBox({ repo, canCommit, onError, height }: { repo: string; canCommit: boolean; onError: (e: string) => void; height: number }) {
+const CommitBox = memo(function CommitBox({ repo, canCommit, onError, height }: { repo: string; canCommit: boolean; onError: (e: unknown) => void; height: number }) {
   useLocale();
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -297,7 +297,7 @@ const CommitBox = memo(function CommitBox({ repo, canCommit, onError, height }: 
         setSources(r.sources ?? []);
       }
     } catch (e) {
-      onError(String(e));
+      onError(e);
     } finally {
       ai.current = null;
       setAiBusy(false);
@@ -326,7 +326,7 @@ const CommitBox = memo(function CommitBox({ repo, canCommit, onError, height }: 
       setSources([]);
       setAmend(false);
     } catch (e) {
-      onError(String(e));
+      onError(e);
     } finally {
       setBusy(false);
     }

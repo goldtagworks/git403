@@ -30,12 +30,12 @@ pub(crate) struct Ai {
     /// 이 프로세스에서 위험 확인을 마친 대화 (`<대화id>\0<저장소>`). 이어 가기 차례는 다시 묻지 않는다
     #[cfg(feature = "cli")]
     pub(crate) confirmed: Mutex<HashSet<String>>,
-    /// AI 차례가 진행 중인 저장소(정규화한 경로). 같은 저장소에서 차례를 동시에 돌리지 않는다(백업·되돌림·전후 비교가 서로 엉킨다)
+    /// AI 차례가 진행 중인 저장소(`repo_gate::lock_key` 키 = git common dir. 같은 저장소의 worktree도 같은 잠금). 같은 저장소에서 차례를 동시에 돌리지 않는다(백업·되돌림·전후 비교가 서로 엉킨다)
     #[cfg(feature = "cli")]
-    pub(crate) repos: std::sync::Arc<Mutex<HashSet<PathBuf>>>,
+    pub(crate) repos: std::sync::Arc<Mutex<HashSet<String>>>,
     /// 이 프로세스가 만든 백업((저장소, id) → 백업). 되돌리기가 UI가 주는 digest 대신 여기(없으면 이력)의 digest로 검사한다
     #[cfg(feature = "cli")]
-    pub(crate) backups: Mutex<HashMap<(PathBuf, String), gc_core::ai_backup::Backup>>,
+    pub(crate) backups: Mutex<HashMap<(String, String), gc_core::ai_backup::Backup>>,
 }
 
 fn cancelled() -> String {
@@ -143,9 +143,11 @@ impl Ai {
             h.abort();
         }
         t.cancelled.clear();
-        for (_, h) in self.chats.lock().drain() {
-            h.kill_now();
-        }
+    }
+
+    /// 종료 정리용: 진행 중인 AI 채팅 프로세스의 핸들을 모두 꺼낸다(정리는 `Backend::shutdown`이 한꺼번에 `JobHandle::stop_all`로)
+    pub fn take_chats(&self) -> Vec<gc_core::JobHandle> {
+        self.chats.lock().drain().map(|(_, h)| h).collect()
     }
 }
 

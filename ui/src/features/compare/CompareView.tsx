@@ -51,7 +51,7 @@ function Lists({ repo }: { repo: string }) {
         setSel(first ? { side: d.onlyA[0] ? "a" : "b", ids: new Set([first.id]) } : null);
         compare.setCommit(first ?? null);
       },
-      (e) => live && (ctx.error(String(e)), compare.close()),
+      (e) => live && (ctx.error(e), compare.close()),
     );
     return () => void (live = false);
   }, [repo, a, b, rev]);
