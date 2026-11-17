@@ -45,7 +45,6 @@ let revealCommit: (sha: string) => void = () => {};
 export const PrReviewHost = memo(function PrReviewHost({ repo, onSelectCommit }: { repo: string; onSelectCommit: (sha: string) => void }) {
   revealCommit = onSelectCommit;
   const { open } = usePrReview();
-  useEffect(() => prReview.close(), [repo]);
   useEffect(() => void (open && bigView.exit()), [open]);
   return open ? <PrReviewScreen repo={repo} /> : null;
 });

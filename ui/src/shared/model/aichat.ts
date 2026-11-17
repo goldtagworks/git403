@@ -25,31 +25,42 @@ export interface Chat { id: string; repo: string; sessionId: string | null; item
 export const available = !isMobile && !COMPACT && !DETAIL;
 
 const chats = new Map<string, Chat>();
-const subs = new Set<() => void>();
+const subs = new Map<string, Set<() => void>>(); // 저장소별 구독: 다른 저장소의 대화 갱신은 이 저장소 화면을 깨우지 않는다
 const runSubs = new Set<() => void>();
 const openSubs = new Set<() => void>();
 const sub = (set: Set<() => void>) => (f: () => void) => (set.add(f), () => void set.delete(f));
 const emit = (set: Set<() => void>) => set.forEach((f) => f());
+const emitChat = (repo: string) => subs.get(repo) && emit(subs.get(repo)!);
 
+let running = 0; // 실행 중인 대화 수 (put에서 이전 상태와 비교해 증감)
 let anyRunning = false;
 /** 실행 중 여부가 바뀔 때만 상태바 항목을 깨운다 */
 const syncRunning = () => {
-  const now = [...chats.values()].some((c) => c.running);
+  const now = running > 0;
   if (now === anyRunning) return;
   anyRunning = now;
   emit(runSubs);
 };
 let frame = 0;
+const dirty = new Set<string>(); // 글 조각만 바뀌어 화면 갱신을 기다리는 저장소
 const put = (c: Chat) => {
+  running += +c.running - +!!chats.get(c.repo)?.running;
   chats.set(c.repo, c);
-  if (frame) (cancelAnimationFrame(frame), (frame = 0)); // 대기 중인 글 조각도 이 갱신에 함께 반영된다
-  emit(subs);
+  dirty.delete(c.repo); // 대기 중인 글 조각도 이 갱신에 함께 반영된다
+  if (frame && !dirty.size) (cancelAnimationFrame(frame), (frame = 0));
+  emitChat(c.repo);
   syncRunning();
 };
 /** 스트리밍 글 조각: 상태는 바로 갱신하되 화면(마크다운 재파싱)은 프레임당 한 번만 깨운다. 최종 내용은 같다 */
 const putText = (c: Chat) => {
-  chats.set(c.repo, c);
-  frame ||= requestAnimationFrame(() => ((frame = 0), emit(subs)));
+  chats.set(c.repo, c); // running은 그대로
+  dirty.add(c.repo);
+  frame ||= requestAnimationFrame(() => {
+    frame = 0;
+    const repos = [...dirty];
+    dirty.clear();
+    repos.forEach(emitChat);
+  });
 };
 
 const KEY = "aiChatOpen";
@@ -282,9 +293,23 @@ export const aiChat = {
 };
 
 // 구독 함수는 모듈에서 한 번만 만든다: 렌더마다 새로 만들면 React가 렌더할 때마다 구독을 풀었다가 다시 건다 (docs/performance.md)
-const onChats = sub(subs), onRun = sub(runSubs), onOpen = sub(openSubs);
+const chatSubs = new Map<string, (f: () => void) => () => void>();
+const onChats = (repo: string) => {
+  let f = chatSubs.get(repo);
+  if (!f) {
+    f = (cb) => {
+      let set = subs.get(repo);
+      if (!set) subs.set(repo, (set = new Set()));
+      set.add(cb);
+      return () => void set!.delete(cb);
+    };
+    chatSubs.set(repo, f);
+  }
+  return f;
+};
+const onRun = sub(runSubs), onOpen = sub(openSubs);
 /** 이 저장소의 대화 (없으면 undefined) */
-export const useChat = (repo: string) => useSyncExternalStore(onChats, () => chats.get(repo));
+export const useChat = (repo: string) => useSyncExternalStore(onChats(repo), () => chats.get(repo));
 /** 어떤 대화든 실행 중인지 — 상태바 항목만 구독한다 */
 export const useChatRunning = () => useSyncExternalStore(onRun, () => anyRunning);
 export const useChatOpen = (repo: string) => useSyncExternalStore(onOpen, () => isOpen(repo));

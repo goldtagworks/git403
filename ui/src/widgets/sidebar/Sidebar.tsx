@@ -210,11 +210,12 @@ const remoteMenu = (name: string): MenuEntry[] => [
 ];
 
 /** 폴더 행: 숨김 여부만 구독해서 토글한 폴더만 다시 그려진다. */
-const FolderRow = memo(function FolderRow({ repo, path, pad, open, icon, label, onToggle, menu, q }: { repo: string; path: string | null; pad: number; open: boolean; icon: IconName; label: string; q: string; onToggle: () => void; menu: () => MenuEntry[] }) {
+const FolderRow = memo(function FolderRow({ repo, path, pad, open, icon, label, onToggle, nodeKey, server, q }: { repo: string; path: string | null; pad: number; open: boolean; icon: IconName; label: string; q: string; nodeKey: string; server: boolean; onToggle: (key: string) => void }) {
+  countRender("FolderRow");
   useLocale();
   const off = useHiddenNode(repo, path ?? "", true);
   return (
-    <button className={"item folder" + (off ? " off" : "")} style={guides(pad)} aria-expanded={open} onClick={onToggle} onContextMenu={contextMenu(menu)}>
+    <button className={"item folder" + (off ? " off" : "")} style={guides(pad)} aria-expanded={open} onClick={() => onToggle(nodeKey)} onContextMenu={contextMenu(() => (path ? folderMenu(repo, path, server ? remoteMenu(label) : []) : []))}>
       {path && <Eye off={off} onToggle={() => ops.toggleHidden(path, true)} />}
       <Icon name={open ? "chevronDown" : "chevronRight"} size={12} />
       <Icon name={icon} />
@@ -365,13 +366,13 @@ export const Sidebar = memo(function Sidebar({ repo, refs, submodules, worktrees
     return () => window.removeEventListener("keydown", onKey);
   }, []);
   const needle = q.trim().toLowerCase();
-  const toggle = (k: string) =>
+  const toggle = useCallback((k: string) =>
     setClosed((s) => {
       const n = new Set(s);
       n.has(k) ? n.delete(k) : n.add(k);
       store("sideClosed", [...n]);
       return n;
-    });
+    }), []);
 
   const renderNodes = (nodes: Node[], depth: number, kind: RefKind, leafIcon: IconName) =>
     nodes.map((n) => {
@@ -394,8 +395,9 @@ export const Sidebar = memo(function Sidebar({ repo, refs, submodules, worktrees
             icon={folderIcon}
             label={n.label}
             q={needle}
-            onToggle={() => toggle(n.key)}
-            menu={() => (path ? folderMenu(repo, path, server ? remoteMenu(n.label) : []) : [])}
+            nodeKey={n.key}
+            server={server}
+            onToggle={toggle}
           />
           {open && renderNodes(n.children, depth + 1, kind, leafIcon)}
         </div>

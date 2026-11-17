@@ -298,20 +298,7 @@ export const Details = memo(function Details({ repo, commit, rules, right }: { r
                 {r.name}
               </li>
             ) : (
-              <li
-                key={r.file.path}
-                role="option"
-                aria-selected={r.file.path === file}
-                className={r.file.path === file ? "selected" : ""}
-                style={{ paddingLeft: 4 + r.depth * 14 }}
-                title={r.file.path}
-                onMouseDown={() => (setFile(r.file.path), bigView.picked())}
-                onDoubleClick={IS_VSCODE ? () => ops.openInEditor(r.file.path, commit.id) : () => bigView.enter()}
-                onContextMenu={contextMenu(() => [{ label: t("diff.big"), action: () => (setFile(r.file.path), bigView.enter(true)) }, { separator: true }, ...fileMenu(r.file.path, commit.id)])}
-              >
-                <span className={`status s-${r.file.status}`}>{r.file.status}</span>
-                {r.name}
-              </li>
+              <FileItem key={r.file.path} f={r.file} name={r.name} depth={r.depth} active={r.file.path === file} commitId={commit.id} onSel={setFile} />
             ),
           )}
         </ul>
@@ -325,6 +312,26 @@ export const Details = memo(function Details({ repo, commit, rules, right }: { r
         <FileNav {...nav} go={setFile} />
       </div>
     </DiffFrame>
+  );
+});
+
+/** 변경 파일 한 행. 고른 파일이 바뀔 때 바뀐 두 행만 다시 그린다 (active 불리언만 받는다). */
+const FileItem = memo(function FileItem({ f, name, depth, active, commitId, onSel }: { f: ChangedFile; name: string; depth: number; active: boolean; commitId: string; onSel: (path: string) => void }) {
+  countRender("FileItem");
+  return (
+    <li
+      role="option"
+      aria-selected={active}
+      className={active ? "selected" : ""}
+      style={{ paddingLeft: 4 + depth * 14 }}
+      title={f.path}
+      onMouseDown={() => (onSel(f.path), bigView.picked())}
+      onDoubleClick={IS_VSCODE ? () => ops.openInEditor(f.path, commitId) : () => bigView.enter()}
+      onContextMenu={contextMenu(() => [{ label: t("diff.big"), action: () => (onSel(f.path), bigView.enter(true)) }, { separator: true }, ...fileMenu(f.path, commitId)])}
+    >
+      <span className={`status s-${f.status}`}>{f.status}</span>
+      {name}
+    </li>
   );
 });
 

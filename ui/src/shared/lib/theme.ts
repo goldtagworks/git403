@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { IS_VSCODE, setWindowTheme } from "../api/bridge";
 
 export type ThemeMode = "system" | "light" | "dark";
@@ -18,13 +18,14 @@ const vscodeDark = () => {
   return c.contains("vscode-dark") || (c.contains("vscode-high-contrast") && !c.contains("vscode-high-contrast-light"));
 };
 
+const media = window.matchMedia("(prefers-color-scheme: dark)"); // 모듈에서 한 번만 (렌더마다 만들지 않는다)
+
 /**
  * 테마 모드 + 실제 적용된 테마("light" | "dark").
  * `resolved`가 바뀌면 Canvas처럼 CSS가 안 닿는 곳을 다시 그리면 된다.
  */
 export function useTheme() {
   const [mode, setMode] = useState<ThemeMode>(read);
-  const media = window.matchMedia("(prefers-color-scheme: dark)");
   const [systemDark, setSystemDark] = useState(IS_VSCODE ? vscodeDark : media.matches);
 
   useEffect(() => {
@@ -57,7 +58,7 @@ export function useTheme() {
   }, [mode, systemDark]);
 
   const resolved = mode === "system" ? (systemDark ? "dark" : "light") : mode;
-  return { mode, setMode, resolved } as const;
+  return useMemo(() => ({ mode, setMode, resolved }) as const, [mode, resolved]);
 }
 
 /** CSS 토큰 값을 읽는다. */

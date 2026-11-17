@@ -27,7 +27,9 @@ function entries(repo: string): Set<string> {
   }
   return s;
 }
+let ver = 0; // 숨김이 바뀔 때마다 올린다 (스냅숏 캐시 무효화)
 const save = (repo: string, s: Set<string>) => {
+  ver++;
   cache.set(repo, s);
   try {
     s.size ? localStorage.setItem("hidden:" + repo, JSON.stringify([...s])) : localStorage.removeItem("hidden:" + repo);
@@ -74,18 +76,29 @@ export function toggleHidden(repo: string, path: string, folder: boolean) {
 /** 컴포넌트용: 판단 결과(boolean)만 구독하므로 바뀐 항목만 다시 그려진다. */
 export const useHiddenRef = (repo: string, r: Ref) => useSyncExternalStore(subscribe, () => isHiddenRef(repo, r));
 export const useHiddenNode = (repo: string, path: string, folder: boolean) => useSyncExternalStore(subscribe, () => isHiddenNode(repo, path, folder));
+/** 스냅숏 계산 결과를 (refs 배열, 저장소, 숨김 버전)별로 캐시한다. useSyncExternalStore가 렌더·커밋마다 여러 번 부르므로 ref 수만큼 도는 계산을 한 번만 한다. */
+const memoSnap = (calc: (repo: string, refs: Ref[]) => string) => {
+  const m = new WeakMap<Ref[], { repo: string; ver: number; v: string }>();
+  return (repo: string, refs: Ref[]) => {
+    const h = m.get(refs);
+    if (h && h.repo === repo && h.ver === ver) return h.v;
+    const v = calc(repo, refs);
+    m.set(refs, { repo, ver, v });
+    return v;
+  };
+};
+const visibleText = memoSnap((repo, refs) => {
+  const shown = refs.reduce((n, r) => n + (isHiddenRef(repo, r) ? 0 : 1), 0);
+  return shown < refs.length ? `${shown}/${refs.length}` : String(refs.length);
+});
+const viewingText = memoSnap((repo, refs) => {
+  let all = 0, shown = 0; // 배열을 만들지 않고 센다
+  for (const r of refs) if (r.kind !== "stash") (all++, isHiddenRef(repo, r) || shown++);
+  return shown < all ? `${shown}/${all}` : "";
+});
 /** 섹션 제목 개수: 숨긴 게 있으면 `보이는수/전체` */
-export const useVisibleCount = (repo: string, refs: Ref[]) =>
-  useSyncExternalStore(subscribe, () => {
-    const shown = refs.reduce((n, r) => n + (isHiddenRef(repo, r) ? 0 : 1), 0);
-    return shown < refs.length ? `${shown}/${refs.length}` : String(refs.length);
-  });
+export const useVisibleCount = (repo: string, refs: Ref[]) => useSyncExternalStore(subscribe, () => visibleText(repo, refs));
 /** "보는 중 70/97"용: 숨긴 ref가 있을 때만 `보이는수/전체`, 없으면 빈 문자열 (스태시 제외) */
-export const useViewing = (repo: string, refs: Ref[]) =>
-  useSyncExternalStore(subscribe, () => {
-    let all = 0, shown = 0; // 스냅숏은 자주 불리므로 배열을 만들지 않고 센다
-    for (const r of refs) if (r.kind !== "stash") (all++, isHiddenRef(repo, r) || shown++);
-    return shown < all ? `${shown}/${all}` : "";
-  });
+export const useViewing = (repo: string, refs: Ref[]) => useSyncExternalStore(subscribe, () => viewingText(repo, refs));
 /** 숨김 항목 집합. 바뀔 때만 새 참조 (memo 의존성용) */
 export const useHiddenSet = (repo: string) => useSyncExternalStore(subscribe, () => entries(repo));

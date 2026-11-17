@@ -493,14 +493,24 @@ export const DiffView = memo(function DiffView({ diff, actions, rev, image, note
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // 끝에 닿으면 더 그린다
+  // 끝에 닿으면 더 그린다. 관찰자는 sentinel이 생길 때 한 번만 만들고(ref 콜백이 안정적), 최신 budget은 ref로 읽는다.
+  // 더 그린 뒤에도 끝이 보이면 이어서 그리도록 budget·diff가 바뀔 때 다시 observe해 첫 알림을 받는다.
   const seen = useRef<IntersectionObserver>();
-  const sentinel = (el: HTMLElement | null) => {
+  const sentEl = useRef<HTMLElement | null>(null);
+  const nextMore = useRef({ diff, n: budget + BASE });
+  nextMore.current = { diff, n: budget + BASE };
+  const sentinel = useCallback((el: HTMLElement | null) => {
     seen.current?.disconnect();
+    seen.current = undefined;
+    sentEl.current = el;
     if (!el) return;
-    seen.current = new IntersectionObserver((e) => e[0].isIntersecting && setMore({ diff, n: budget + BASE }), { rootMargin: "800px" });
+    seen.current = new IntersectionObserver((e) => e[0].isIntersecting && setMore(nextMore.current), { rootMargin: "800px" });
     seen.current.observe(el);
-  };
+  }, []);
+  useEffect(() => {
+    const el = sentEl.current, o = seen.current;
+    if (el && o) (o.unobserve(el), o.observe(el));
+  }, [budget, diff]);
 
   const slash = file ? file.path.lastIndexOf("/") + 1 : 0;
   // ImageDiff·IbDiff(memo)에 넘기는 머리·추가 요소는 파일·언어가 바뀔 때만 새로 만든다 (참조가 안정적이어야 memo가 먹는다)

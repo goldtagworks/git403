@@ -1,7 +1,7 @@
 import { t, dateFmt, useLocale } from "../../shared/i18n/i18n";
 import { isMobile } from "../../shared/lib/platform";
 import { Sha } from "../../shared/ui/Sha";
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { contextMenu, type MenuEntry } from "../../shared/ui/menu";
 import { api } from "../../shared/api/api";
 import { COMPACT, openFull } from "../../shared/api/bridge";
@@ -55,6 +55,8 @@ const chipOf = (rs: Ref[]): Chip => {
   const label = f.r.kind === "remote" ? f.r.name.slice(f.r.name.indexOf("/") + 1) : f.r.name;
   return { name: f.r.name, label, kind: f.r.kind, head: f.r.head, paired: f.paired, extra: entries.length - 1, title: rs.map((r) => r.name).join("\n") };
 };
+
+const sameChip = (a: Chip, b: Chip) => a.name === b.name && a.label === b.label && a.kind === b.kind && a.head === b.head && a.paired === b.paired && a.extra === b.extra && a.title === b.title;
 
 /** 그래프 열 폭에 맞춘 레인 간격 (넉넉하면 LANE_W, 좁으면 LANE_MIN까지) */
 const laneStep = (gw: number, lanes: number) => Math.min(LANE_W, Math.max(LANE_MIN, (gw - PAD * 2) / lanes));
@@ -234,6 +236,7 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
   const [search, setSearch] = useState<{ q: string; content: boolean; hits: Set<string> | null } | null>(COMPACT ? { q: "", content: false, hits: null } : null); // compact: 검색칸은 항상 보인다
   const searchRef = useRef<HTMLInputElement>(null);
   const [listOn, setListOn] = useState(false); // 일치한 커밋만 목록으로 모아 보기
+  const focus = useFocusRef();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "f") {
@@ -245,41 +248,47 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+  // 결과 계산은 입력보다 한 박자 늦춰(입력 칸은 바로 반응), 소문자 본문은 검색 중일 때 커밋마다 한 번만 만든다
+  const dsearch = useDeferredValue(search);
+  const textSearch = !!dsearch?.q.trim() && !dsearch.content;
+  const hay = useMemo(() => (textSearch ? commits.map((c) => [c.subject.toLowerCase(), c.body.toLowerCase(), c.author.toLowerCase()]) : null), [textSearch, commits]);
   const matches = useMemo(() => {
-    if (!search?.q.trim()) return [];
-    if (search.content) return search.hits ? commits.filter((c) => search.hits!.has(c.id)).map((c) => c.id) : [];
-    const q = search.q.toLowerCase();
-    return commits.filter((c) => c.subject.toLowerCase().includes(q) || c.body.toLowerCase().includes(q) || c.author.toLowerCase().includes(q) || c.id.startsWith(q)).map((c) => c.id);
-  }, [search, commits]);
+    if (!dsearch?.q.trim()) return [];
+    if (dsearch.content) return dsearch.hits ? commits.filter((c) => dsearch.hits!.has(c.id)).map((c) => c.id) : [];
+    const q = dsearch.q.toLowerCase();
+    const h = hay!; // textSearch일 때만 여기 온다
+    return commits.filter((c, i) => h[i][0].includes(q) || h[i][1].includes(q) || h[i][2].includes(q) || c.id.startsWith(q)).map((c) => c.id);
+  }, [dsearch, commits, hay]);
   const matchSet = useMemo(() => new Set(matches), [matches]);
   // 검색 중이면 일치하지 않는 행(과 노드·선)을 흐리게 한다. 내용 검색은 Enter로 결과가 오기 전엔 흐리지 않는다.
-  const dimming = !!search?.q.trim() && (!search.content || !!search.hits);
+  const dimming = !!dsearch?.q.trim() && (!dsearch.content || !!dsearch.hits);
+  const byId = useMemo(() => (listOn || focus ? new Map(commits.map((c) => [c.id, c])) : null), [commits, listOn, !!focus]); // 검색 목록·계보 강조가 켜졌을 때만
   // 그래프에서 브랜치 배지를 누르면 그 계보(불러온 커밋 안에서 닿는 조상)만 진하게. 검색 흐림이 우선이다.
-  const focus = useFocusRef();
   const lit = useMemo(() => {
     if (!focus || dimming) return null;
-    const byId = new Map(commits.map((c) => [c.id, c]));
     const set = new Set<string>();
     const stack = [focus];
     while (stack.length) {
       const id = stack.pop()!;
-      const c = byId.get(id);
+      const c = byId!.get(id);
       if (!c || set.has(id)) continue;
       set.add(id);
       stack.push(...c.parents);
     }
     // 선은 레인을 따라 위에서 아래로: 계보 노드에서 나가는 선, 그 선이 이어지는 레인만 진하게
     let on = new Set<number>();
+    let next = new Set<number>(); // 행마다 새로 만들지 않고 둘을 바꿔 쓴다
     const edges = layout.rows.map((r, i) => {
       const e = r.edges;
       const flags: boolean[] = [];
       for (let k = 0; k < e.length; k += 3) flags.push(e[k] === r.lane ? set.has(commits[i].id) : on.has(e[k]));
-      on = new Set();
-      for (let k = 0; k < e.length; k += 3) if (flags[k / 3]) on.add(e[k + 1]);
+      next.clear();
+      for (let k = 0; k < e.length; k += 3) if (flags[k / 3]) next.add(e[k + 1]);
+      [on, next] = [next, on];
       return flags;
     });
     return { set, edges };
-  }, [focus, dimming, commits, layout]);
+  }, [focus, dimming, commits, layout, byId]);
   const cur = matches.indexOf(selected ?? "") + 1;
   const jump = (dir: 1 | -1) => {
     if (!matches.length) return;
@@ -304,13 +313,19 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
   const leftW = effRefW + graphW;
 
   const hiddenSet = useHiddenSet(ctx.repo);
+  const chipsRef = useRef(new Map<string, Chip>());
   const chips = useMemo(() => {
     const m = new Map<string, Ref[]>();
     for (const r of refs) if (r.kind !== "stash" && !isHiddenRef(ctx.repo, r)) m.set(r.target, [...(m.get(r.target) ?? []), r]);
+    // 내용이 같은 칩은 이전 객체를 다시 써서 행(memo)이 다시 그려지지 않게 한다
     const out = new Map<string, Chip>();
-    for (const [id, rs] of m) out.set(id, chipOf(rs));
+    for (const [id, rs] of m) {
+      const c = chipOf(rs), p = chipsRef.current.get(id);
+      out.set(id, p && sameChip(p, c) ? p : c);
+    }
+    chipsRef.current = out;
     return out;
-  }, [refs, view, hiddenSet]);
+  }, [refs, hiddenSet]);
 
   // 현재 HEAD 커밋 행: "로컬 변경사항" 점선이 닿는 곳
   const headIdx = useMemo(() => {
@@ -531,6 +546,10 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
     const list = m.size > 1 && m.has(c.id) ? commitsRef.current.filter((x) => m.has(x.id)) : [c];
     dnd.begin(e.nativeEvent, list, () => (setMulti(NONE), onSelect(c.id)));
   }, [onSelect]);
+  const moreKey = useRef("");
+  const refsRef = useRef(refs);
+  refsRef.current = refs;
+  const getRefs = useCallback(() => refsRef.current, []); // 우클릭 때만 읽는다 (행 props 참조 고정)
   const getMulti = useCallback(() => multiRef.current, []); // 우클릭 때만 읽는다 (행 props 참조 고정)
   const headId = useMemo(() => refs.find((r) => r.head)?.target, [refs]);
 
@@ -563,7 +582,7 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
             <input type="checkbox" checked={search.content} onChange={(e) => setSearch({ ...search, content: e.target.checked, hits: null })} /> {t("graph.searchContent")}
           </label>
           <button className={"search-list-btn" + (listOn ? " on" : "")} aria-pressed={listOn} onClick={() => setListOn(!listOn)}>{t("graph.searchList")}</button>
-          <span className="search-count">{search.q.trim() ? `${cur || "-"} / ${matches.length}` : ""}</span>
+          <span className="search-count">{dsearch?.q.trim() ? `${cur || "-"} / ${matches.length}` : ""}</span>
           <button className="icon-btn" onClick={() => jump(-1)} disabled={!matches.length} aria-label={t("graph.prevResult")}><Icon name="arrowUp" size={14} /></button>
           <button className="icon-btn" onClick={() => jump(1)} disabled={!matches.length} aria-label={t("graph.nextResult")}><Icon name="arrowDown" size={14} /></button>
           {COMPACT ? (
@@ -574,7 +593,7 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
           {listOn && matches.length > 0 && (
             <ul className="search-list" role="listbox" aria-label={t("graph.searchList")}>
               {matches.slice(0, 500).map((id) => {
-                const c = commits.find((x) => x.id === id)!;
+                const c = byId!.get(id)!;
                 return (
                   <li key={id} role="option" aria-selected={id === selected} className={id === selected ? "selected" : ""} onMouseDown={() => onSelect(id)} onDoubleClick={onOpen && (() => onOpen(id))}>
                     <span className="subject">{c.subject}</span>
@@ -619,7 +638,10 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
           setBucket((p) => (p === b ? p : b)); // 같은 구간 안의 스크롤은 렌더링하지 않는다
           requestDraw();
           if (COMPACT) tip.scrolled();
-          if (el.scrollTop + el.clientHeight > el.scrollHeight - 30 * ROW_H) onMore();
+          if (el.scrollTop + el.clientHeight > el.scrollHeight - 30 * ROW_H) {
+            const key = b + ":" + commits.length; // 구간이 바뀌거나 커밋이 더 불러와졌을 때만 (스크롤 이벤트마다 부르지 않는다)
+            if (moreKey.current !== key) (moreKey.current = key, onMore());
+          }
         }}>
         <div style={{ height: commits.length * ROW_H, position: "relative" }}>
           <canvas ref={canvasRef} className="graph-canvas" />
@@ -637,7 +659,7 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
                 head={c.id === headId}
                 match={matchSet.has(c.id)}
                 dim={(dimming && !matchSet.has(c.id)) || (!!lit && !lit.set.has(c.id))}
-                refs={refs}
+                getRefs={getRefs}
                 onPick={pickRow}
                 onDrag={dragRow}
                 onOpen={onOpen}
@@ -653,9 +675,9 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
 });
 
 /** 커밋 한 행. 원시값 props만 받아 memo로 감싸, 선택이 바뀌면 바뀐 두 행만 다시 그린다. */
-const Row = memo(function Row({ c, top, lane, color, chip, selected, head, match, dim, refs, onPick, onDrag, onOpen, getMulti }: {
+const Row = memo(function Row({ c, top, lane, color, chip, selected, head, match, dim, getRefs, onPick, onDrag, onOpen, getMulti }: {
   c: Commit; top: number; lane: number; color: number; chip: Chip | undefined;
-  selected: boolean; head: boolean; match: boolean; dim: boolean; refs: Ref[]; onPick: (id: string, e: React.MouseEvent) => void; onDrag: (e: React.PointerEvent, c: Commit) => void; onOpen?: (id: string) => void; getMulti: () => ReadonlySet<string>;
+  selected: boolean; head: boolean; match: boolean; dim: boolean; getRefs: () => Ref[]; onPick: (id: string, e: React.MouseEvent) => void; onDrag: (e: React.PointerEvent, c: Commit) => void; onOpen?: (id: string) => void; getMulti: () => ReadonlySet<string>;
 }) {
   useLocale(); // 날짜 형식이 언어를 따른다
   countRender("CommitRow");
@@ -691,7 +713,7 @@ const Row = memo(function Row({ c, top, lane, color, chip, selected, head, match
       onClick={onOpen && (() => onOpen(c.id))}
       onMouseEnter={COMPACT ? (e) => tip.hover(ctx.repo, c, e.currentTarget) : undefined}
       onMouseLeave={COMPACT ? tip.leave : undefined}
-      onContextMenu={contextMenu(() => commitMenu(c, refs, getMulti()))}
+      onContextMenu={contextMenu(() => commitMenu(c, getRefs(), getMulti()))}
     >
       {LITE ? (
         <span className="c-main">

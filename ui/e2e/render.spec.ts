@@ -1238,3 +1238,39 @@ test("jj 30f: 작업 기록·북마크·jj 끄기 시트(열기·더 보기·pha
   await page.waitForTimeout(700);
   await same(b2);
 });
+
+test("사이드바 폴더 접기·펼치기는 그 폴더 행 하나만 다시 그린다 (FolderRow memo: 안정 콜백·nodeKey)", async ({ page }) => {
+  const feature = page.locator(".side").getByRole("button", { name: "feature", exact: true }).first(); // 브랜치의 feature 폴더
+  await expect(feature).toHaveAttribute("aria-expanded", "true");
+  const before = await renders(page);
+  expect(before.FolderRow).toBeGreaterThan(1);
+  await feature.click();
+  await expect(feature).toHaveAttribute("aria-expanded", "false");
+  const after = await renders(page);
+  expect(after.FolderRow - before.FolderRow, "FolderRow").toBe(2); // 한 행 × StrictMode 이중 렌더(개발). 전체가 다시 그려지면 행 수의 두 배
+  expect(after.CommitGraph, "CommitGraph").toBe(before.CommitGraph);
+});
+
+test("변경 화면·커밋 상세에서 파일을 바꿔 고르면 선택이 바뀐 두 행만 다시 그린다 (ChangeItem·FileItem memo)", async ({ page }) => {
+  const files = page.getByRole("listbox", { name: "변경 파일", exact: true }).getByRole("option");
+  expect(await files.count()).toBeGreaterThan(2); // 커밋 상세(기본 선택 커밋)
+  const b1 = await renders(page);
+  await files.nth(2).click();
+  await expect(files.nth(2)).toHaveAttribute("aria-selected", "true");
+  const a1 = await renders(page);
+  expect(a1.FileItem - b1.FileItem, "FileItem").toBeLessThanOrEqual(4); // 두 행 × StrictMode 이중 렌더(개발)
+  expect(a1.CommitGraph, "CommitGraph").toBe(b1.CommitGraph);
+
+  await page.locator(".commits").getByText("로컬 변경사항").click();
+  const all = page.locator(".change-list .files").getByRole("option"); // 스테이지 안 됨 + 스테이지됨
+  await expect(all.first()).toBeVisible();
+  const n = await all.count();
+  expect(n).toBeGreaterThan(2); // 전체가 다시 그려지면 n×2 > 4
+  await page.waitForTimeout(300);
+  const b2 = await renders(page);
+  await all.nth(n - 1).click(); // 다른 목록의 파일
+  await expect(all.nth(n - 1)).toHaveAttribute("aria-selected", "true");
+  const a2 = await renders(page);
+  expect(a2.ChangeItem - b2.ChangeItem, "ChangeItem").toBeLessThanOrEqual(4);
+  expect(a2.CommitGraph, "CommitGraph").toBe(b2.CommitGraph);
+});

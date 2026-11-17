@@ -1,4 +1,4 @@
-import { StrictMode, memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { StrictMode, Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { COMPACT, DETAIL, errCode, hideWindow, listen, onOpenRepo, onSelect, openCommit, reportSelected } from "../shared/api/bridge";
 import { api } from "../shared/api/api";
@@ -9,18 +9,13 @@ import { Details } from "../widgets/details/Details";
 import { DomMenuHost } from "../shared/ui/menu";
 import { aiHandoff, ctx, jobNote, ops, prBus, store, stored, touch, type JobTrack } from "../shared/model/ops";
 import { prompt, PromptHost } from "../shared/ui/prompt";
-import { AiHost } from "../features/ai/AiSheets";
-import { AiChatHost } from "../features/ai/AiChat";
 import { aiChat } from "../shared/model/aichat";
-import { HostingHost } from "../features/hosting/HostingSheets";
-import { PrReviewHost } from "../features/hosting/PrReview";
 import { InspectorHost } from "../features/inspect/Inspector";
-import { JjHost } from "../features/jj/JjSheets";
 import type { IssueRule } from "../shared/lib/issues";
 import { QuickLaunch } from "../features/quick-launch/QuickLaunch";
 import { RebaseHost } from "../features/rebase/RebaseSheet";
 import { RewordHost } from "../features/rebase/Reword";
-import { AutoFetch, SettingsHost } from "../widgets/settings/SettingsSheet";
+import { AutoFetch } from "../widgets/settings/AutoFetch";
 import { GRAPH_PAGE, graphLimit, onPrefs, pref } from "../shared/lib/settings";
 import { Sidebar } from "../widgets/sidebar/Sidebar";
 import { CompareLists } from "../features/compare/CompareView";
@@ -32,7 +27,6 @@ import { gh, suggestOtherAccount } from "../shared/model/gh";
 import { StatusBar } from "../widgets/status-bar/StatusBar";
 import { isRepoBusy, toast, toastError } from "../shared/lib/toast";
 import { Toasts } from "../shared/ui/Toasts";
-import { MobileShell } from "./mobile/MobileShell";
 import { Tabs } from "../widgets/tabs/Tabs";
 import { Toolbar } from "../widgets/toolbar/Toolbar";
 import { WORKTREE, type GraphView, type Ref, type RepoChange, type Status, type Submodule, type Worktree } from "../shared/api/types";
@@ -40,11 +34,38 @@ import { useTheme } from "../shared/lib/theme";
 import { hideSplash } from "../shared/lib/splash";
 import { guide } from "../shared/model/guide";
 import { bigView } from "../shared/model/bigview";
+import { prReview } from "../shared/model/prreview";
 import { dismissTop } from "../shared/lib/dismiss";
 import { appMenu } from "../shared/model/appMenu";
 import { loadCaps } from "../shared/lib/caps";
 import { initMobile, isMobile } from "../shared/lib/platform";
 import "./style.css";
+
+// 열 때만 쓰는 큰 화면은 별도 청크: 첫 렌더 뒤 바로 불러와(Suspense fallback 없음) 열 때는 이미 준비돼 있다. 데스크탑은 MobileShell을, 모바일·VS Code는 JjHost를 아예 받지 않는다
+const AiHost = lazy(() => import("../features/ai/AiSheets").then((m) => ({ default: m.AiHost })));
+const AiChatHost = lazy(() => import("../features/ai/AiChat").then((m) => ({ default: m.AiChatHost })));
+const HostingHost = lazy(() => import("../features/hosting/HostingSheets").then((m) => ({ default: m.HostingHost })));
+const PrReviewHost = lazy(() => import("../features/hosting/PrReview").then((m) => ({ default: m.PrReviewHost })));
+const JjHost = lazy(() => import("../features/jj/JjSheets").then((m) => ({ default: m.JjHost })));
+const SettingsHost = lazy(() => import("../widgets/settings/SettingsSheet").then((m) => ({ default: m.SettingsHost })));
+// 모바일은 첫 화면이라 렌더 전에 받는다(빈 화면 없음). 데스크탑은 받지 않는다
+const MobileShell = isMobile ? (await import("./mobile/MobileShell")).MobileShell : null;
+/** 호스트가 `ctx.showXxx`를 등록하기 전(청크가 오는 중)에 온 열기 요청은 등록된 뒤로 미룬다 */
+function holdUntilMounted(keys: ("showSettings" | "showJjOps" | "showJjBookmarks" | "showJjDisable" | "showAi" | "showPr")[], load: () => Promise<unknown>) {
+  const c = ctx as unknown as Record<string, (...a: unknown[]) => void>;
+  for (const k of keys) {
+    const stub = (...a: unknown[]) =>
+      void load().then(async () => {
+        for (let i = 0; c[k] === stub && i < 100; i++) await new Promise((r) => setTimeout(r, 20));
+        if (c[k] !== stub) c[k](...a);
+      });
+    c[k] = stub;
+  }
+}
+holdUntilMounted(["showSettings"], () => import("../widgets/settings/SettingsSheet"));
+holdUntilMounted(["showAi"], () => import("../features/ai/AiSheets"));
+holdUntilMounted(["showPr"], () => import("../features/hosting/HostingSheets"));
+if (!isMobile && !COMPACT) holdUntilMounted(["showJjOps", "showJjBookmarks", "showJjDisable"], () => import("../features/jj/JjSheets"));
 
 /** 새로 받은 값이 이전과 내용이 같으면 이전 참조를 돌려준다 (memo된 화면을 다시 그리지 않게) */
 function same<T>(prev: T, next: T): T {
@@ -292,6 +313,7 @@ function App() {
   useEffect(() => (bigView.exit(), compare.close()), [repo]);
   useEffect(() => void (selected || bigView.exit()), [selected]);
   useEffect(() => void (repo && store("activeTab", repo)), [repo]);
+  useEffect(() => prReview.close(), [repo]); // 저장소가 바뀌면 PR 리뷰 화면을 닫는다 (호스트는 늦게 올라오므로 여기서)
   ctx.activeTab = pending ?? repo;
 
   const moveTab = useCallback(
@@ -537,7 +559,7 @@ function App() {
   return (
     <div className={COMPACT ? "app compact" : DETAIL ? "app detail-mode" : "app"}>
       {isMobile ? (
-        <MobileShell repo={repo} view={view} refs={refs} status={status} selected={selected} commit={commit} rules={issueRules} theme={theme.resolved} repos={repos} pending={pending} onPick={pick} onMore={loadMore} onOpenRepo={loadAll} onClose={clear} onForget={forget} />
+        MobileShell && <MobileShell repo={repo} view={view} refs={refs} status={status} selected={selected} commit={commit} rules={issueRules} theme={theme.resolved} repos={repos} pending={pending} onPick={pick} onMore={loadMore} onOpenRepo={loadAll} onClose={clear} onForget={forget} />
       ) : (
         <>
       {!COMPACT && !DETAIL && <Toolbar
@@ -608,8 +630,10 @@ function App() {
               <Details repo={repo} commit={commit} rules={issueRules} />
             )}
           </main>
-          <AiChatHost repo={repo} operation={status?.operation ?? null} behind={(status?.behind ?? 0) > 0} />
-          <PrReviewHost repo={repo} onSelectCommit={reveal} />
+          <Suspense fallback={null}>
+            <AiChatHost repo={repo} operation={status?.operation ?? null} behind={(status?.behind ?? 0) > 0} />
+            <PrReviewHost repo={repo} onSelectCommit={reveal} />
+          </Suspense>
         </div>
       ) : (
         (
@@ -646,16 +670,24 @@ function App() {
         </>
       )}
       {!isMobile && palette && <QuickLaunch recent={repos} onOpen={open} onClose={() => setPalette(false)} />}
-      <SettingsHost theme={theme.mode} onTheme={theme.setMode} />
+      <Suspense fallback={null}>
+        <SettingsHost theme={theme.mode} onTheme={theme.setMode} />
+      </Suspense>
       <PromptHost />
       <Toasts />
       <RebaseHost />
       <RewordHost />
-      <HostingHost />
-      <AiHost />
+      <Suspense fallback={null}>
+        <HostingHost />
+        <AiHost />
+      </Suspense>
       <AutoFetch repo={repo} />
       <InspectorHost onSelectCommit={setSelected} />
-      {!isMobile && !COMPACT && <JjHost repo={repo} />}
+      {!isMobile && !COMPACT && (
+        <Suspense fallback={null}>
+          <JjHost repo={repo} />
+        </Suspense>
+      )}
       <DomMenuHost />
     </div>
   );
