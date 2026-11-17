@@ -524,7 +524,7 @@ git 작업용 AI. git을 모른다 — 입력 텍스트는 호출 측(UI `ops.ts
 
 ## 다국어 (UI, `ui/src/shared/i18n/i18n.ts`)
 
-- 사용자에게 보이는 문구는 전부 `t("key", vars?)`. 문구는 `ui/src/shared/i18n/locales/en.ts`(키 타입의 원본)와 언어별 `locales/xx.ts`(`Record<Key,string>` — 키가 빠지거나 남으면 `pnpm build` 실패). 지원 23개: en ko zh-CN zh-TW vi ja tl km uz lo ru th mn ne de fr es pt-BR it pl tr uk nl. 목록 원본은 `settings.ts`의 `LOCALES`(`Locale` 타입). **언어 추가 = `locales/xx.ts` 한 파일 + `LOCALES`·`i18n.ts`의 `DICTS`·`LANGS`에 한 줄 + Rust `gc_i18n::SUPPORTED_LOCALES`·`language_name`.** 새 키는 en에 넣으면 모든 언어 파일에 번역을 넣어야 빌드가 통과한다(복수형 `{n?단수:복수}`는 복수 없는 언어에서 생략 가능). RTL(아랍어 등)은 미지원.
+- 사용자에게 보이는 문구는 전부 `t("key", vars?)`. 문구는 `ui/src/shared/i18n/locales/en.ts`(키 타입의 원본)와 언어별 `locales/xx.ts`(`Record<Key,string>` — 키가 빠지거나 남으면 `pnpm build` 실패). 지원 23개: en ko zh-CN zh-TW vi ja tl km uz lo ru th mn ne de fr es pt-BR it pl tr uk nl. 목록 원본은 `settings.ts`의 `LOCALES`(`Locale` 타입). **언어 추가 = `locales/xx.ts` 한 파일(첫 export가 사전, `en` 외에는 `import.meta.glob`이 자동으로 지연 로드) + `LOCALES`·`i18n.ts`의 `LANGS`에 한 줄 + Rust `gc_i18n::SUPPORTED_LOCALES`·`language_name`.** 새 키는 en에 넣으면 모든 언어 파일에 번역을 넣어야 빌드가 통과한다(복수형 `{n?단수:복수}`는 복수 없는 언어에서 생략 가능). RTL(아랍어 등)은 미지원.
 - 치환 `{name}`, 복수 `{n?commit:commits}`(vars.n === 1이면 앞). 키는 `영역.이름`(`ops.`·`toolbar.`·`settings.` …).
 - 언어 결정: 설정 `language`(`"system"|"en"|"ko"`, `pref`/`setPref`, 기본 system). system이면 `navigator.languages`에서 처음 만나는 지원 언어, 없으면 en. 바꾸면 즉시 반영 — `onLocale`/`useLocale()` 구독, `locale()`·`intlTag()`·`dateFmt(opts)`(로케일별 `Intl.DateTimeFormat` 캐시). 시작·변경 시 `api.setLocale`(main.tsx).
 - 규칙: `t()`는 **호출 시점**에(모듈 최상위 상수에 문구를 넣지 말고 키만 두고 렌더 때 `t`). memo 컴포넌트·Host가 문구를 쓰면 `useLocale()` 한 번 — 언어가 바뀔 때만 다시 그려지므로 평소 렌더는 늘지 않는다. git에 전달되는 값·Rust 메시지·mock 데이터는 번역하지 않는다. 토스트 성공 판정은 `toast.successRe`(언어별 패턴).

@@ -65,7 +65,10 @@ export const Details = memo(function Details({ repo, commit, rules, right }: { r
     setFile(null);
     setDiff("");
     loadedFor.current = null;
-    if (commit) api.changedFiles(repo, commit.id).then((f) => (loadedFor.current = commit.id, setFiles(f)), (e) => ctx.error(e)); // 실패를 "변경 파일 없음"으로 보이지 않게 알린다
+    if (!commit) return;
+    let live = true; // 늦게 온 이전 커밋 응답이 덮어쓰지 않게
+    api.changedFiles(repo, commit.id).then((f) => live && (loadedFor.current = commit.id, setFiles(f)), (e) => live && ctx.error(e)); // 실패를 "변경 파일 없음"으로 보이지 않게 알린다
+    return () => void (live = false);
   }, [repo, commit?.id]);
   // AI 채팅이 알려 준 파일 열기 (ops.aiChatOpenFile): 이 커밋의 파일 목록에 있으면 고른다
   const loadedFor = useRef<string | null>(null);
@@ -124,7 +127,10 @@ export const Details = memo(function Details({ repo, commit, rules, right }: { r
   const hasMessage = !!preview;
   const file = picked ?? (hasMessage ? MSG : files[0]?.path ?? null);
   useEffect(() => {
-    if (commit && file && file !== MSG) api.fileDiff(repo, commit.id, file).then(setDiff, (e) => ctx.error(e));
+    if (!commit || !file || file === MSG) return;
+    let live = true;
+    api.fileDiff(repo, commit.id, file).then((d) => live && setDiff(d), (e) => live && ctx.error(e));
+    return () => void (live = false);
   }, [repo, commit?.id, file, ignoreEol, ignoreWs]);
   const rows = useMemo(() => (fileView === "tree" ? toTree(files) : files.map(asListRow)), [files, fileView]);
 

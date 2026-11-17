@@ -353,7 +353,7 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
   useEffect(() => requestAvatars(ctx.repo, commits.slice(first, last)), [commits, first, last]);
 
   // 사진이 도착해도 React 상태는 건드리지 않는다. Canvas만 다시 그린다.
-  useEffect(() => onAvatarChange(() => drawRef.current()), []);
+  useEffect(() => onAvatarChange(requestDraw), [requestDraw]);
   // 크게 보기를 닫으면 그동안 못 그린 변경(데이터·테마)을 한 번 반영한다 (React 렌더링 없이)
   useEffect(() => bigView.on(() => bigView.open || requestDraw()), [requestDraw]);
 
@@ -450,7 +450,7 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
       ctx.fill();
       if (R < 6) continue; // 너무 작으면 사진·이니셜 없이 색 점만
       const url = avatarUrl(c.email);
-      const img = url ? avatarImage(url, () => drawRef.current()) : null;
+      const img = url ? avatarImage(url, requestDraw) : null;
       ctx.save();
       ctx.beginPath();
       ctx.arc(nx, cy, R - 2, 0, Math.PI * 2);
@@ -480,7 +480,7 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
     }
   };
   drawRef.current = draw;
-  useEffect(draw, [view, first, last, leftW, theme, localCount, headIdx, dimming, matchSet, lit]);
+  useEffect(draw, [view, first, last, leftW, theme, localCount, headIdx, dimming, matchSet, lit, chips]);
 
   // 행 틴트가 쓰는 레인 색(--g0..)을 토큰에서 내보낸다. 마지막으로 내보낸 값과 같으면 아무것도 안 한다.
   const palRef = useRef("");

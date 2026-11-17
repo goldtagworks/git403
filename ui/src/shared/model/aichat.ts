@@ -39,10 +39,17 @@ const syncRunning = () => {
   anyRunning = now;
   emit(runSubs);
 };
+let frame = 0;
 const put = (c: Chat) => {
   chats.set(c.repo, c);
+  if (frame) (cancelAnimationFrame(frame), (frame = 0)); // 대기 중인 글 조각도 이 갱신에 함께 반영된다
   emit(subs);
   syncRunning();
+};
+/** 스트리밍 글 조각: 상태는 바로 갱신하되 화면(마크다운 재파싱)은 프레임당 한 번만 깨운다. 최종 내용은 같다 */
+const putText = (c: Chat) => {
+  chats.set(c.repo, c);
+  frame ||= requestAnimationFrame(() => ((frame = 0), emit(subs)));
 };
 
 const KEY = "aiChatOpen";
@@ -84,7 +91,7 @@ function onEvent(conversation: string, ev: AiChatEvent) {
   const turn = c.items.slice(c.items.map((i) => i.k).lastIndexOf("user") + 1);
   switch (ev.kind) {
     case "text":
-      return put({ ...c, items: last?.k === "text" ? [...c.items.slice(0, -1), { k: "text", text: last.text + ev.text }] : [...c.items, { k: "text", text: ev.text }] });
+      return putText({ ...c, items: last?.k === "text" ? [...c.items.slice(0, -1), { k: "text", text: last.text + ev.text }] : [...c.items, { k: "text", text: ev.text }] });
     case "tool":
       return put({ ...c, items: [...c.items, { k: "tool", id: ev.id, name: ev.name, command: ev.command }] });
     case "toolResult":

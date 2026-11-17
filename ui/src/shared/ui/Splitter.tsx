@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * 크기를 저장하는 분할 패널 크기. `[size, splitter]`를 돌려준다.
@@ -37,6 +37,9 @@ function useSplitImpl(key: string, initial: number, min: number, max: number, ax
     }
   });
 
+  const stop = useRef<(() => void) | null>(null); // 진행 중인 드래그를 정리하는 함수
+  useEffect(() => () => stop.current?.(), []); // 드래그 중 언마운트되면 리스너·body 클래스가 남지 않게
+
   const reset = () => {
     setSize(initial);
     try {
@@ -64,19 +67,27 @@ function useSplitImpl(key: string, initial: number, min: number, max: number, ax
       pane.style[prop] = ratio ? last * 100 + "%" : px + "px";
       onMove?.(last);
     };
-    const up = () => {
+    const end = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
       document.body.classList.remove("resizing-" + axis);
+      stop.current = null;
+    };
+    const up = () => {
+      end();
       if (!moved) return; // 클릭만 했으면 저장하지 않는다 (자동 크기가 고정값으로 바뀌지 않게)
       setSize(last);
       try {
         localStorage.setItem("split:" + key, String(last));
       } catch {}
     };
+    stop.current?.(); // 이전 드래그가 안 끝났으면 먼저 정리
     document.body.classList.add("resizing-" + axis);
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up); // 터치·펜이 시스템에 끊겨도 놓은 것으로 처리
+    stop.current = end;
   };
 
   const splitter = (

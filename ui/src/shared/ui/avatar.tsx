@@ -20,8 +20,10 @@ const emit = (emails: string[]) => {
 export function requestAvatars(repo: string, commits: Commit[]) {
   if (owner !== repo) {
     owner = repo;
+    const had = [...urls.keys()];
     urls.clear();
     asked.clear();
+    if (had.length) emit(had); // 옛 저장소의 사진이 남아 보이지 않게 비운 뒤 알린다
   }
   const items: { sha: string; email: string }[] = [];
   const seen = new Set<string>();
@@ -76,7 +78,10 @@ const onEmail = (k: string) => {
     on = (f) => {
       const s = subs.get(k) ?? subs.set(k, new Set()).get(k)!;
       s.add(f);
-      return () => void s.delete(f);
+      return () => {
+        s.delete(f);
+        if (!s.size && subs.get(k) === s) subs.delete(k); // 빈 Set이 쌓이지 않게
+      };
     };
     onKey.set(k, on);
   }
@@ -85,11 +90,13 @@ const onEmail = (k: string) => {
 const useUrl = (email: string) => useSyncExternalStore(onEmail(key(email)), () => urls.get(key(email)) ?? null);
 
 // Canvas용 이미지 캐시. 불러오면 onLoad로 다시 그리게 한다. 실패는 "bad"로 기억해 이니셜(점)로 둔다.
+const IMG_MAX = 500;
 const imgs = new Map<string, HTMLImageElement | "bad">();
 export function avatarImage(url: string, onLoad: () => void): HTMLImageElement | null {
   const hit = imgs.get(url);
   if (hit) return hit === "bad" ? null : hit.complete && hit.naturalWidth ? hit : null;
   const img = new Image();
+  if (imgs.size >= IMG_MAX) imgs.delete(imgs.keys().next().value!); // 가장 오래된 것부터 버린다(쓰던 것이면 다시 불러온다)
   imgs.set(url, img);
   img.onload = onLoad;
   img.onerror = () => imgs.set(url, "bad");

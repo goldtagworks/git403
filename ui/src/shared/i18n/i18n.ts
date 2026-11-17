@@ -1,36 +1,22 @@
 // 다국어: 라이브러리 없이 최소 구조. 문구는 locales/en.ts(키 타입의 원본)와 언어별 locales/xx.ts(Record<Key,string>)에 있다.
-// 언어 추가 = locales/xx.ts 한 파일 + settings.ts LOCALES·아래 DICTS·LANGS에 한 줄 + Rust SUPPORTED_LOCALES (키가 빠지면 빌드 실패).
+// 언어 추가 = locales/xx.ts 한 파일(첫 export가 사전) + settings.ts LOCALES·아래 LANGS에 한 줄 + Rust SUPPORTED_LOCALES (키가 빠지면 빌드 실패).
 // 이 파일은 settings.ts·lib/safeText.ts(순수 함수, 의존 없음) 외에는 아무것도 import하지 않는다 (api·ops가 t를 쓰므로 순환 방지).
 import { useSyncExternalStore } from "react";
 import { en, type Key } from "./locales/en";
 import { visibleText } from "../lib/safeText";
-import { ko } from "./locales/ko";
-import { zhCN } from "./locales/zh-CN";
-import { zhTW } from "./locales/zh-TW";
-import { vi } from "./locales/vi";
-import { ja } from "./locales/ja";
-import { tl } from "./locales/tl";
-import { km } from "./locales/km";
-import { uz } from "./locales/uz";
-import { lo } from "./locales/lo";
-import { ru } from "./locales/ru";
-import { th } from "./locales/th";
-import { mn } from "./locales/mn";
-import { ne } from "./locales/ne";
-import { de } from "./locales/de";
-import { fr } from "./locales/fr";
-import { es } from "./locales/es";
-import { ptBR } from "./locales/pt-BR";
-import { it } from "./locales/it";
-import { pl } from "./locales/pl";
-import { tr } from "./locales/tr";
-import { uk } from "./locales/uk";
-import { nl } from "./locales/nl";
 import { onPrefs, pref, type Locale } from "../lib/settings";
 
 export type { Key, Locale };
-const DICTS: Record<Locale, Record<Key, string>> = {
-  en, ko, "zh-CN": zhCN, "zh-TW": zhTW, vi, ja, tl, km, uz, lo, ru, th, mn, ne, de, fr, es, "pt-BR": ptBR, it, pl, tr, uk, nl,
+type Dict = Record<Key, string>;
+// en만 정적(키 타입 원본·폴백). 나머지는 쓰는 언어 파일 하나만 청크로 받는다 (각 파일은 `Record<Key,string>`을 첫 export로 내보낸다 — 타입은 파일 쪽에서 강제)
+const loaders: Record<string, () => Promise<Record<string, Dict>>> = typeof document === "undefined" ? {} : import.meta.glob<Record<string, Dict>>(["./locales/*.ts", "!./locales/en.ts"]); // Node 테스트는 glob이 없다
+const loaded: Partial<Record<Locale, Dict>> = { en };
+/** 언어 사전을 받아 둔다 (이미 있으면 바로 끝). 못 받으면 영어로 남는다 */
+const load = async (l: Locale) => {
+  if (loaded[l]) return;
+  try {
+    loaded[l] = Object.values(await loaders[`./locales/${l}.ts`]())[0];
+  } catch {}
 };
 /** 설정 창 선택지(각 언어 이름은 그 언어로) + Intl 로케일 태그. 순서는 settings.ts `LOCALES` */
 export const LANGS: { id: Locale; name: string; tag: string }[] = [
@@ -66,16 +52,27 @@ const resolve = (): Locale => {
   return p === "system" ? detect() : p;
 };
 
-let current = resolve();
+let current: Locale = "en";
 const subs = new Set<() => void>();
-if (typeof document !== "undefined") document.documentElement.lang = current;
-// 설정이 바뀔 때마다 불리지만 언어가 그대로면 아무것도 안 한다 (리렌더링 없음)
+const apply = (next: Locale) => {
+  current = next;
+  document.documentElement.lang = next;
+};
+// 첫 렌더 전에 현재 언어를 받아 둔다(영어가 먼저 깜빡이지 않게 — 이 모듈을 쓰는 쪽은 로드가 끝난 뒤 실행된다). 테스트(Node)는 건너뜀
+if (typeof document !== "undefined") {
+  const first = resolve();
+  await load(first);
+  apply(loaded[first] ? first : "en");
+}
+// 설정이 바뀔 때마다 불리지만 언어가 그대로면 아무것도 안 한다 (리렌더링 없음). 바뀌면 사전을 받은 뒤 한 번에 갈아끼우고 알린다
 onPrefs(() => {
   const next = resolve();
   if (next === current) return;
-  current = next;
-  document.documentElement.lang = next;
-  subs.forEach((f) => f());
+  void load(next).then(() => {
+    if (resolve() !== next || next === current) return; // 기다리는 사이 또 바뀌었으면 마지막 것만
+    apply(loaded[next] ? next : "en");
+    subs.forEach((f) => f());
+  });
 });
 
 export const locale = () => current;
@@ -92,7 +89,7 @@ type Vars = Record<string, string | number>;
  * 모듈 맨 위 상수에서 부르면 언어가 바뀌어도 안 바뀐다 — 함수 안에서 부를 것.
  */
 export function t(key: Key, vars?: Vars): string {
-  const s = DICTS[current][key] ?? en[key];
+  const s = loaded[current]![key] ?? en[key];
   if (!vars) return s;
   return s
     .replace(/\{(\w+)\?([^:}]*):([^}]*)\}/g, (_, n: string, one: string, many: string) => (vars[n] === 1 ? one : many))

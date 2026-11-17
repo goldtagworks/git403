@@ -104,7 +104,9 @@ export const ChangesView = memo(function ChangesView({
 
   useEffect(() => {
     if (!selFile || !sel) return setD({ text: "", eol: false, ws: false });
-    api.worktreeDiff(repo, selFile.path, diffStaged, selFile.untracked).then((text) => setD({ text, eol: ignoreEol, ws: ignoreWs }), (e) => onError(e));
+    let live = true; // 파일을 바꾼 뒤 늦게 온 이전 응답이 덮어쓰지 않게
+    api.worktreeDiff(repo, selFile.path, diffStaged, selFile.untracked).then((text) => live && setD({ text, eol: ignoreEol, ws: ignoreWs }), (e) => live && onError(e));
+    return () => void (live = false);
   }, [repo, sel?.side, diffStaged, selFile?.path, selFile?.untracked, status, touched, ignoreEol, ignoreWs]);
 
   useEffect(() => bigView.setAvail(!!selFile), [!!selFile]);
