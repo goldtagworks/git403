@@ -99,11 +99,25 @@ interface Props {
 }
 
 /** 커밋 우클릭 메뉴 (ops 재사용). 그룹 순서: 체크아웃 → 이 커밋 기준 작업 → AI → 복사·패치·웹 → 태그 */
-const commitMenu = (c: Commit, refs: Ref[]): MenuEntry[] => {
+const commitMenu = (c: Commit, refs: Ref[], multi: ReadonlySet<string>): MenuEntry[] => {
   const branches = refs.filter((r) => r.kind === "local" && !r.head);
   const tip = refs.find((r) => r.head)?.target;
   const stash = refs.find((r) => r.kind === "stash" && r.target === c.id);
+  // jj 보기(30e): 고른 커밋이 정확히 둘이면 머지 변경, 아니면 이 커밋 기준 작업. 불변 커밋은 백엔드가 거절한다
+  const jj: MenuEntry[] = !ops.jjOn()
+    ? []
+    : [
+        ...(multi.size === 2 && multi.has(c.id)
+          ? [{ label: t("graph.jjNewMerge"), action: () => void ops.jjNew([c.id, ...[...multi].filter((x) => x !== c.id)]) }]
+          : [{ label: t("graph.jjNew"), action: () => void ops.jjNew([c.id]) }]),
+        { label: t("graph.jjDescribe"), action: () => void ops.jjDescribe(c.id) },
+        { label: t("graph.jjEdit"), action: () => void ops.jjEdit(c.id) },
+        { label: t("graph.jjSquash"), action: () => void ops.jjSquash(c.id) },
+        { label: t("graph.jjAbandon"), action: () => void ops.jjAbandon(c.id) },
+        { separator: true },
+      ];
   return [
+    ...jj,
     ...(stash ? [...stashMenu(stash), { separator: true } as MenuEntry] : []),
     ...branches.map((r) => ({ label: t("graph.checkoutName", { name: r.name }), op: "switch", action: () => ops.checkout(r.name) })),
     { label: t("graph.checkoutCommit"), op: "switch", action: () => ops.checkoutCommit(c.id) },
@@ -500,6 +514,7 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
     const list = m.size > 1 && m.has(c.id) ? commitsRef.current.filter((x) => m.has(x.id)) : [c];
     dnd.begin(e.nativeEvent, list, () => (setMulti(NONE), onSelect(c.id)));
   }, [onSelect]);
+  const getMulti = useCallback(() => multiRef.current, []); // 우클릭 때만 읽는다 (행 props 참조 고정)
   const headId = useMemo(() => refs.find((r) => r.head)?.target, [refs]);
 
   const laneStyle = (lane: number, color: number): CSSProperties =>
@@ -609,6 +624,7 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
                 onPick={pickRow}
                 onDrag={dragRow}
                 onOpen={onOpen}
+                getMulti={getMulti}
               />
             );
           })}
@@ -620,9 +636,9 @@ export const CommitGraph = memo(function CommitGraph({ view, refs, theme, select
 });
 
 /** 커밋 한 행. 원시값 props만 받아 memo로 감싸, 선택이 바뀌면 바뀐 두 행만 다시 그린다. */
-const Row = memo(function Row({ c, top, lane, color, chip, selected, head, match, dim, refs, onPick, onDrag, onOpen }: {
+const Row = memo(function Row({ c, top, lane, color, chip, selected, head, match, dim, refs, onPick, onDrag, onOpen, getMulti }: {
   c: Commit; top: number; lane: number; color: number; chip: Chip | undefined;
-  selected: boolean; head: boolean; match: boolean; dim: boolean; refs: Ref[]; onPick: (id: string, e: React.MouseEvent) => void; onDrag: (e: React.PointerEvent, c: Commit) => void; onOpen?: (id: string) => void;
+  selected: boolean; head: boolean; match: boolean; dim: boolean; refs: Ref[]; onPick: (id: string, e: React.MouseEvent) => void; onDrag: (e: React.PointerEvent, c: Commit) => void; onOpen?: (id: string) => void; getMulti: () => ReadonlySet<string>;
 }) {
   useLocale(); // 날짜 형식이 언어를 따른다
   countRender("CommitRow");
@@ -658,7 +674,7 @@ const Row = memo(function Row({ c, top, lane, color, chip, selected, head, match
       onClick={onOpen && (() => onOpen(c.id))}
       onMouseEnter={COMPACT ? (e) => tip.hover(ctx.repo, c, e.currentTarget) : undefined}
       onMouseLeave={COMPACT ? tip.leave : undefined}
-      onContextMenu={contextMenu(() => commitMenu(c, refs))}
+      onContextMenu={contextMenu(() => commitMenu(c, refs, getMulti()))}
     >
       {LITE ? (
         <span className="c-main">

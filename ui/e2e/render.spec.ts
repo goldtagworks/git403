@@ -1150,3 +1150,32 @@ test("jj 보기: 켜기·끄기와 jj 상태 반영은 바뀐 행만 다시 그�
   for (const id of ["CommitGraph", "Sidebar", "Details", "Toolbar"]) expect(after[id], id).toBe(before[id]);
   expect(after.CommitRow - before.CommitRow).toBeLessThanOrEqual(8); // 표시가 있는 2개 행만 (켜고 끌 때 각 1번, StrictMode 개발 렌더는 두 번씩 센다)
 });
+
+test("jj 쓰기 작업(30e): 우클릭 메뉴 열기·새 변경·설명 편집 시트는 Sidebar·Toolbar를 다시 그리지 않고, 변경 화면 체크는 CommitGraph·Sidebar·Details를 다시 그리지 않는다", async ({ page }) => {
+  const status = { workingCopy: sha("m3"), changeIds: { [sha("m3")]: { short: "kkmpptxzrspx", full: "kkmpptxzrspxqwertyuiopasdfghjklz" } }, conflicted: [], truncated: false };
+  await page.addInitScript((j) => Object.assign(window, { __jj: j }), { enabled: true, status });
+  await page.reload();
+  await expect(page.locator(".jj-mark")).toHaveCount(1);
+  const row = page.locator(".commits .row").filter({ hasText: "README 정리" });
+  await row.click({ button: "right" }); // 우클릭의 행 선택은 정상 렌더 — 그 뒤부터 센다
+  await page.keyboard.press("Escape");
+  const before = await renders(page);
+  await row.click({ button: "right" }); // 같은 행 메뉴 열기·닫기는 렌더 없음 (행 props는 참조 고정, 다중 선택은 ref로만 읽음)
+  await page.getByRole("menu").getByRole("menuitem", { name: "설명 편집…" }).click();
+  const dlg = page.getByRole("dialog", { name: "설명 편집" });
+  await dlg.getByLabel("제목").fill("글자를 입력해도 목록은 그대로");
+  const typing = await renders(page);
+  for (const id of ["CommitGraph", "Sidebar", "Toolbar"]) expect(typing[id], id).toBe(before[id]);
+  expect(typing.CommitRow, "CommitRow").toBe(before.CommitRow);
+  await page.keyboard.press("Escape");
+  // 변경 화면: 파일 체크는 ChangesView·JjBox만
+  await page.locator(".commits").getByText("로컬 변경사항").click();
+  const list = page.getByRole("listbox", { name: "@의 변경" });
+  await expect(list).toBeVisible();
+  const b2 = await renders(page);
+  const first = list.getByRole("checkbox").first();
+  await first.check();
+  await first.uncheck();
+  const a2 = await renders(page);
+  for (const id of ["CommitGraph", "Sidebar", "Details", "Toolbar", "StatusBar"]) expect(a2[id], id).toBe(b2[id]);
+});

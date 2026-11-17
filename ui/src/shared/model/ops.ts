@@ -2,19 +2,19 @@
 // 상태는 App이 `ctx`에 넣어 두고, 작업은 그걸 읽기만 한다 (props로 내려보내지 않아 리렌더링이 없다).
 import { prReview } from "./prreview";
 import { useSyncExternalStore } from "react";
-import { ask, listen, openFile } from "../api/bridge";
+import { ask, errCode, listen, openFile } from "../api/bridge";
 import { api } from "../api/api";
-import { t } from "../i18n/i18n";
+import { t, tErr } from "../i18n/i18n";
 import { build, kindLabels, targetLabels, type CustomCommand, type CustomKind, type CustomTarget, type CustomVars } from "../lib/custom";
 import { showAll, toggleHidden } from "../lib/hidden";
-import { jjEnabled, jjOn, setJjStatus, setJjView } from "../lib/jjview";
+import { jjEnabled, jjOn, jjWorking, setJjStatus, setJjView } from "../lib/jjview";
 import { prompt, type Field } from "../ui/prompt";
 import { toast, toastError, type ToastOpts } from "../lib/toast";
 import type { MenuEntry } from "../ui/menu";
 import { autoRule, jiraCfg, jiraEffective, jiraRule, jiraSuggest, parseRules, type IssueRule, type JiraSuggestion } from "../lib/issues";
 import { GIT_SETTINGS_RE, JIRA_RE, parseConfig, pref, setPref, validEmail, type Prefs } from "../lib/settings";
 import { aiProvider } from "./aiProviders";
-import { WORKTREE, type AiEffort, type AiPart, type AiResults, type AiStatus, type AiTask, type Commit, type HostAccount, type Ref, type RemoteInfo, type Status } from "../api/types";
+import { WORKTREE, type JjWarning, type AiEffort, type AiPart, type AiResults, type AiStatus, type AiTask, type Commit, type HostAccount, type Ref, type RemoteInfo, type Status } from "../api/types";
 import { guide } from "./guide";
 import { aiChat } from "./aichat";
 import { fileWant, type PickRef } from "./selection";
@@ -72,7 +72,7 @@ export const ctx = {
   /** 저장소 통계 시트 열기 (Inspector가 등록) */
   showStats: () => {},
   /** 현재 저장소 다시 읽기 (서브모듈·worktree처럼 파일 감시가 못 잡는 변경 뒤) */
-  reload: () => {},
+  reload: (): Promise<unknown> | void => {},
   /** 설정 창 열기 (SettingsSheet가 등록 — 순환 import 방지). tab: general|git|accounts|tools|ignore|ssh|issues */
   showSettings: (_tab?: string) => {},
   /** 긴 작업(start_job)이 돌고 있는지 (App이 등록). 자동 fetch가 원격 작업 잠금을 건너뛸 때 쓴다 */
@@ -85,6 +85,12 @@ export const ctx = {
   showAi: (_s: AiState) => {},
   /** 이슈 링크 규칙이 바뀌었을 때 App에 알린다 (App이 등록) */
   setIssues: (_rules: IssueRule[]) => {},
+  /** 커밋 메시지 입력 시트(RewordHost가 등록 — 순환 import 방지). 현재 메시지로 채워 열고 저장하면 새 메시지, 취소하면 null */
+  editMessage: (_sha: string, _title: string): Promise<string | null> => {
+    // RewordHost가 마운트되지 않은 경우(조립 실수): 조용히 넘기지 않고 개발 중에 바로 드러낸다
+    if (import.meta.env.DEV) console.error("ctx.editMessage: RewordHost가 마운트되지 않았습니다");
+    return Promise.resolve(null);
+  },
   /** 저장소 열기(탭 추가·활성화) */
   open: (_path: string) => {},
   /** 그래프에서 커밋(또는 WORKTREE) 선택 (App이 등록) */
@@ -1117,7 +1123,16 @@ export const ops = {
 
   // ---- jj 모드(30d): 켜짐 여부는 `.jj`(jj_status 성공), git/jj 보기는 저장소별 설정(lib/jjview.ts) ----
   /** `jj_status`를 읽어 스토어에 반영한다(저장소를 열 때·다시 읽을 때 그래프보다 먼저). 꺼져 있거나 실패하면 git 보기 그대로. */
-  jjLoad: async (repo: string) => setJjStatus(repo, await api.jjStatus(repo).catch(() => null)),
+  jjLoad: async (repo: string) =>
+    setJjStatus(
+      repo,
+      await api.jjStatus(repo).catch((e) => {
+        // 꺼짐·일반 저장소가 아님(worktree·서브모듈)은 정상이라 조용히 git 보기. 그 밖의 오류는 사용자에게 보인다(그래프는 git 보기로 뜬다)
+        const c = errCode(e);
+        if (c !== "jj.notEnabled" && c !== "jj.notRepo") ctx.error(t("ops.jj.statusFail"), String(e));
+        return null;
+      }),
+    ),
   jjEnabled: () => jjEnabled(ctx.repo),
   jjOn: () => jjOn(ctx.repo),
   /** jj 모드 켜기: OS 확인창 → `jj_enable`(멱등) → jj 보기로 그래프 다시 읽기 */
@@ -1136,6 +1151,52 @@ export const ops = {
       ctx.reload();
     }
   },
+  /** jj 쓰기 작업 공통(30e): 성공하면 완료 토스트 + 경고(`JjWarning`)마다 경고 토스트, 끝나면 jj 상태·그래프를 다시 읽는다(`ctx.reload`가 jjLoad부터).
+   *  `jj.stale`(밖에서 바뀜)이면 자동 재시도 없이 다시 읽고 안내만 한다. 성공하면 true */
+  jjRun: async (done: string, call: (repo: string) => Promise<JjWarning[]>) => {
+    const repo = ctx.repo;
+    if (!repo) return false;
+    let ok = false;
+    let stale = false;
+    try {
+      const warns = await call(repo);
+      ok = true;
+      ctx.notify(done, { kind: "success" });
+      for (const w of warns) ctx.notify(tErr(w.code, w.vars, w.message), { kind: "warning" });
+    } catch (e) {
+      if (errCode(e) === "jj.stale") stale = true;
+      else ctx.error(String(e));
+    }
+    if (repo === ctx.repo) await ctx.reload();
+    if (stale) ctx.error(t("ops.jj.staleReloaded")); // 다시 읽은 뒤에 안내
+    return ok;
+  },
+  /** 이 커밋(들)을 부모로 새 변경. 둘 이상이면 머지 변경 */
+  jjNew: (shas: string[]) => ops.jjRun(t(shas.length > 1 ? "ops.jj.newMerged" : "ops.jj.newDone"), (r) => api.jjNew(r, shas)),
+  /** `@` 위에 새 변경 */
+  jjNewWorking: async () => {
+    const wc = jjWorking(ctx.repo);
+    return wc ? ops.jjNew([wc]) : false;
+  },
+  /** 설명 편집: 메시지 입력 시트(`ctx.editMessage`, 커밋 메시지 수정 시트 재사용) → describe. sha 생략 = `@` */
+  jjDescribe: async (sha?: string) => {
+    const target = sha ?? jjWorking(ctx.repo);
+    if (!target) return false;
+    const message = await ctx.editMessage(target, t("ops.jj.describeTitle"));
+    return message !== null && ops.jjRun(t("ops.jj.describeDone"), (r) => api.jjDescribe(r, target, message));
+  },
+  /** `@`를 이 커밋으로 */
+  jjEdit: (sha: string) => ops.jjRun(t("ops.jj.editDone"), (r) => api.jjEdit(r, sha)),
+  /** 이 커밋을 부모로 합치기 (paths가 있으면 그 파일만, sha 생략 = `@`) */
+  jjSquash: (sha?: string, paths?: string[]) => ops.jjRun(t("ops.jj.squashDone"), (r) => api.jjSquash(r, sha, paths)),
+  /** `@`에서 고른 파일만 별도 변경으로 나누기 */
+  jjSplit: async (paths: string[]) => {
+    const wc = jjWorking(ctx.repo);
+    return !!wc && ops.jjRun(t("ops.jj.splitDone"), (r) => api.jjSplit(r, wc, paths));
+  },
+  /** 커밋 버리기(확인창) */
+  jjAbandon: async (sha: string) =>
+    (await ask(t("ops.jj.abandonAsk"), { title: t("ops.jj.abandonTitle"), kind: "warning" })) && ops.jjRun(t("ops.jj.abandonDone"), (r) => api.jjAbandon(r, sha)),
   /** git 보기 ↔ jj 보기 (그래프 범위가 달라서 다시 읽는다) */
   jjToggleView: () => {
     setJjView(ctx.repo, jjOn(ctx.repo) ? "git" : "jj");

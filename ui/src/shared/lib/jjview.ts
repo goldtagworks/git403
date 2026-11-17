@@ -28,6 +28,10 @@ const viewOf = (repo: string): "git" | "jj" => {
 /** jj가 켜져 있고(.jj) 보기도 jj인가 */
 export const jjOn = (repo: string) => !!status.get(repo) && viewOf(repo) === "jj";
 export const jjEnabled = (repo: string) => !!status.get(repo);
+/** `@`(작업 사본) 커밋 SHA. jj 보기가 아니거나 모르면 undefined */
+export const jjWorking = (repo: string) => (jjOn(repo) ? status.get(repo)?.workingCopy ?? undefined : undefined);
+/** jj 보기 여부(원시값 구독): 변경 화면이 스테이징 대신 `@` 화면으로 바뀐다 */
+export const useJjOn = (repo: string) => useSyncExternalStore(subscribe, () => jjOn(repo));
 
 /** `jj_status` 결과(null = 꺼져 있음)를 반영한다. 내용이 같으면 참조·구독자를 그대로 둔다. */
 export function setJjStatus(repo: string, s: JjStatus | null) {

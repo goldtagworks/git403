@@ -564,6 +564,7 @@ function handle(cmd: string, args: any): any {
       return null;
     }
     if (cmd === "commit_message") {
+      if ((window as any).__commitMessageFail) throw (window as any).__commitMessageFail; // E2E: 메시지 읽기 실패
       const c = view.commits.find((x) => x.id === (args as any).sha);
       if (!c) return "";
       if (c.subject === "로그 파서") return `${c.subject}\n\nWhat:\n${Array.from({ length: 8 }, (_, i) => `- ${i + 1}번째 변경 ABC-${i}`).join("\n")}\n\nResolves: ABC-34\n\nAI-Use: yes\nCo-authored-by: 옥토 <1+octo@users.noreply.github.com>`;
@@ -801,23 +802,25 @@ function handle(cmd: string, args: any): any {
     }
     // jj: window.__jj = { enabled, status? } (기본 꺼짐). jj_enable은 켜고 gitCalls에 기록, 꺼져 있으면 jj_status는 jj.notEnabled 오류
     if (cmd === "jj_enable") {
+      if ((window as any).__jj?.enableFail) throw (window as any).__jj.enableFail; // E2E: jj_enable 오류(JSON 문자열)
       ((window as any).__jj ??= {}).enabled = true;
       gitCalls.push(["jj_enable"]);
       return null;
     }
     if (cmd === "jj_status") {
       const j = ((window as any).__jj ??= {});
+      if (j.statusFail) throw j.statusFail; // E2E: jj_status 오류(JSON 문자열)
       if (!j.enabled) throw JSON.stringify({ code: "jj.notEnabled", vars: {}, message: "jj is not enabled for this repository" });
       return j.status ?? { workingCopy: null, changeIds: {}, conflicted: [], truncated: false };
     }
-    // jj 쓰기(30e): 호출만 gitCalls에 [cmd, ...인자]로 기록(결과 상태는 window.__jj.status로 테스트가 정함). window.__jj.fail(JSON 문자열)이 있으면 그 오류로 실패
+    // jj 쓰기(30e): 호출만 gitCalls에 [cmd, ...인자]로 기록(결과 상태는 window.__jj.status로 테스트가 정함). window.__jj.fail(JSON 문자열)이 있으면 그 오류로 실패, window.__jj.warn이 있으면 그 경고 배열 반환
     if (/^jj_(new|describe|edit|squash|split|abandon)$/.test(cmd)) {
       const j = ((window as any).__jj ??= {});
       if (!j.enabled) throw JSON.stringify({ code: "jj.notEnabled", vars: {}, message: "jj is not enabled for this repository" });
       if (j.fail) throw j.fail;
       const a = args as { parents?: string[]; sha?: string | null; message?: string; paths?: string[] | null };
       gitCalls.push([cmd, ...(a.parents ? [a.parents.join(",")] : []), ...(a.sha ? [a.sha] : []), ...(a.message !== undefined ? [a.message] : []), ...(a.paths ? [a.paths.join(",")] : [])]);
-      return [];
+      return j.warn ?? []; // E2E: window.__jj.warn = [{code, vars, message}] 이면 경고 반환
     }
     if (cmd === "account_remove") {
       const { account } = args as { account: HostAccount };

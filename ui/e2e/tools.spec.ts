@@ -251,7 +251,9 @@ test("실행 전 확인: 최종 명령을 보여 주고, 아니오면 실행하�
   await page.keyboard.press("ControlOrMeta+p");
   await page.getByRole("dialog", { name: "빠른 실행" }).getByRole("textbox").fill("실행: 정리");
   await page.keyboard.press("Enter");
-  await expect.poll(() => lastCall(page)).toEqual(["start_shell", cmd]);
+  // 자동 fetch 등 다른 호출이 끼어도 흔들리지 않게 start_shell 중 마지막 것을 본다
+  const lastShell = async () => (await gitCalls(page)).filter((a) => a[0] === "start_shell").at(-1);
+  await expect.poll(lastShell).toEqual(["start_shell", cmd]);
   expect(await page.evaluate(() => (window as any).__asked)).toEqual([expect.stringContaining(cmd)]);
 
   await page.evaluate(() => ((window as any).__askNo = true));

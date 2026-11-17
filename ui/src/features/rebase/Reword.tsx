@@ -6,8 +6,10 @@ import { ask } from "../../shared/api/bridge";
 import { t, useLocale } from "../../shared/i18n/i18n";
 import type { Commit } from "../../shared/api/types";
 
-interface State { commit: Commit; chain: Commit[]; subject: string; body: string }
+/** resolve가 있으면 git 대신 입력한 메시지만 돌려준다(jj 설명 편집, `ctx.editMessage`) */
+interface State { commit: Commit; chain: Commit[]; subject: string; body: string; title?: string; resolve?: (message: string | null) => void }
 let openSheet: ((s: State) => void) | null = null;
+let pending: ((message: string | null) => void) | null = null; // 열린 jj 설명 시트의 결과 대기
 
 /**
  * 커밋 메시지 수정. HEAD면 `commit --amend --only`(스테이지는 그대로), 더 오래된 커밋이면
@@ -64,22 +66,24 @@ export async function startReword(sha: string) {
   openSheet?.({ ...plan, subject, body });
 }
 
-function RewordSheet({ commit, chain, subject: s0, body: b0, onClose }: State & { onClose: () => void }) {
+function RewordSheet({ commit, chain, subject: s0, body: b0, title, resolve, onClose }: State & { onClose: () => void }) {
   useLocale();
   const [subject, setSubject] = useState(s0);
   const [body, setBody] = useState(b0);
   const [busy, setBusy] = useState(false);
-  const same = subject.trim() === s0.trim() && body.trim() === b0.trim();
+  const same = !resolve && subject.trim() === s0.trim() && body.trim() === b0.trim(); // jj 설명은 같아도 저장할 수 있다 (빈 변경 설명 등)
 
   const run = async () => {
     setBusy(true);
-    await applyReword({ commit, chain }, joinMessage(subject, body));
+    if (resolve) resolve(joinMessage(subject, body));
+    else await applyReword({ commit, chain }, joinMessage(subject, body));
+    setBusy(false);
     onClose();
   };
 
   return (
-    <Sheet label={t("reword.title")} onClose={onClose}>
-      <SheetHead title={t("reword.title")} />
+    <Sheet label={title ?? t("reword.title")} onClose={onClose}>
+      <SheetHead title={title ?? t("reword.title")} />
       <SheetBody>
         {chain.length > 1 && <p className="muted">{t("reword.rebaseNote", { n: chain.length - 1 })}</p>}
         <div className="field">
@@ -96,6 +100,26 @@ function RewordSheet({ commit, chain, subject: s0, body: b0, onClose }: State & 
 
 export function RewordHost() {
   const [state, setState] = useState<State | null>(null);
-  useEffect(() => void (openSheet = setState), []);
-  return state ? <RewordSheet key={state.commit.id} {...state} onClose={() => setState(null)} /> : null;
+  useEffect(() => {
+    openSheet = setState;
+    // jj 설명 편집용: 그 커밋의 현재 메시지로 채워 열고, 닫으면(취소 포함) 결과를 돌려준다
+    ctx.editMessage = async (sha, title) => {
+      pending?.(null); // 열려 있던 시트의 대기는 취소로 끝낸다
+      pending = null;
+      let msg: string;
+      try {
+        msg = await api.commitMessage(ctx.repo, sha);
+      } catch (e) {
+        ctx.error(String(e)); // 읽지 못한 채 열면 빈 메시지로 설명이 지워질 수 있다
+        return null;
+      }
+      const [subject, body] = splitSubject(msg);
+      const commit = ctx.commits.find((c) => c.id === sha) ?? ({ id: sha, parents: [], author: "", email: "", time: 0, subject, body } as Commit);
+      return new Promise<string | null>((resolve) => {
+        pending = resolve;
+        setState({ commit, chain: [commit], subject, body, title, resolve });
+      });
+    };
+  }, []);
+  return state ? <RewordSheet key={state.commit.id} {...state} onClose={() => (state.resolve?.(null), setState(null))} /> : null;
 }

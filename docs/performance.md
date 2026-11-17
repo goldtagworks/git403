@@ -45,6 +45,7 @@
   - 로컬 변경사항 넓게 보기를 끄면(← 그래프로) `CommitGraph`/`Sidebar`를 다시 그리지 않는다.
   - AI 채팅 열(열기·닫기·스트림 이벤트·입력·끝난 뒤 새로고침)은 `CommitGraph`/`Sidebar`/`Details`/`Toolbar`/`StatusBar`를 다시 그리지 않는다(상태는 `aichat.ts` 외부 스토어, 입력 글자는 `ChatInput` 안, 상태바는 `useChatHidden` 불리언만 구독 — 열이 닫힌 채 진행 중일 때만 `AiChatStatusItem`이 다시 그려진다).
   - jj 보기(30d): 켜기·끄기·jj 상태 반영은 `CommitGraph`/`Sidebar`/`Details`/`Toolbar`를 다시 그리지 않고 표시가 있는 행만 다시 그린다(`jjview.ts` 외부 스토어, 행이 자기 커밋의 문자열 하나만 구독, 같은 상태는 구독자를 깨우지 않음).
+  - jj 쓰기 작업(30e): 같은 행 우클릭 메뉴 열기·닫기와 설명 편집 시트 입력은 `CommitGraph`/`Sidebar`/`Toolbar`/`CommitRow`를 다시 그리지 않고(행의 `getMulti`는 안정적 ref 콜백), 변경 화면의 파일 체크는 `CommitGraph`/`Sidebar`/`Details`/`Toolbar`/`StatusBar`를 다시 그리지 않는다(체크 상태는 `ChangesView` 안).
 - 리뷰할 때 확인할 것: 새 `useState`가 App 같은 상위 컴포넌트에 생기는지, 그 값이 얼마나 자주 바뀌는지.
 
 ## 4. 번들과 의존성

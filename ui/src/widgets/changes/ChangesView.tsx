@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useJjOn } from "../../shared/lib/jjview";
 import { fileWant, useFileWant } from "../../shared/model/selection";
 import { ask } from "../../shared/api/bridge";
 import { t, useLocale } from "../../shared/i18n/i18n";
@@ -25,6 +26,10 @@ export const statusChar = (f: StatusFile, side: Side) => (f.untracked ? "?" : f.
 /** 스테이지 안 됨 / 스테이지됨 목록에 드는 파일 (모바일 변경 화면도 같은 규칙) */
 export const isUnstaged = (f: StatusFile) => f.untracked || f.conflict || f.worktree !== ".";
 export const isStaged = (f: StatusFile) => !f.untracked && !f.conflict && f.index !== ".";
+
+const NO_FILES: StatusFile[] = [];
+const NO_PATHS: ReadonlySet<string> = new Set();
+const NO_PATHS_ARR: string[] = [];
 
 /** DU·UD·DD처럼 한쪽이 삭제한 충돌 (mergetool은 이런 파일에서 대화형으로 물어본다) */
 const isDeleteConflict = (f: StatusFile) => f.conflict && (f.index === "D" || f.worktree === "D");
@@ -54,15 +59,19 @@ export const ChangesView = memo(function ChangesView({
   const ignoreEol = useSyncExternalStore(onPrefs, () => pref("ignoreEol"));
   const ignoreWs = useSyncExternalStore(onPrefs, () => pref("ignoreWs"));
 
-  const unstaged = useMemo(() => status.files.filter(isUnstaged), [status]);
-  const staged = useMemo(() => status.files.filter(isStaged), [status]);
+  // jj 보기(30e): 스테이징이 없다. `@`의 변경 전부를 한 목록으로 (스테이지만 된 파일의 diff는 index 기준으로 읽는다)
+  const jj = useJjOn(repo);
+  const [picked, setPicked] = useState<ReadonlySet<string>>(NO_PATHS); // jj 보기에서 체크한 파일(합치기·나누기 대상)
+  const unstaged = useMemo(() => (jj ? status.files : status.files.filter(isUnstaged)), [status, jj]);
+  const staged = useMemo(() => (jj ? NO_FILES : status.files.filter(isStaged)), [status, jj]);
   const selFile = (sel?.side === "staged" ? staged : unstaged).find((f) => f.path === sel?.path) ?? null;
 
   // 현재 보는 목록 안에서만 이동 (끝에서 다른 목록으로 넘어가지 않는다)
   const nav = useMemo(() => neighbors((sel?.side === "staged" ? staged : unstaged).map((f) => f.path), selFile?.path ?? null), [sel?.side, selFile?.path, staged, unstaged]);
   // 이미지 diff: 스테이지 안 됨 = 인덱스 ↔ 작업 트리, 스테이지됨 = HEAD ↔ 인덱스.
   // 다시 읽는 기준은 diff 텍스트(바이너리 diff의 `index 옛해시..새해시`가 내용 지문): status가 새로 읽혀도 내용이 같으면 재조회하지 않는다. 충돌 파일은 제외
-  const image = useMemo(() => (selFile?.conflict ? undefined : { repo, before: sel?.side === "staged" ? "HEAD" : ":", after: sel?.side === "staged" ? ":" : null, v: diff }), [repo, sel?.side, selFile?.conflict, diff]);
+  const diffStaged = sel?.side === "staged" || (jj && !!selFile && !isUnstaged(selFile));
+  const image = useMemo(() => (selFile?.conflict ? undefined : { repo, before: diffStaged ? "HEAD" : ":", after: diffStaged ? ":" : null, v: diff }), [repo, diffStaged, selFile?.conflict, diff]);
   const goFile = useCallback((path: string) => setSel((s) => s && { side: s.side, path }), []);
   // AI 읽는 흐름 가이드(25d): 스테이지된 트리 sha가 대상 키. 가이드의 파일은 스테이지됨 목록에서 연다
   const goStaged = useCallback((path: string) => setSel({ side: "staged", path }), []);
@@ -95,8 +104,8 @@ export const ChangesView = memo(function ChangesView({
 
   useEffect(() => {
     if (!selFile || !sel) return setD({ text: "", eol: false, ws: false });
-    api.worktreeDiff(repo, selFile.path, sel.side === "staged", selFile.untracked).then((text) => setD({ text, eol: ignoreEol, ws: ignoreWs }), (e) => onError(String(e)));
-  }, [repo, sel?.side, selFile?.path, selFile?.untracked, status, touched, ignoreEol, ignoreWs]);
+    api.worktreeDiff(repo, selFile.path, diffStaged, selFile.untracked).then((text) => setD({ text, eol: ignoreEol, ws: ignoreWs }), (e) => onError(String(e)));
+  }, [repo, sel?.side, diffStaged, selFile?.path, selFile?.untracked, status, touched, ignoreEol, ignoreWs]);
 
   useEffect(() => bigView.setAvail(!!selFile), [!!selFile]);
   useEffect(() => () => bigView.setAvail(false), []);
@@ -111,7 +120,7 @@ export const ChangesView = memo(function ChangesView({
   const diffRef = useRef(diff); // 버튼은 누를 때의 diff를 쓴다 (diff가 바뀔 때마다 버튼 목록을 새로 만들지 않게)
   diffRef.current = diff;
   const hunkActions: HunkAction[] | undefined = useMemo(() => {
-    if (!selFile || selFile.untracked || ignoreEol || ignoreWs || stale) return undefined; // 줄 끝 CR·공백 무시 diff는 실제 파일과 달라 패치로 적용할 수 없다
+    if (jj || !selFile || selFile.untracked || ignoreEol || ignoreWs || stale) return undefined; // jj 보기는 스테이지·버리기 hunk 버튼이 없다. 줄 끝 CR·공백 무시 diff는 실제 파일과 달라 패치로 적용할 수 없다
     const partial = (target: "stage" | "unstage" | "discard") => (hunk: number, lines: number[] | null) =>
       run(api.applyPartial(repo, diffRef.current, hunk, lines, target));
     return sel?.side === "staged"
@@ -126,40 +135,46 @@ export const ChangesView = memo(function ChangesView({
             },
           },
         ];
-  }, [!selFile, selFile?.untracked, sel?.side, repo, ignoreEol, ignoreWs, stale, loc]);
+  }, [jj, !selFile, selFile?.untracked, sel?.side, repo, ignoreEol, ignoreWs, stale, loc]);
   // Blame·히스토리는 추적 중인 파일만 (새 파일·충돌 파일은 숨김)
   const onInspect = useMemo(() => (!selFile || selFile.untracked || selFile.conflict ? undefined : (kind: "blame" | "history", path: string) => (kind === "blame" ? inspect.blame(path, null) : inspect.history(path))), [!selFile, selFile?.untracked, selFile?.conflict]);
+
+  const togglePick = useCallback((path: string) => setPicked((p) => { const n = new Set(p); n.has(path) ? n.delete(path) : n.add(path); return n; }), []);
+  // 합치기·나누기 대상: 지금 목록에 있는 체크 파일. 이름 바꾸기(R)만 옛 경로도 같이(복사 C는 제외), 폴더 `dir/`는 끝 `/`를 뗀다(백엔드는 디렉터리 접두를 받고 `/`는 badPath)
+  const pickedPaths = useMemo(() => (jj ? unstaged.filter((f) => picked.has(f.path)).flatMap((f) => [f.path, ...(f.oldPath && (f.index === "R" || f.worktree === "R") ? [f.oldPath] : [])]).map((x) => x.replace(/\/+$/, "")) : NO_PATHS_ARR), [jj, unstaged, picked]);
+  useEffect(() => setPicked(NO_PATHS), [jj, repo]); // 보기·저장소가 바뀌면 체크를 비운다 (선택 파일은 아래 효과가 첫 파일로 맞춘다)
+  const clearPicked = useCallback(() => setPicked(NO_PATHS), []);
 
   const list = (side: Side, files: StatusFile[]) => (
     <section className="change-list">
       <div className="files-head">
-        <span>{side === "staged" ? t("changes.staged") : t("changes.unstaged")} {files.length}</span>
+        <span>{jj ? t("changes.jjHead") : side === "staged" ? t("changes.staged") : t("changes.unstaged")} {files.length}</span>
         {files.length > 0 && (
           <span className="head-actions">
-            {side === "unstaged" && <button className="secondary" onClick={() => ops.snapshot()} title={t("changes.snapshotTip")}>{t("changes.snapshot")}</button>}
+            {!jj && side === "unstaged" && <button className="secondary" onClick={() => ops.snapshot()} title={t("changes.snapshotTip")}>{t("changes.snapshot")}</button>}
             <button className="secondary" onClick={() => ops.savePatchChanges(side === "staged" ? "staged" : "unstaged")}>{t("changes.savePatch")}</button>
-            {side === "unstaged" && supports("discard") && <button className="secondary stop" onClick={() => discard(files)}>{t("changes.discardAll")}</button>}
+            {!jj && side === "unstaged" && supports("discard") && <button className="secondary stop" onClick={() => discard(files)}>{t("changes.discardAll")}</button>}
             {/* 좁을 때만 보인다: 위 보조 버튼들을 메뉴로 */}
             <button
               className="more"
               aria-label={t("changes.more")}
               onClick={() =>
                 showMenu([
-                  ...(side === "unstaged" ? [{ label: t("changes.snapshot"), op: "stash", action: () => ops.snapshot() }] : []),
+                  ...(!jj && side === "unstaged" ? [{ label: t("changes.snapshot"), op: "stash", action: () => ops.snapshot() }] : []),
                   { label: t("changes.savePatch"), op: "diff", action: () => ops.savePatchChanges(side === "staged" ? "staged" : "unstaged") },
-                  ...(side === "unstaged" ? [{ label: t("changes.discardAll"), op: "discard", action: () => discard(files) }] : []),
+                  ...(!jj && side === "unstaged" ? [{ label: t("changes.discardAll"), op: "discard", action: () => discard(files) }] : []),
                 ])
               }
             >
               ⋯
             </button>
-            {supports(side === "staged" ? "unstage" : "stage") && <button className={side === "staged" ? undefined : "go"} onClick={() => run(side === "staged" ? api.unstage(repo, files.map((f) => f.path)) : api.stage(repo, files.map((f) => f.path)))}>
+            {!jj && supports(side === "staged" ? "unstage" : "stage") && <button className={side === "staged" ? undefined : "go"} onClick={() => run(side === "staged" ? api.unstage(repo, files.map((f) => f.path)) : api.stage(repo, files.map((f) => f.path)))}>
               {side === "staged" ? t("changes.unstageAll") : t("changes.stageAll")}
             </button>}
           </span>
         )}
       </div>
-      <ul className="files" role="listbox" aria-label={side === "staged" ? t("changes.staged") : t("changes.unstaged")}>
+      <ul className="files" role="listbox" aria-label={jj ? t("changes.jjHead") : side === "staged" ? t("changes.staged") : t("changes.unstaged")}>
         {files.map((f) => {
           const active = sel?.side === side && sel.path === f.path;
           return (
@@ -170,7 +185,7 @@ export const ChangesView = memo(function ChangesView({
               className={active ? "selected" : ""}
               title={f.oldPath ? `${f.oldPath} → ${f.path}` : f.path}
               onMouseDown={() => (setSel({ side, path: f.path }), bigView.picked())}
-              onDoubleClick={() => run(side === "staged" ? api.unstage(repo, [f.path]) : api.stage(repo, [f.path]))}
+              onDoubleClick={jj ? undefined : () => run(side === "staged" ? api.unstage(repo, [f.path]) : api.stage(repo, [f.path]))}
               onContextMenu={contextMenu(() => [
                 { label: t("diff.big"), action: () => (setSel({ side, path: f.path }), bigView.enter(true)) },
                 { separator: true },
@@ -178,10 +193,10 @@ export const ChangesView = memo(function ChangesView({
                 ...(f.conflict && !isDeleteConflict(f) ? [{ label: t("changes.mergeTool"), op: "mergetool", action: () => ops.mergeTool(f.path) }] : []),
                 ...(f.conflict && !isDeleteConflict(f) && ops.aiOn() ? [{ label: t("changes.aiConflict"), action: () => ops.aiConflict(f.path) }] : []),
                 ...(f.conflict ? [{ separator: true } as MenuEntry] : []),
-                { label: side === "staged" ? t("changes.unstage") : t("changes.stage"), op: side === "staged" ? "unstage" : "stage", action: () => run(side === "staged" ? api.unstage(repo, [f.path]) : api.stage(repo, [f.path])) },
-                ...(side === "unstaged" ? [{ label: t("changes.discardMenu"), op: "discard", action: () => discard([f]) }] : []),
+                ...(jj ? [] : [{ label: side === "staged" ? t("changes.unstage") : t("changes.stage"), op: side === "staged" ? "unstage" : "stage", action: () => run(side === "staged" ? api.unstage(repo, [f.path]) : api.stage(repo, [f.path])) }]),
+                ...(!jj && side === "unstaged" ? [{ label: t("changes.discardMenu"), op: "discard", action: () => discard([f]) }] : []),
                 { label: t("changes.trashMenu"), op: "trash_files", action: () => ops.trashFiles([f.path]), disabled: f.path.endsWith("/") }, // 폴더는 못 옮긴다
-                ...(side === "unstaged" ? [{ label: t("changes.stashFile"), op: "stash", action: () => ops.stashFiles([f.path]) }] : []),
+                ...(!jj && side === "unstaged" ? [{ label: t("changes.stashFile"), op: "stash", action: () => ops.stashFiles([f.path]) }] : []),
                 { label: t("changes.ignore"), action: () => ops.ignore(f.path), disabled: !f.untracked },
                 { label: t("changes.lfs"), op: "lfs", action: () => ops.lfsTrackFile(f.path) },
                 { separator: true },
@@ -189,9 +204,20 @@ export const ChangesView = memo(function ChangesView({
                 ...(f.untracked ? [] : [{ label: t("changes.savePatchFile"), op: "diff", action: () => ops.savePatchChanges(side, [f.path]) }]),
               ])}
             >
-              <span className={`status s-${statusChar(f, side)}`}>{statusChar(f, side)}</span>
+              {jj && (
+                <input
+                  type="checkbox"
+                  className="jj-pick"
+                  aria-label={t("changes.jjPick", { path: f.path })}
+                  checked={picked.has(f.path)}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onDoubleClick={(e) => e.stopPropagation()}
+                  onChange={() => togglePick(f.path)}
+                />
+              )}
+              <span className={`status s-${statusChar(f, jj && !isUnstaged(f) ? "staged" : side)}`}>{statusChar(f, jj && !isUnstaged(f) ? "staged" : side)}</span>
               <span className="label">{f.path}</span>
-              {supports(side === "staged" ? "unstage" : "stage") && (
+              {!jj && supports(side === "staged" ? "unstage" : "stage") && (
                 <button className="row-btn" onMouseDown={(e) => e.stopPropagation()} onClick={() => run(side === "staged" ? api.unstage(repo, [f.path]) : api.stage(repo, [f.path]))}>
                   {side === "staged" ? "−" : "+"}
                 </button>
@@ -214,11 +240,11 @@ export const ChangesView = memo(function ChangesView({
         ) : (
           <>
             {list("unstaged", unstaged)}
-            {list("staged", staged)}
+            {!jj && list("staged", staged)}
           </>
         )}
         {boxSplit}
-        <CommitBox repo={repo} canCommit={staged.length > 0} onError={onError} height={boxH} />
+        {jj ? <JjBox paths={pickedPaths} height={boxH} onDone={clearPicked} /> : <CommitBox repo={repo} canCommit={staged.length > 0} onError={onError} height={boxH} />}
       </div>
       }
     >
@@ -333,5 +359,37 @@ const CommitBox = memo(function CommitBox({ repo, canCommit, onError, height }: 
       </div>
       <AiSources sources={sources} />
     </form>
+  );
+});
+
+/** jj 보기(30e)의 커밋 상자 자리: `@`에 설명 달기·새 변경, 체크한 파일을 부모로 합치기·별도 변경으로 나누기 (모두 ops.jj*) */
+const JjBox = memo(function JjBox({ paths, height, onDone }: { paths: string[]; height: number; onDone: () => void }) {
+  useLocale();
+  const [busy, setBusy] = useState(false);
+  const run = async (f: () => Promise<boolean>) => {
+    setBusy(true);
+    try {
+      if (await f()) onDone();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const none = paths.length === 0 || busy;
+  return (
+    <div className="commit-box jj-box" style={{ height: Math.min(height, 130) }}>
+      <p className="muted">{t("changes.jjHint")}</p>
+      <div className="commit-actions">
+        <span className="commit-btns">
+          <button type="button" disabled={none} onClick={() => run(() => ops.jjSquash(undefined, paths))}>{t("changes.jjSquash")}</button>
+          <button type="button" disabled={none} onClick={() => run(() => ops.jjSplit(paths))}>{t("changes.jjSplit")}</button>
+        </span>
+      </div>
+      <div className="commit-actions">
+        <span className="commit-btns">
+          <button type="button" disabled={busy} onClick={() => run(() => ops.jjNewWorking())}>{t("changes.jjNew")}</button>
+          <button type="button" className="primary" disabled={busy} onClick={() => run(() => ops.jjDescribe())}>{t("changes.jjDescribe")}</button>
+        </span>
+      </div>
+    </div>
   );
 });
