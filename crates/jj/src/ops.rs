@@ -253,18 +253,18 @@ fn run(repo_path: &Path, op: Op) -> Result<Vec<Coded>, Coded> {
         return Err(coded!("jj.notEnabled", "jj is not enabled for this repository"));
     }
     let _gate = repo_lock(&root);
-    let settings = settings_with_identity(&root)?;
+    // git 저장소는 한 번만 연다(작성자 설정과 무시 규칙이 같이 쓴다)
+    let git = gix::open(&root).ok();
+    let settings = settings_with_identity(git.as_ref())?;
     let mut ws = load_workspace(&root, &settings)?;
-    pollster::block_on(execute(&mut ws, &root, op))
+    pollster::block_on(execute(&mut ws, &root, git.as_ref(), op))
 }
 
 /// git 전역 `core.excludesFile`(없으면 XDG 기본) + 저장소 `.git/info/exclude`. 전역 무시 파일(`.DS_Store` 등)이 커밋에 들어가지 않게.
 /// 설정은 gix로 읽고(저장소 로컬 설정이 가리키는 파일은 신뢰하지 않는다 = `trusted_path`) git 실행 파일은 쓰지 않는다.
-fn base_ignores(root: &Path) -> Arc<GitIgnoreFile> {
+fn base_ignores(root: &Path, git: Option<&gix::Repository>) -> Arc<GitIgnoreFile> {
     let mut ig = GitIgnoreFile::empty();
-    let configured = gix::open(root)
-        .ok()
-        .and_then(|r| r.config_snapshot().trusted_path("core.excludesFile").ok().flatten());
+    let configured = git.and_then(|r| r.config_snapshot().trusted_path("core.excludesFile").ok().flatten());
     let global = configured.or_else(|| {
         let base = std::env::var_os("XDG_CONFIG_HOME")
             .map(PathBuf::from)
@@ -343,7 +343,10 @@ fn complete_newline(s: &str) -> String {
     }
 }
 
-async fn execute(ws: &mut Workspace, root: &Path, mut op: Op) -> Result<Vec<Coded>, Coded> {
+async fn execute(ws: &mut Workspace, root: &Path, git: Option<&gix::Repository>, mut op: Op) -> Result<Vec<Coded>, Coded> {
+    // 무시 규칙은 snapshot이 필요할 때 한 번만 만든다
+    let ignores = std::cell::OnceCell::new();
+    let snapshot_options = || snapshot_options(ignores.get_or_init(|| base_ignores(root, git)).clone());
     let name = ws.workspace_name().to_owned();
     let name_ref: &WorkspaceName = &name;
     let loader = ws.repo_loader().clone();
@@ -363,7 +366,7 @@ async fn execute(ws: &mut Workspace, root: &Path, mut op: Op) -> Result<Vec<Code
         Ok(WorkingCopyFreshness::WorkingCopyStale) => {
             // 이전 작업이 커밋은 했지만 작업 사본 갱신 전에 끊겼다. 사용자 변경(옛 상태 대비)이 있으면 덮어쓰지 않고 거절,
             // 없으면 update-stale처럼 현재 `@` 내용으로 체크아웃한다.
-            let (tree, _) = locked.locked_wc().snapshot(&snapshot_options(root)).await.map_err(|e| fail("snapshot", e))?;
+            let (tree, _) = locked.locked_wc().snapshot(&snapshot_options()).await.map_err(|e| fail("snapshot", e))?;
             if tree.tree_ids() != locked.locked_wc().old_tree().tree_ids() {
                 return Err(coded!("jj.stale", "The repository changed or the working copy is out of date; refresh and retry"));
             }
@@ -404,7 +407,7 @@ async fn execute(ws: &mut Workspace, root: &Path, mut op: Op) -> Result<Vec<Code
     }
 
     // 2. 작업 사본 snapshot
-    let (tree, _stats) = locked.locked_wc().snapshot(&snapshot_options(root)).await.map_err(|e| fail("snapshot", e))?;
+    let (tree, _stats) = locked.locked_wc().snapshot(&snapshot_options()).await.map_err(|e| fail("snapshot", e))?;
     if tree.tree_ids() != wc_commit.tree_ids() {
         let stale = wc_commit.id().clone();
         wc_commit = m.rewrite_commit(&wc_commit).set_tree(tree).write().await.map_err(|e| fail("snapshot-commit", e))?;
@@ -483,9 +486,9 @@ async fn wc_commit_of(repo: &ReadonlyRepo, name: &WorkspaceName) -> Result<Commi
     repo.store().get_commit_async(&id).await.map_err(|e| fail("wc-commit", e))
 }
 
-fn snapshot_options(root: &Path) -> SnapshotOptions<'static> {
+fn snapshot_options(base_ignores: Arc<GitIgnoreFile>) -> SnapshotOptions<'static> {
     SnapshotOptions {
-        base_ignores: base_ignores(root),
+        base_ignores,
         progress: None,
         start_tracking_matcher: &EverythingMatcher,
         force_tracking_matcher: &NothingMatcher,

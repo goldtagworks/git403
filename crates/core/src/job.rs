@@ -237,7 +237,7 @@ fn kill_tree(pid: Option<u32>) {
 }
 
 #[cfg(feature = "cli")]
-/// 스트림을 `\n`과 `\r` 기준으로 잘라 이벤트로 보낸다. 오류 요약(`summarize`)을 돌려준다.
+/// 스트림을 `\n`과 `\r` 기준으로 잘라 이벤트로 보낸다. stderr이면 오류 요약(`summarize`)을 돌려준다(stdout은 빈 문자열).
 async fn pump(
     stream: impl AsyncRead + Unpin,
     events: mpsc::UnboundedSender<JobEvent>,
@@ -260,16 +260,16 @@ async fn pump(
         if line.is_empty() {
             continue;
         }
-        let ev = if is_stderr {
-            JobEvent::Progress { line: line.clone() }
+        if is_stderr {
+            // 오류 요약(`summarize`)은 stderr 꼬리만 쓴다
+            let _ = events.send(JobEvent::Progress { line: line.clone() });
+            if recent.len() == 40 {
+                recent.pop_front();
+            }
+            recent.push_back(line);
         } else {
-            JobEvent::Stdout { line: line.clone() }
-        };
-        let _ = events.send(ev);
-        if recent.len() == 40 {
-            recent.pop_front();
+            let _ = events.send(JobEvent::Stdout { line });
         }
-        recent.push_back(line);
     }
     summarize(recent.make_contiguous())
 }

@@ -168,7 +168,7 @@ fn parse(text: &str) -> Result<Vec<Commit>> {
             let email = next()?.to_owned();
             let time = next()?.parse().map_err(|_| Error::Parse(rec.to_owned()))?;
             let subject = next()?.to_owned();
-            let body = f.next().unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" ").chars().take(BODY_MAX).collect();
+            let body = crate::squash_ws(f.next().unwrap_or(""), BODY_MAX);
             Ok(Commit { id, parents, author, email, time, subject, body })
         })
         .collect()

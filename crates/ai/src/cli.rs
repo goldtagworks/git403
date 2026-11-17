@@ -59,7 +59,7 @@ pub(crate) async fn run(provider: Provider, program: &str, path: Option<&str>, t
     let prompt = format!(
         "{}\n\nOutput only one JSON object that satisfies the JSON schema below. No code blocks, explanations or surrounding text.\nSchema: {}\n\n{input}",
         task.system_for(input),
-        task.schema()
+        task.schema_json()
     );
     // 프롬프트를 stdin으로 줄 수 있으면 Some. 못 주는 CLI(Grok)는 인자에 들어 있다.
     let (args, stdin_prompt) = match provider {

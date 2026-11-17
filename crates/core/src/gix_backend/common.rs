@@ -19,15 +19,29 @@ pub(crate) fn hex(id: impl AsRef<gix::oid>) -> String {
 }
 
 /// 커밋 메시지에서 git의 `%s`(제목)와 `%b`(본문). 제목은 첫 문단의 줄을 공백 하나로 잇고(줄 끝 공백 제거),
-/// 본문은 그 뒤 빈 줄들을 건너뛴 나머지다.
-pub(crate) fn subject_body(msg: &[u8]) -> (String, String) {
-    let text = String::from_utf8_lossy(msg);
-    let mut lines = text.split('\n').peekable();
-    while lines.peek().is_some_and(|l| l.trim().is_empty()) {
-        lines.next();
+/// 본문은 그 뒤 빈 줄들을 건너뛴 나머지다(`text`의 조각을 그대로 빌려 준다).
+pub(crate) fn subject_and_rest(text: &str) -> (String, &str) {
+    // `text.split('\n')`과 같은 줄 나누기. `None` = 더 읽을 줄 없음
+    fn pop<'a>(rest: &mut Option<&'a str>) -> Option<&'a str> {
+        let s = (*rest)?;
+        match s.find('\n') {
+            Some(i) => {
+                *rest = Some(&s[i + 1..]);
+                Some(&s[..i])
+            }
+            None => {
+                *rest = None;
+                Some(s)
+            }
+        }
+    }
+    let peek_blank = |rest: &Option<&str>| rest.is_some_and(|s| s.split('\n').next().is_some_and(|l| l.trim().is_empty()));
+    let mut rest = Some(text);
+    while peek_blank(&rest) {
+        pop(&mut rest);
     }
     let mut subject = String::new();
-    for l in lines.by_ref() {
+    while let Some(l) = pop(&mut rest) {
         let l = l.trim_end();
         if l.is_empty() {
             break;
@@ -37,10 +51,19 @@ pub(crate) fn subject_body(msg: &[u8]) -> (String, String) {
         }
         subject.push_str(l);
     }
-    while lines.peek().is_some_and(|l| l.trim().is_empty()) {
-        lines.next();
+    while peek_blank(&rest) {
+        pop(&mut rest);
     }
-    (subject, lines.collect::<Vec<_>>().join("\n"))
+    (subject, rest.unwrap_or(""))
+}
+
+/// 업스트림 대비 (ahead, behind) = (`local`에만 있는 커밋 수, `up`에만 있는 커밋 수). 같은 커밋이면 걷지 않는다.
+pub(crate) fn ahead_behind_ids(r: &gix::Repository, local: gix::ObjectId, up: gix::ObjectId) -> (u32, u32) {
+    if local == up {
+        return (0, 0);
+    }
+    let count = |tip: gix::ObjectId, hide: gix::ObjectId| r.rev_walk([tip]).with_hidden([hide]).all().map(|w| w.filter_map(|i| i.ok()).count() as u32).unwrap_or(0);
+    (count(local, up), count(up, local))
 }
 
 /// `core.quotepath=false` 기준의 git 경로 인용: `"`·`\`·제어 문자가 있을 때만 C 방식으로 감싼다.
@@ -206,4 +229,50 @@ pub(crate) fn append_head_log(r: &gix::Repository, old: gix::ObjectId, new: gix:
     lock.commit().map_err(|e| fail(e.error))?;
     super::durable::dir(path.parent().unwrap_or(&path));
     Ok(())
+}
+
+#[cfg(test)]
+mod subject_tests {
+    use super::*;
+
+    /// 이전 구현(줄 벡터를 합치던 것)과 같은 결과여야 한다
+    fn old(msg: &str) -> (String, String) {
+        let mut lines = msg.split('\n').peekable();
+        while lines.peek().is_some_and(|l| l.trim().is_empty()) {
+            lines.next();
+        }
+        let mut subject = String::new();
+        for l in lines.by_ref() {
+            let l = l.trim_end();
+            if l.is_empty() {
+                break;
+            }
+            if !subject.is_empty() {
+                subject.push(' ');
+            }
+            subject.push_str(l);
+        }
+        while lines.peek().is_some_and(|l| l.trim().is_empty()) {
+            lines.next();
+        }
+        (subject, lines.collect::<Vec<_>>().join("\n"))
+    }
+
+    #[test]
+    fn subject_and_rest_matches_old_split() {
+        for m in ["", "\n", "a", "a\n", "a\n\n", "a\nb\n\nbody1\nbody2\n", "\n\n a  \n  b\n \n\n\nx\n\n", "a\r\nb\r\n\r\nc\r\n", "a\n \n\t\nz", "  \n  "] {
+            let (s, r) = subject_and_rest(m);
+            assert_eq!((s, r.to_owned()), old(m), "{m:?}");
+        }
+    }
+
+    #[test]
+    fn squash_stops_at_max_like_join_take() {
+        for (s, max) in [("a b  c\n d", 200), ("a b  c\n d", 3), ("a b  c\n d", 4), ("a b", 1), ("a b", 2), ("가나 다라\n마", 4), ("", 5), ("  ", 5), ("abc", 0)] {
+            let want: String = s.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(max).collect();
+            assert_eq!(crate::squash_ws(s, max), want, "{s:?} {max}");
+        }
+        let long = "word ".repeat(1000);
+        assert_eq!(crate::squash_ws(&long, 200), long.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(200).collect::<String>());
+    }
 }

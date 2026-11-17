@@ -79,10 +79,13 @@ impl RepoWatcher {
         let (tx, rx) = mpsc::channel::<PathBuf>();
         let stopped = Arc::new(AtomicBool::new(false));
         let stop = stopped.clone();
+        let cb_git_dirs = git_dirs.clone();
         let mut watcher = recommended_watcher(move |res: notify_debouncer_mini::notify::Result<Event>| {
             let Ok(ev) = res else { return };
             if !ev.kind.is_access() {
-                ev.paths.into_iter().for_each(|p| drop(tx.send(p)));
+                // .git 안에서 상태·참조와 무관한 경로(objects, lock 파일 등)는 채널에 쌓지 않는다(큰 fetch·gc 때 수만 건)
+                let relevant = |p: &PathBuf| cb_git_dirs.iter().find_map(|d| p.strip_prefix(d).ok()).is_none_or(|inner| git_change(inner).is_some());
+                ev.paths.into_iter().filter(relevant).for_each(|p| drop(tx.send(p)));
             }
         })?;
         watcher.watch(repo, RecursiveMode::Recursive)?;
@@ -94,14 +97,11 @@ impl RepoWatcher {
             for path in &events {
                 match git_dirs.iter().find_map(|d| path.strip_prefix(d).ok()) {
                     Some(inner) => {
-                        let s = inner.to_string_lossy();
-                        if s == "index" {
-                            change.worktree = true;
-                        } else if s == "HEAD" || s == "packed-refs" || s.starts_with("refs") || s.starts_with("logs/refs/stash") {
-                            change.refs = true;
-                            change.worktree = true;
-                        }
                         // 그 밖의 .git 내부(objects, lock 파일 등)는 무시
+                        if let Some(refs) = git_change(inner) {
+                            change.worktree = true;
+                            change.refs |= refs;
+                        }
                     }
                     None => {
                         // ignore된 경로(target/, node_modules/ 등 빌드 산출물)는 상태에 안 나오므로 무시
@@ -113,7 +113,7 @@ impl RepoWatcher {
                         if rel.file_name().is_some_and(|n| n == ".gitignore") {
                             ignored = ignore_rules(&root);
                             change.worktree = true;
-                        } else if !ignored.matched_path_or_any_parents(rel, path.is_dir()).is_ignore() {
+                        } else if !is_ignored(&ignored, rel, path) {
                             change.worktree = true;
                         }
                     }
@@ -125,6 +125,24 @@ impl RepoWatcher {
         }));
         Ok(Self { _watcher: watcher, stopped })
     }
+}
+
+/// git 디렉터리 안 경로가 알릴 만한 변경인가: `Some(refs)` = index 변경(false) 또는 HEAD·refs·스태시 변경(true), `None` = 무시.
+fn git_change(inner: &Path) -> Option<bool> {
+    let s = inner.to_string_lossy();
+    if s == "index" {
+        Some(false)
+    } else if s == "HEAD" || s == "packed-refs" || s.starts_with("refs") || s.starts_with("logs/refs/stash") {
+        Some(true)
+    } else {
+        None
+    }
+}
+
+/// ignore 규칙에 걸리는 경로인가. 디렉터리 전용 규칙(`target/`)이 갈리는 경우에만 디스크를 확인한다(`is_dir` stat 생략).
+fn is_ignored(rules: &Gitignore, rel: &Path, abs: &Path) -> bool {
+    let (file, dir) = (rules.matched_path_or_any_parents(rel, false).is_ignore(), rules.matched_path_or_any_parents(rel, true).is_ignore());
+    if file == dir { file } else if abs.is_dir() { dir } else { file }
 }
 
 /// `.git`이 파일(`gitdir: <경로>`)일 때 가리키는 git 디렉터리와, 그 안 `commondir`이 가리키는 공통 디렉터리(refs 등이 있는 곳).

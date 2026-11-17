@@ -131,14 +131,19 @@ impl Hosting {
         let remote = remotes.into_iter().next().map(|(_, _, r)| r);
         let accts = self.accounts();
         let host = remote.as_ref().map(|r| r.host.clone());
-        // 계정 파일·키체인 읽기는 블로킹이라 별도 스레드에서
+        // 계정 파일 읽기는 블로킹이라 별도 스레드에서
         let h = host.clone();
-        let (account, stored) = off(move || {
-            let account = h.and_then(|h| accts.list().ok()?.into_iter().find(|a| a.provider == Provider::GitHub && a.on_host(&h)));
-            let token = account.as_ref().and_then(|a| accts.token(a).ok().flatten());
-            Ok((account, token))
-        })
-        .await?;
+        let accts2 = self.accounts();
+        let account = off(move || Ok(h.and_then(|h| accts2.list().ok()?.into_iter().find(|a| a.provider == Provider::GitHub && a.on_host(&h))))).await?;
+        // GitHub 원격이고 이메일이 전부 캐시에 있으면 키체인·gh 토큰 조회 없이 바로 돌려준다
+        if remote.is_some() && (account.is_some() || host.as_deref() == Some("github.com")) {
+            if let Some(r) = gc_hosting::cached_avatars(&self.avatars, &items) {
+                return Ok(r);
+            }
+        }
+        // 키체인 읽기도 블로킹
+        let a = account.clone();
+        let stored = off(move || Ok(a.as_ref().and_then(|a| accts.token(a).ok().flatten()))).await?;
         // 저장된 토큰이 없으면 `gh` 토큰(PR 조회와 같은 규칙). 비공개 저장소도 사진을 찾는다.
         let token = match &host {
             Some(h) if account.is_some() || h == "github.com" => {

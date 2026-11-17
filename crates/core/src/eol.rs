@@ -52,29 +52,70 @@ pub async fn fix_crlf(git: &GitRunner, repo: &Path, paths: &[String]) -> Result<
     let mut a = vec!["--literal-pathspecs", "ls-files", "-s", "-z", "--"];
     a.extend(paths.iter().map(String::as_str));
     let listing = git.query(repo, &a).await?;
-    let mut info = Vec::new();
-    for e in String::from_utf8_lossy(&listing).split('\0') {
+    // (모드, 인덱스 blob, 경로). 병합 충돌 항목(단계 ≠ 0)은 예전처럼 `:경로` 읽기가 오류를 내게 둔다
+    let mut entries: Vec<(&str, &str, &str)> = Vec::new();
+    let listing = String::from_utf8_lossy(&listing);
+    for e in listing.split('\0') {
         let Some((meta, path)) = e.split_once('\t') else { continue };
-        let mode = meta.split(' ').next().unwrap_or("");
+        let mut m = meta.split(' ');
+        let (mode, sha, stage) = (m.next().unwrap_or(""), m.next().unwrap_or(""), m.next().unwrap_or("0"));
         if !matches!(mode, "100644" | "100755") {
             continue;
         }
-        let old = git.output(repo, &["cat-file", "blob", &format!(":{path}")]).await?;
-        let new = lf(&old);
-        if new == old {
+        if stage != "0" {
+            git.output(repo, &["cat-file", "blob", &format!(":{path}")]).await?;
             continue;
         }
-        let sha = String::from_utf8_lossy(&git.output_stdin(repo, &["hash-object", "-w", "--stdin"], &new).await?).trim().to_owned();
-        info.extend(format!("{mode} {sha} 0\t{path}\0").bytes());
-        let wt = path_in_repo(repo, path)?;
-        if std::fs::read(&wt).is_ok_and(|w| w == old) {
-            std::fs::write(&wt, &new)?;
+        entries.push((mode, sha, path));
+    }
+    let mut info = Vec::new();
+    // blob을 파일마다 `cat-file`로 읽지 않고 묶음(`--batch`, 입력은 sha 줄)으로 읽는다. 한 번에 많이 메모리에 올리지 않게 200개씩.
+    for chunk in entries.chunks(200) {
+        let input: String = chunk.iter().map(|(_, sha, _)| format!("{sha}\n")).collect();
+        let out = git.output_stdin(repo, &["cat-file", "--batch"], input.as_bytes()).await?;
+        let mut rest = &out[..];
+        for &(mode, sha, path) in chunk {
+            let old = next_batch_blob(&mut rest, sha)?;
+            let new = lf(old);
+            if new == old {
+                continue;
+            }
+            let hashed = git.output_stdin(repo, &["hash-object", "-w", "--stdin"], &new).await?;
+            info.extend(format!("{mode} {} 0\t{path}\0", String::from_utf8_lossy(&hashed).trim()).bytes());
+            // 작업 파일은 인덱스와 같을 때만 LF로 (파일 입출력은 블로킹 스레드에서)
+            let (r, p, old, new) = (repo.to_path_buf(), path.to_owned(), old.to_vec(), new);
+            tokio::task::spawn_blocking(move || -> Result<()> {
+                let wt = path_in_repo(&r, &p)?;
+                if std::fs::read(&wt).is_ok_and(|w| w == old) {
+                    std::fs::write(&wt, &new)?;
+                }
+                Ok(())
+            })
+            .await
+            .map_err(|e| crate::Error::Parse(e.to_string()))??;
         }
     }
     if !info.is_empty() {
         git.output_stdin(repo, &["update-index", "-z", "--index-info"], &info).await?;
     }
     Ok(())
+}
+
+#[cfg(feature = "cli")]
+/// `cat-file --batch` 출력(`<sha> <type> <size>\n<내용>\n` 반복)에서 다음 blob 내용을 떼어 낸다.
+fn next_batch_blob<'a>(rest: &mut &'a [u8], sha: &str) -> Result<&'a [u8]> {
+    let bad = || crate::Error::Parse(format!("cat-file --batch: {sha}"));
+    let nl = rest.iter().position(|&c| c == b'\n').ok_or_else(bad)?;
+    let header = std::str::from_utf8(&rest[..nl]).map_err(|_| bad())?;
+    let mut h = header.split(' ');
+    let (Some(name), Some("blob"), Some(size)) = (h.next(), h.next(), h.next()) else { return Err(bad()) };
+    let size: usize = size.parse().map_err(|_| bad())?;
+    if name != sha || rest.len() < nl + 1 + size + 1 {
+        return Err(bad());
+    }
+    let body = &rest[nl + 1..nl + 1 + size];
+    *rest = &rest[nl + 1 + size + 1..];
+    Ok(body)
 }
 
 #[cfg(feature = "cli")]
@@ -107,6 +148,17 @@ mod tests {
         let out = "i/crlf  w/crlf  attr/                \ta.txt\0i/lf    w/lf    attr/text eol=lf     \tb.txt\0\
                    i/mixed w/mixed attr/                \tc d.txt\0i/crlf  w/crlf  attr/text eol=crlf   \twin.bat\0i/-text w/-text attr/                \tbin\0";
         assert_eq!(parse_crlf(out), ["a.txt", "c d.txt"]);
+    }
+
+    #[test]
+    fn batch_blob_parsing() {
+        let out = b"aaa blob 3\nx\r\n\nbbb blob 0\n\n".to_vec();
+        let mut r = &out[..];
+        assert_eq!(next_batch_blob(&mut r, "aaa").unwrap(), b"x\r\n");
+        assert_eq!(next_batch_blob(&mut r, "bbb").unwrap(), b"");
+        assert!(r.is_empty());
+        assert!(next_batch_blob(&mut &b"ccc missing\n"[..], "ccc").is_err());
+        assert!(next_batch_blob(&mut &b"ccc blob 9\nab\n"[..], "ccc").is_err());
     }
 
     #[test]

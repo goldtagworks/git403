@@ -159,7 +159,7 @@ pub async fn worktree_diff(git: &GitRunner, repo: &Path, path: &str, staged: boo
         a.extend(["--", path]);
         git.query(repo, &a).await?
     };
-    Ok(String::from_utf8_lossy(&out).into_owned())
+    Ok(crate::utf8_lossy(out))
 }
 
 #[cfg(all(test, feature = "cli"))]

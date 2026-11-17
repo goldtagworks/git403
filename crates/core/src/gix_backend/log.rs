@@ -5,7 +5,7 @@ use std::path::Path;
 use gix::bstr::ByteSlice;
 use gix::traverse::commit::topo;
 
-use super::common::{fail, glob, hex, open, subject_body};
+use super::common::{fail, glob, hex, open, subject_and_rest};
 use crate::log::{jj_scope, JjScope};
 use crate::{Commit, Result};
 
@@ -20,7 +20,8 @@ pub(super) fn head_commit(repo: &Path) -> Option<String> {
 pub(super) fn to_commit(c: &gix::Commit<'_>) -> Result<Commit> {
     let d = c.decode().map_err(fail)?;
     let a = d.author().map_err(fail)?;
-    let (subject, body) = subject_body(d.message);
+    let text = String::from_utf8_lossy(d.message);
+    let (subject, body) = subject_and_rest(&text);
     Ok(Commit {
         id: hex(c.id),
         parents: d.parents().map(hex).collect(),
@@ -28,7 +29,7 @@ pub(super) fn to_commit(c: &gix::Commit<'_>) -> Result<Commit> {
         email: a.email.to_str_lossy().into_owned(),
         time: a.time().map(|t| t.seconds).unwrap_or(0),
         subject,
-        body: body.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(BODY_MAX).collect(),
+        body: crate::squash_ws(body, BODY_MAX),
     })
 }
 
@@ -77,7 +78,9 @@ fn tips(r: &gix::Repository, hidden: &[String]) -> Result<Vec<gix::ObjectId>> {
 }
 
 pub(super) fn read_log(repo: &Path, limit: usize, hidden: &[String]) -> Result<Vec<Commit>> {
-    let r = open(repo)?;
+    let mut r = open(repo)?;
+    // 걷기(topo)가 읽은 커밋을 `find_commit`이 다시 읽을 때 디코딩을 되풀이하지 않게 객체 캐시를 켠다
+    r.object_cache_size_if_unset(32 * 1024 * 1024);
     let tips = tips(&r, hidden)?;
     if tips.is_empty() || limit == 0 {
         return Ok(Vec::new());

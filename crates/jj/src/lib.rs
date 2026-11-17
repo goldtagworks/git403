@@ -78,10 +78,10 @@ fn settings() -> Result<UserSettings, Coded> {
 
 /// 쓰기 작업용 설정: 기본 설정 + 저장소의 git 설정(`user.name`·`user.email`, 전역·저장소 git config 그대로 = git 커밋과 같은 작성자).
 /// 사용자·저장소 jj 설정은 읽지 않는다. git 실행 파일은 쓰지 않는다(gix로 읽음 — PATH·Android 무관).
-pub(crate) fn settings_with_identity(root: &Path) -> Result<UserSettings, Coded> {
+pub(crate) fn settings_with_identity(git: Option<&gix::Repository>) -> Result<UserSettings, Coded> {
     let mut config = StackedConfig::with_defaults();
     let mut layer = ConfigLayer::empty(ConfigSource::User);
-    if let Ok(repo) = gix::open(root) {
+    if let Some(repo) = git {
         let snap = repo.config_snapshot();
         for key in ["user.name", "user.email"] {
             if let Some(v) = snap.string(key) {
@@ -188,7 +188,15 @@ pub fn status(repo_path: &Path) -> Result<JjStatus, Coded> {
         return Err(coded!("jj.notEnabled", "jj is not enabled for this repository"));
     }
     let (ws, repo) = load(&root)?;
-    pollster::block_on(async {
+    // 결과는 operation(= 뷰)만으로 정해진다: 같은 op이면 커밋을 다시 걷지 않는다(새로고침·감시 이벤트마다 부른다)
+    static CACHE: std::sync::Mutex<BTreeMap<String, (String, JjStatus)>> = std::sync::Mutex::new(BTreeMap::new());
+    let (key, op_id) = (gc_pathkey::real_key(&root), repo.op_id().hex());
+    if let Some((op, st)) = CACHE.lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
+        if *op == op_id {
+            return Ok(st.clone());
+        }
+    }
+    let st = pollster::block_on(async {
         let store = repo.store();
         let view = repo.view();
         let mut out = JjStatus::default();
@@ -214,6 +222,12 @@ pub fn status(repo_path: &Path) -> Result<JjStatus, Coded> {
             out.change_ids.insert(sha, ChangeId { short, full });
             queue.extend(c.parent_ids().iter().cloned());
         }
-        Ok(out)
-    })
+        Ok::<_, Coded>(out)
+    })?;
+    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if cache.len() >= 16 && !cache.contains_key(&key) {
+        cache.clear(); // 열어 본 저장소가 많아도 메모리가 자라지 않게
+    }
+    cache.insert(key, (op_id, st.clone()));
+    Ok(st)
 }

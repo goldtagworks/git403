@@ -5,7 +5,7 @@ use std::path::Path;
 use gix::bstr::ByteSlice;
 use gix::object::Kind;
 
-use super::common::{fail, hex, open, subject_body};
+use super::common::{ahead_behind_ids, fail, hex, open, subject_and_rest};
 use crate::{Ref, RefKind, Result};
 
 /// 태그가 주석 태그면 한 단계 벗긴 대상 (`%(*objectname)`과 같다), 아니면 자기 자신.
@@ -21,8 +21,7 @@ fn ahead_behind(r: &gix::Repository, full: &gix::refs::FullNameRef, local: gix::
     let Some(Ok(up)) = r.branch_remote_tracking_ref_name(full, gix::remote::Direction::Fetch) else { return (0, 0) };
     let Ok(Some(mut upref)) = r.try_find_reference(up.as_ref()) else { return (0, 0) };
     let Ok(up_id) = upref.peel_to_id().map(|i| i.detach()) else { return (0, 0) };
-    let count = |tip: gix::ObjectId, hide: gix::ObjectId| r.rev_walk([tip]).with_hidden([hide]).all().map(|w| w.filter_map(|i| i.ok()).count() as u32).unwrap_or(0);
-    (count(local, up_id), count(up_id, local))
+    ahead_behind_ids(r, local, up_id)
 }
 
 pub(super) fn read_refs(repo: &Path) -> Result<Vec<Ref>> {
@@ -70,7 +69,7 @@ fn stashes(r: &gix::Repository) -> Result<Vec<Ref>> {
     for (i, line) in rev.enumerate() {
         let line = line.map_err(fail)?;
         let id = line.new_oid;
-        let subject = r.find_commit(id).ok().and_then(|c| c.message_raw().ok().map(|m| subject_body(m).0));
+        let subject = r.find_commit(id).ok().and_then(|c| c.message_raw().ok().map(|m| subject_and_rest(&String::from_utf8_lossy(m)).0));
         out.push(Ref { kind: RefKind::Stash, name: format!("stash@{{{i}}}"), target: hex(id), head: false, message: subject, ahead: 0, behind: 0 });
     }
     Ok(out)

@@ -14,7 +14,7 @@ impl Backend {
     pub async fn dispatch(&self, cmd: &str, args: Value) -> Res<Value> {
         // AI 차례가 도는 저장소에 대한 쓰기는 여기서 거절한다(repo_gate.rs, docs/security.md)
         #[cfg(feature = "cli")]
-        let _write = self.begin_write(cmd, &args).await?; // 쓰기는 작업으로 등록해 요청이 끝날 때까지 들고 있는다(AI 시작의 겹침 확인이 본다)
+        let gate = self.begin_write(cmd, &args).await?; // 쓰기는 작업으로 등록해 요청이 끝날 때까지 들고 있는다(AI 시작의 겹침 확인이 본다)
         let mut a = Args(args);
         let a = &mut a;
         let git = &*self.backend;
@@ -260,7 +260,7 @@ impl Backend {
                 let argv: Vec<&str> = args.iter().map(String::as_str).collect();
                 // 읽기 명령(repo_gate::git_writes)은 `--no-optional-locks`와 같게 돈다: status·diff·describe가 index.lock을 잡지 않는다
                 #[cfg(feature = "cli")]
-                let read = !crate::repo_gate::git_writes(&args);
+                let read = !gate.git_writes.unwrap_or_else(|| crate::repo_gate::git_writes(&args));
                 #[cfg(not(feature = "cli"))]
                 let read = false;
                 let out = if read { git.run_query(&repo, &argv, &ok).await } else { git.run(&repo, &argv, &ok).await }.map_err(err)?;
@@ -543,7 +543,7 @@ impl Backend {
             #[cfg(feature = "cli")]
             "stale_lock_remove" => {
                 let (repo, path) = (a.repo()?, a.get::<String>("path")?);
-                self.stale_lock_remove(repo, path, _write.as_ref().map(crate::jobs::JobReg::id)).await
+                self.stale_lock_remove(repo, path, gate.reg.as_ref().map(crate::jobs::JobReg::id)).await
             }
             "askpass_reply" => {
                 let (id, answer) = (a.get::<u64>("id")?, a.get::<Option<String>>("answer")?);

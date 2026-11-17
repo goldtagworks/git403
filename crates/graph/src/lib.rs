@@ -4,6 +4,8 @@
 //! 출력: 행마다 노드의 레인(열)과, 다음 행으로 이어지는 선분 목록.
 //! 그리기는 UI가 하고, 여기서는 좌표 계산만 한다.
 
+use std::collections::HashMap;
+
 use serde::Serialize;
 
 pub struct Node<'a> {
@@ -47,12 +49,55 @@ pub struct Layout {
 }
 
 #[derive(Clone)]
-struct Slot {
+struct Slot<'a> {
     /// 이 레인이 기다리는 커밋.
-    expect: String,
+    expect: &'a str,
     color: u16,
     /// HEAD 자리로 미리 잡아 둔 레인: 아직 아무 선도 없으므로 그리지 않는다.
     ghost: bool,
+}
+
+/// 레인 목록 + "커밋 id → 그 커밋을 기다리는 레인들(오름차순)" 색인. 슬롯을 바꿀 때마다 색인을 같이 고친다.
+struct Lanes<'a> {
+    slots: Vec<Option<Slot<'a>>>,
+    waiting: HashMap<&'a str, Vec<usize>>,
+}
+
+impl<'a> Lanes<'a> {
+    fn set(&mut self, i: usize, slot: Slot<'a>) {
+        self.clear(i);
+        let v = self.waiting.entry(slot.expect).or_default();
+        let at = v.partition_point(|&x| x < i);
+        v.insert(at, i);
+        self.slots[i] = Some(slot);
+    }
+
+    fn take(&mut self, i: usize) -> Option<Slot<'a>> {
+        let slot = self.slots[i].take()?;
+        if let Some(v) = self.waiting.get_mut(slot.expect) {
+            v.retain(|&x| x != i);
+            if v.is_empty() {
+                self.waiting.remove(slot.expect);
+            }
+        }
+        Some(slot)
+    }
+
+    fn clear(&mut self, i: usize) {
+        self.take(i);
+    }
+
+    /// `id`를 기다리는 가장 왼쪽 레인.
+    fn first_waiting(&self, id: &str) -> Option<usize> {
+        self.waiting.get(id).and_then(|v| v.first().copied())
+    }
+
+    fn free(&mut self) -> usize {
+        self.slots.iter().position(Option::is_none).unwrap_or_else(|| {
+            self.slots.push(None);
+            self.slots.len() - 1
+        })
+    }
 }
 
 pub fn layout<'a>(nodes: impl IntoIterator<Item = Node<'a>>) -> Layout {
@@ -63,92 +108,86 @@ pub fn layout<'a>(nodes: impl IntoIterator<Item = Node<'a>>) -> Layout {
 /// HEAD보다 위에 오는 다른 브랜치 커밋은 1번 레인부터 쓴다.
 pub fn layout_with_head<'a>(nodes: impl IntoIterator<Item = Node<'a>>, head: Option<&str>) -> Layout {
     let nodes: Vec<Node<'a>> = nodes.into_iter().collect();
-    let mut lanes: Vec<Option<Slot>> = Vec::new();
+    let mut lanes = Lanes { slots: Vec::new(), waiting: HashMap::new() };
     let mut next_color: u16 = 0;
-    let mut out = Layout::default();
+    let mut out = Layout { rows: Vec::with_capacity(nodes.len()), max_lanes: 0 };
     let mut fresh_color = || {
         let c = next_color;
         next_color = next_color.wrapping_add(1);
         c
     };
-    if let Some(h) = head.filter(|h| nodes.first().is_some_and(|n| n.id != *h) && nodes.iter().any(|n| n.id == *h)) {
-        lanes.push(Some(Slot { expect: h.to_owned(), color: fresh_color(), ghost: true }));
+    if let Some(h) = head.filter(|_| nodes.first().is_some()) {
+        if let Some(hn) = nodes.iter().find(|n| n.id == h).filter(|_| nodes[0].id != h) {
+            lanes.slots.push(None);
+            lanes.set(0, Slot { expect: hn.id, color: fresh_color(), ghost: true });
+        }
     }
 
-    for node in nodes {
+    // 행마다 새로 만들지 않고 재사용하는 임시 버퍼.
+    let mut through: Vec<bool> = Vec::new();
+    let mut parent_lanes: Vec<(usize, u16)> = Vec::new();
+    let mut moved: Vec<(usize, usize)> = Vec::new();
+    let mut waiting: Vec<usize> = Vec::new();
+
+    for node in &nodes {
         // 1. 이 커밋을 기다리던 레인들. 첫 번째가 노드 위치, 나머지는 여기로 합류한다.
-        let waiting: Vec<usize> = lanes
-            .iter()
-            .enumerate()
-            .filter(|(_, s)| s.as_ref().is_some_and(|s| s.expect == node.id))
-            .map(|(i, _)| i)
-            .collect();
+        waiting.clear();
+        if let Some(v) = lanes.waiting.get(node.id) {
+            waiting.extend_from_slice(v);
+        }
 
         let (lane, color) = match waiting.first() {
-            Some(&i) => (i, lanes[i].as_ref().unwrap().color),
+            Some(&i) => (i, lanes.slots[i].as_ref().unwrap().color),
             None => {
                 // 브랜치 끝(아무도 기다리지 않던 커밋): 빈 레인을 쓰거나 새로 만든다.
-                let i = lanes.iter().position(Option::is_none).unwrap_or_else(|| {
-                    lanes.push(None);
-                    lanes.len() - 1
-                });
-                (i, fresh_color())
+                (lanes.free(), fresh_color())
             }
         };
         for &i in &waiting {
-            lanes[i] = None;
+            lanes.clear(i);
         }
         // 이 행에 들어오기 전부터 이어지던 레인 (노드 자신 제외). 이 레인들은 부모가 합류해도 세로선을 끊지 않는다.
-        let through: Vec<bool> = lanes.iter().map(Option::is_some).collect();
+        through.clear();
+        through.extend(lanes.slots.iter().map(Option::is_some));
 
         // 2. 부모를 레인에 배정한다. 첫 부모는 같은 레인·같은 색을 이어받는다.
-        let mut parent_lanes = Vec::with_capacity(node.parents.len());
+        parent_lanes.clear();
         // 오른쪽 레인을 왼쪽으로 당겨 온 경우 (원래 레인, 새 레인).
-        let mut moved: Vec<(usize, usize)> = Vec::new();
+        moved.clear();
         for (k, parent) in node.parents.iter().enumerate() {
             // 이미 다른 레인이 같은 부모를 기다리면 그쪽으로 합친다.
-            if let Some(i) = lanes.iter().position(|s| s.as_ref().is_some_and(|s| &s.expect == parent)) {
+            if let Some(i) = lanes.first_waiting(parent) {
                 // 첫 부모가 더 오른쪽에서 기다리고 있으면 현재 레인으로 당겨 와서
                 // 그래프가 왼쪽으로 모이게 한다.
-                if k == 0 && lane < i && lanes[lane].is_none() {
-                    let slot = lanes[i].take();
-                    let c = slot.as_ref().unwrap().color;
-                    lanes[lane] = slot;
+                if k == 0 && lane < i && lanes.slots[lane].is_none() {
+                    let slot = lanes.take(i).unwrap();
+                    let c = slot.color;
+                    lanes.set(lane, slot);
                     moved.push((i, lane));
                     parent_lanes.push((lane, c));
                 } else {
                     // 다른 레인으로 합류하는 선은 이 브랜치 색으로 그린다.
-                    let c = if k == 0 { color } else { lanes[i].as_ref().unwrap().color };
-                    if let Some(s) = lanes[i].as_mut() {
+                    let c = if k == 0 { color } else { lanes.slots[i].as_ref().unwrap().color };
+                    if let Some(s) = lanes.slots[i].as_mut() {
                         s.ghost = false; // 누군가 합류했으니 이제부터 선이 있다
                     }
                     parent_lanes.push((i, c));
                 }
                 continue;
             }
-            let (i, c) = if k == 0 {
-                (lane, color)
-            } else {
-                let i = lanes.iter().position(Option::is_none).unwrap_or_else(|| {
-                    lanes.push(None);
-                    lanes.len() - 1
-                });
-                (i, fresh_color())
-            };
-            lanes[i] = Some(Slot { expect: parent.clone(), color: c, ghost: false });
+            let (i, c) = if k == 0 { (lane, color) } else { (lanes.free(), fresh_color()) };
+            lanes.set(i, Slot { expect: parent, color: c, ghost: false });
             parent_lanes.push((i, c));
         }
 
         // 3. 다음 행으로 가는 선: 노드에서 부모 레인으로, 그리고 지나가는 레인들.
-        let mut edges: Vec<Edge> = parent_lanes
-            .iter()
-            .map(|&(to, c)| Edge { from: lane as u16, to: to as u16, color: c })
-            .collect();
+        let mut edges: Vec<Edge> = Vec::with_capacity(lanes.slots.len() + parent_lanes.len());
+        edges.extend(parent_lanes.iter().map(|&(to, c)| Edge { from: lane as u16, to: to as u16, color: c }));
         for &(from, to) in &moved {
-            let c = lanes[to].as_ref().unwrap().color;
+            let c = lanes.slots[to].as_ref().unwrap().color;
             edges.push(Edge { from: from as u16, to: to as u16, color: c });
         }
-        for (i, slot) in lanes.iter().enumerate() {
+        for (i, slot) in lanes.slots.iter().enumerate() {
             if let Some(s) = slot.as_ref().filter(|s| !s.ghost) {
                 // 노드에서 새로 시작한 부모 레인은 노드에서 나가는 선이 있으니 세로선을 더하지 않는다.
                 // 이미 이어지던 레인에 부모가 합류하는 경우는 그 레인의 세로선도 그대로 그린다 (끊기지 않게).
@@ -162,11 +201,11 @@ pub fn layout_with_head<'a>(nodes: impl IntoIterator<Item = Node<'a>>, head: Opt
         }
 
         // 오른쪽 끝의 빈 레인은 정리해서 그래프 폭이 계속 늘지 않게 한다.
-        while matches!(lanes.last(), Some(None)) {
-            lanes.pop();
+        while matches!(lanes.slots.last(), Some(None)) {
+            lanes.slots.pop();
         }
 
-        out.max_lanes = out.max_lanes.max(lanes.len().max(lane + 1) as u16);
+        out.max_lanes = out.max_lanes.max(lanes.slots.len().max(lane + 1) as u16);
         out.rows.push(Row { lane: lane as u16, color, edges });
     }
     out
@@ -235,5 +274,53 @@ mod tests {
     fn edges_serialize_flat() {
         let row = Row { lane: 1, color: 2, edges: vec![Edge { from: 0, to: 0, color: 3 }, Edge { from: 1, to: 0, color: 2 }] };
         assert_eq!(serde_json::to_string(&row).unwrap(), r#"{"lane":1,"color":2,"edges":[0,0,3,1,0,2]}"#);
+    }
+}
+
+#[cfg(test)]
+mod legacy;
+
+#[cfg(test)]
+mod same_as_legacy {
+    use super::*;
+
+    /// 무작위 DAG(머지·옥토퍼스·여러 브랜치 끝)를 date-order 비슷하게 만든다. 부모는 항상 자식보다 뒤.
+    fn random_history(n: usize, seed: u64) -> Vec<(String, Vec<String>)> {
+        let mut x = seed;
+        let mut rnd = move |m: usize| {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            (x % m as u64) as usize
+        };
+        (0..n)
+            .map(|i| {
+                let rest = n - 1 - i;
+                let np = if rest == 0 { 0 } else { match rnd(20) { 0..=11 => 1, 12..=15 => 2, 16 => 3, 17 => 4, 18 => 0, _ => 1 } };
+                let mut ps: Vec<String> = Vec::new();
+                for _ in 0..np {
+                    // 가까운 뒤쪽 커밋을 주로, 가끔 멀리
+                    let d = if rnd(4) == 0 { 1 + rnd(rest.min(400)) } else { 1 + rnd(rest.min(12)) };
+                    let p = format!("c{}", i + d);
+                    if !ps.contains(&p) {
+                        ps.push(p);
+                    }
+                }
+                (format!("c{i}"), ps)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn big_random_inputs_match_legacy_bytes() {
+        for (n, seed) in [(30_000, 1u64), (20_000, 7), (20_000, 99), (5_000, 12345)] {
+            let owned = random_history(n, seed);
+            let nodes = || owned.iter().map(|(id, ps)| Node { id, parents: ps });
+            for head in [None, Some("c0"), Some("c1"), Some("c37"), Some("c4000"), Some("nope")] {
+                let a = serde_json::to_string(&layout_with_head(nodes(), head)).unwrap();
+                let b = serde_json::to_string(&legacy::layout_with_head(nodes(), head)).unwrap();
+                assert!(a == b, "n={n} seed={seed} head={head:?}");
+            }
+        }
     }
 }

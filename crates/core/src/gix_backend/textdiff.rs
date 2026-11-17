@@ -4,6 +4,8 @@
 //! hunk 제목(기본 함수 패턴: 영문·`_`·`$`로 시작하는 위쪽 가장 가까운 줄, 80바이트)·`\ No newline at end of file`·`Binary files … differ`는 직접 만든다.
 //! `.gitattributes`의 diff 드라이버(함수 패턴·textconv)는 읽지 않는다.
 
+use std::borrow::Cow;
+
 use gix::diff::blob::{Algorithm, Diff, InternedInput};
 
 use super::common::quote_path;
@@ -43,16 +45,16 @@ fn lines(data: &[u8]) -> Vec<&[u8]> {
     out
 }
 
-/// 줄 비교용 키: 공백 무시 옵션에 맞춰 줄을 정규화한다 (출력은 원본 줄).
-fn key(line: &[u8], o: &Opts) -> Vec<u8> {
+/// 줄 비교용 키: 공백 무시 옵션에 맞춰 줄을 정규화한다 (출력은 원본 줄). 줄을 자르기만 하는 경우는 복사하지 않고 빌린다.
+fn key<'a>(line: &'a [u8], o: &Opts) -> Cow<'a, [u8]> {
     if o.ignore_ws {
-        line.iter().copied().filter(|b| !matches!(b, b' ' | b'\t' | b'\n' | b'\r')).collect()
+        Cow::Owned(line.iter().copied().filter(|b| !matches!(b, b' ' | b'\t' | b'\n' | b'\r')).collect())
     } else if o.ignore_eol {
         // 줄 끝의 `\n`·`\r`을 무시한다 (git은 마지막 줄의 개행 유무 차이도 같은 줄로 본다)
         let l = line.strip_suffix(b"\n").unwrap_or(line);
-        l.strip_suffix(b"\r").unwrap_or(l).to_vec()
+        Cow::Borrowed(l.strip_suffix(b"\r").unwrap_or(l))
     } else {
-        line.to_vec()
+        Cow::Borrowed(line)
     }
 }
 
@@ -81,7 +83,7 @@ fn range(start: usize, len: usize) -> String {
 /// 본문(hunk들). 바뀐 줄이 없으면 빈 문자열.
 fn hunks(old: &[u8], new: &[u8], o: &Opts) -> Vec<u8> {
     let (a, b) = (lines(old), lines(new));
-    let mut input: InternedInput<Vec<u8>> = InternedInput::default();
+    let mut input: InternedInput<Cow<[u8]>> = InternedInput::default();
     input.update_before(a.iter().map(|l| key(l, o)));
     input.update_after(b.iter().map(|l| key(l, o)));
     let mut diff = Diff::compute(Algorithm::Myers, &input);
@@ -89,6 +91,8 @@ fn hunks(old: &[u8], new: &[u8], o: &Opts) -> Vec<u8> {
     let changes: Vec<_> = diff.hunks().collect();
     let mut out = Vec::new();
     let mut i = 0;
+    // hunk 제목 탐색은 이전 hunk가 훑은 곳(`func_from`)까지만 거슬러 올라간다: 그 사이에 없으면 답은 이전 hunk의 제목과 같다
+    let (mut func_from, mut func_prev): (usize, Option<&[u8]>) = (0, None);
     while i < changes.len() {
         // 사이 공통 줄이 2*문맥 이하면 같은 hunk
         let mut j = i;
@@ -101,7 +105,9 @@ fn hunks(old: &[u8], new: &[u8], o: &Opts) -> Vec<u8> {
         let e1 = (last.before.end as usize + CONTEXT).min(a.len());
         let e2 = (last.after.end as usize + CONTEXT).min(b.len());
         out.extend(format!("@@ -{} +{} @@", range(s1, e1 - s1), range(s2, e2 - s2)).bytes());
-        if let Some(f) = a[..s1].iter().rev().find_map(|l| funcname(l)) {
+        let func = a[func_from.min(s1)..s1].iter().rev().find_map(|l| funcname(l)).or(func_prev);
+        (func_from, func_prev) = (s1, func);
+        if let Some(f) = func {
             out.push(b' ');
             out.extend(f);
         }

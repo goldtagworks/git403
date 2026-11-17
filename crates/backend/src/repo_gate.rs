@@ -589,30 +589,49 @@ fn targets(args: &Value, argv: Option<&[String]>) -> Vec<PathBuf> {
     out
 }
 
+/// `begin_write`의 결과: 요청이 끝날 때까지 들고 있을 작업 표지와, `git` 명령에서 이미 낸 판정(`dispatch`가 다시 파싱하지 않게).
+pub(crate) struct Gate {
+    pub(crate) reg: Option<crate::jobs::JobReg>,
+    pub(crate) git_writes: Option<bool>,
+}
+
 impl Backend {
     /// 쓰기 요청을 시작하기 전에 부른다(`dispatch` 진입부 한 곳). 읽기·AI 자신의 명령은 `Ok(None)`. 쓰기는 **작업으로 등록**하고(`jobs::register_job`, 종류 `Short`) AI 차례 잠금을 다시 확인한다 —
     /// 그 저장소에서 AI 차례가 도는 중이면(또는 어느 저장소인지 알 수 없으면) `aiChat.repoBusy`. 돌려준 표지(`JobReg`)를 요청이 끝날 때까지 들고 있으면 `ai_chat_start`의 겹침 확인이 이 쓰기를 본다.
     /// `start_job`·`start_shell`·`run_detached`는 자기 등록을 직접 한다(`Ok(None)`).
-    pub(crate) async fn begin_write(&self, cmd: &str, args: &Value) -> Res<Option<crate::jobs::JobReg>> {
+    pub(crate) async fn begin_write(&self, cmd: &str, args: &Value) -> Res<Gate> {
+        let mut gate = Gate { reg: None, git_writes: None };
         if matches!(cmd, "start_job" | "start_shell" | "run_detached") {
-            return Ok(None);
+            return Ok(gate);
+        }
+        // 명령 종류를 먼저 본다: 읽기 명령(대부분)은 인자를 파싱하지도 복사하지도 않는다
+        let class = class(cmd);
+        if matches!(class, Class::Read) {
+            return Ok(gate);
         }
         let argv: Option<Vec<String>> = args.get("args").and_then(|v| serde_json::from_value(v.clone()).ok());
-        let mut paths = match class(cmd) {
-            Class::Read => return Ok(None),
+        let mut paths = match class {
             Class::Git => match &argv {
-                Some(a) if !git_writes(a) => return Ok(None),
-                a => targets(args, a.as_deref().or(Some(&[]))),
+                Some(a) => {
+                    let w = git_writes(a);
+                    gate.git_writes = Some(w);
+                    if !w {
+                        return Ok(gate);
+                    }
+                    targets(args, Some(a))
+                }
+                None => targets(args, Some(&[])),
             },
-            Class::Write => targets(args, None),
+            _ => targets(args, None),
         };
         if paths.is_empty() {
-            return Ok(None);
+            return Ok(gate);
         }
         if argv.as_deref().is_some_and(hides_location) {
             paths.push(PathBuf::from(UNKNOWN_LOCATION));
         }
-        self.register_job(paths, crate::jobs::Kind::Short).await.map(Some)
+        gate.reg = Some(self.register_job(paths, crate::jobs::Kind::Short).await?);
+        Ok(gate)
     }
 
     /// 이 키들 중 하나라도 AI 차례가 도는 저장소이거나 어느 저장소인지 알 수 없으면(`unknown`) true. 메모리 확인뿐이다(키는 등록 때 이미 풀었다)

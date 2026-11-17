@@ -48,7 +48,7 @@ pub async fn file_diff(git: &GitRunner, repo: &Path, commit: &str, path: &str, i
     }
     a.extend([commit, "--", path]);
     let out = git.output(repo, &a).await?;
-    Ok(String::from_utf8_lossy(&out).into_owned())
+    Ok(crate::utf8_lossy(out))
 }
 
 #[cfg(feature = "cli")]

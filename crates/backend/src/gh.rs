@@ -211,6 +211,21 @@ struct Slot {
 /// 엉뚱한 계정 토큰을 주지 않게, 연결 없는 조회(hosting)가 이 계정을 `--user`로 명시한다.
 static SWITCHED_FROM: parking_lot::Mutex<std::collections::BTreeMap<String, String>> = parking_lot::Mutex::new(std::collections::BTreeMap::new());
 
+/// 최근에 "이 계정이 이 host의 gh에 로그인돼 있다"고 확인한 시각. `gh auth status`(프로세스)를 푸시·조회마다 다시 띄우지 않게 한다.
+/// **로그인돼 있음만** 기억한다(없음은 기억하지 않는다): 낡은 긍정은 뒤이은 `token_checked`가 오류로 막고, 낡은 부정은 연결 계정 대신 다른 계정을 쓰게 하므로.
+/// 활성 계정(`active`)은 여기 없다 — 전환·복원 판단은 항상 gh를 직접 읽는다.
+static LOGGED_IN: parking_lot::Mutex<BTreeMap<(String, String), std::time::Instant>> = parking_lot::Mutex::new(BTreeMap::new());
+const LOGGED_IN_TTL: Duration = Duration::from_secs(5);
+
+fn logged_in_cached(host: &str, user: &str) -> bool {
+    LOGGED_IN.lock().get(&(host.to_owned(), user.to_owned())).is_some_and(|t| t.elapsed() < LOGGED_IN_TTL)
+}
+
+/// gh_switch·gh_bind·lease 해제 때 비운다
+fn forget_logins() {
+    LOGGED_IN.lock().clear();
+}
+
 /// 그 host가 전환 구간이면 원래(복원 대상) 계정
 pub(crate) fn switched_from(host: &str) -> Option<String> {
     SWITCHED_FROM.lock().get(host).cloned()
@@ -439,7 +454,10 @@ impl Backend {
     }
 
     pub(crate) async fn gh_switch(&self, host: &str, user: &str) -> Res<()> {
-        self.gh().switch(host, user).await
+        forget_logins();
+        let r = self.gh().switch(host, user).await;
+        forget_logins();
+        r
     }
 
     pub(crate) async fn gh_repo_account(&self, repo: &Path) -> Res<RepoAccount> {
@@ -452,6 +470,7 @@ impl Backend {
 
     /// 저장소에 계정 연결(`None`이면 연결 해제)
     pub(crate) async fn gh_bind(&self, repo: &Path, user: Option<String>) -> Res<()> {
+        forget_logins();
         match user.filter(|u| !u.is_empty()) {
             Some(u) => self.backend.run(repo, &["config", "--local", BIND_KEY, &u], &[]).await.map(drop).map_err(err),
             None => self.backend.run(repo, &["config", "--local", "--unset", BIND_KEY], &[5]).await.map(drop).map_err(err),
@@ -475,11 +494,17 @@ impl Backend {
     /// "연결 없음"으로 넘기면 다른 계정으로 push·PR이 진행된다.
     async fn bound_for(&self, repo: &Path, remote: &RemoteRepo) -> Res<Option<Bound>> {
         let Some(user) = config_get(&*self.backend, repo, BIND_KEY).await? else { return Ok(None) };
+        if logged_in_cached(&remote.host, &user) {
+            return Ok(Some(Bound { host: remote.host.clone(), user }));
+        }
         let all = self.gh().accounts(Some(&remote.host)).await?;
         if !all.installed {
             return Ok(None);
         }
         let has = all.hosts.iter().any(|h| h.host == remote.host && h.accounts.iter().any(|a| a.user == user));
+        if has {
+            LOGGED_IN.lock().insert((remote.host.clone(), user.clone()), std::time::Instant::now());
+        }
         Ok(has.then(|| Bound { host: remote.host.clone(), user }))
     }
 
@@ -518,6 +543,7 @@ impl Backend {
 
     pub(crate) async fn gh_release(&self, lease: Lease, restore: bool, tx: &mpsc::UnboundedSender<JobEvent>) {
         lease.release(restore, progress_logger(tx)).await;
+        forget_logins();
     }
 }
 

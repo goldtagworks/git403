@@ -32,9 +32,7 @@ fn branch(r: &gix::Repository) -> (Option<String>, Option<String>, u32, u32) {
     let (mut ahead, mut behind) = (0, 0);
     if let (Ok(head), Ok(Some(mut upref))) = (r.head_id(), r.try_find_reference(up.as_ref())) {
         if let Ok(up_id) = upref.peel_to_id().map(|i| i.detach()) {
-            let head = head.detach();
-            let count = |tip: gix::ObjectId, hide: gix::ObjectId| r.rev_walk([tip]).with_hidden([hide]).all().map(|w| w.filter_map(|i| i.ok()).count() as u32).unwrap_or(0);
-            (ahead, behind) = (count(head, up_id), count(up_id, head));
+            (ahead, behind) = super::common::ahead_behind_ids(r, head.detach(), up_id);
         }
     }
     (Some(short), Some(upstream), ahead, behind)

@@ -28,6 +28,7 @@ pub struct AvatarResult {
 }
 
 /// 소문자 이메일 → URL. "계정 없음"(None)도 저장해 다시 요청하지 않는다. 같은 이메일의 동시 요청은 하나로 합친다.
+/// 동시 HTTP 요청 수 제한(`permit`)도 여기서 한다.
 pub struct AvatarCache {
     done: Mutex<HashMap<String, Option<String>>>,
     inflight: Mutex<HashMap<String, Arc<OnceCell<Option<String>>>>>,
@@ -48,7 +49,12 @@ impl AvatarCache {
         self.done.lock().insert(email, url);
     }
 
-    /// 캐시에 없으면 `fetch`로 가져온다(전역 동시 4개, 같은 키 진행 중이면 그 결과를 기다림).
+    /// HTTP 호출 하나 동안 들고 있는 자리표(전역 동시 4개). 호출 사이(예: GitHub → Gravatar 전환)에는 놓는다.
+    async fn permit(&self) -> tokio::sync::SemaphorePermit<'_> {
+        self.sem.acquire().await.expect("semaphore never closed")
+    }
+
+    /// 캐시에 없으면 `fetch`로 가져온다(같은 키 진행 중이면 그 결과를 기다림).
     /// `Ok`만 캐시하고 `Err`는 캐시하지 않는다.
     async fn fetch<Fut>(&self, key: &str, fetch: Fut) -> crate::Result<Option<String>>
     where
@@ -59,10 +65,7 @@ impl AvatarCache {
         }
         let cell = self.inflight.lock().entry(key.to_owned()).or_default().clone();
         let r = cell
-            .get_or_try_init(|| async {
-                let _permit = self.sem.acquire().await.expect("semaphore never closed");
-                fetch.await
-            })
+            .get_or_try_init(|| fetch)
             .await
             .cloned();
         if let Ok(v) = &r {
@@ -104,23 +107,48 @@ pub async fn author_avatars(
     let (repo, acct) = (repo.clone(), Arc::new(acct));
     let token = Arc::new(token);
     resolve(cache, items, move |sha, email| {
-        let (repo, acct, token) = (repo.clone(), acct.clone(), token.clone());
+        let (repo, acct, token, cache) = (repo.clone(), acct.clone(), token.clone(), cache.clone());
         async move {
-            match api::github_commit_avatar(&acct, token.as_deref(), &repo, &sha).await {
+            let first = {
+                let _p = cache.permit().await;
+                api::github_commit_avatar(&acct, token.as_deref(), &repo, &sha).await
+            };
+            match first {
                 Ok(Some(url)) => Ok(Some(url)),
                 // 작성자 계정 없음 → Gravatar. 없으면 "사진 없음"으로 캐시한다.
-                Ok(None) => api::gravatar(&email).await,
+                Ok(None) => {
+                    let _p = cache.permit().await;
+                    api::gravatar(&email).await
+                }
                 // 커밋이 없다(404: 아직 푸시 안 함·권한 없음) → Gravatar. 없으면 캐시하지 않아 푸시 후 다시 찾는다.
-                Err(crate::Error::NotFound) => match api::gravatar(&email).await {
-                    Ok(Some(url)) => Ok(Some(url)),
-                    _ => Err(crate::Error::NotFound),
-                },
+                Err(crate::Error::NotFound) => {
+                    let _p = cache.permit().await;
+                    match api::gravatar(&email).await {
+                        Ok(Some(url)) => Ok(Some(url)),
+                        _ => Err(crate::Error::NotFound),
+                    }
+                }
                 // 403 한도·네트워크·5xx는 캐시하지 않는다.
                 Err(e) => Err(e),
             }
         }
     })
     .await
+}
+
+/// 이메일이 전부 캐시에 있거나 noreply 주소면 네트워크 없이 같은 결과를 돌려준다(GitHub 원격으로 확인된 요청에서만 부를 것).
+pub fn cached_avatars(cache: &AvatarCache, items: &[AvatarQuery]) -> Option<Vec<AvatarResult>> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for q in items {
+        let key = q.email.to_lowercase();
+        if !seen.insert(key.clone()) {
+            continue;
+        }
+        let url = cache.get(&key).or_else(|| noreply_avatar(&key).map(Some))?;
+        out.push(AvatarResult { email: q.email.clone(), url, retry: false });
+    }
+    Some(out)
 }
 
 fn none_all(items: &[AvatarQuery]) -> Vec<AvatarResult> {
@@ -245,9 +273,11 @@ mod tests {
             let (cache, calls, now, peak) = (cache.clone(), calls.clone(), now.clone(), peak.clone());
             tasks.push(tokio::spawn(async move {
                 let items: Vec<_> = (0..10).map(|i| q(&format!("s{i}"), &format!("u{i}@e.com"))).collect();
-                resolve(&cache, &items, |_, _| {
-                    let (calls, now, peak) = (calls.clone(), now.clone(), peak.clone());
+                let c = cache.clone();
+                resolve(&cache, &items, move |_, _| {
+                    let (calls, now, peak, c) = (calls.clone(), now.clone(), peak.clone(), c.clone());
                     async move {
+                        let _p = c.permit().await; // 실제 코드처럼 HTTP 호출 하나를 감싼다
                         calls.fetch_add(1, Ordering::SeqCst);
                         let n = now.fetch_add(1, Ordering::SeqCst) + 1;
                         peak.fetch_max(n, Ordering::SeqCst);
@@ -265,6 +295,18 @@ mod tests {
         assert_eq!(calls.load(Ordering::SeqCst), 10, "중복 요청");
         assert!(peak.load(Ordering::SeqCst) <= 4, "동시성 {}", peak.load(Ordering::SeqCst));
         assert!(cache.inflight.lock().is_empty());
+    }
+
+    #[tokio::test]
+    async fn 전부_캐시에_있으면_네트워크_없이_돌려준다() {
+        let cache = Arc::new(AvatarCache::default());
+        let items = [q("a", "1+octo@users.noreply.github.com"), q("b", "X@e.com"), q("c", "x@E.com")];
+        assert!(cached_avatars(&cache, &items).is_none()); // x@e.com이 아직 없다
+        cache.put("x@e.com".into(), None);
+        let r = cached_avatars(&cache, &items).unwrap();
+        assert_eq!(r.len(), 2);
+        assert_eq!(r[0].url.as_deref(), Some("https://avatars.githubusercontent.com/octo"));
+        assert_eq!((r[1].email.as_str(), r[1].url.as_deref(), r[1].retry), ("X@e.com", None, false));
     }
 
     #[tokio::test]

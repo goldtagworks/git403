@@ -39,6 +39,10 @@ pub fn canonical(p: impl AsRef<Path>) -> std::io::Result<PathBuf> {
 pub fn real(p: impl AsRef<Path>) -> PathBuf {
     let p = p.as_ref();
     let abs = if p.is_absolute() { p.to_path_buf() } else { std::env::current_dir().unwrap_or_default().join(p) };
+    // 대부분은 전부 존재한다: 한 번의 canonicalize가 성분별 판정과 같은 결과를 낸다(성분마다 stat·canonicalize하지 않는다). 실패하면(없는 성분·깨진 링크) 아래 성분별 규칙으로.
+    if let Ok(full) = abs.canonicalize() {
+        return plain(full);
+    }
     let (mut cur, mut missing) = (PathBuf::new(), false);
     for c in abs.components() {
         match c {

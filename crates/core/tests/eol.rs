@@ -109,3 +109,23 @@ fn gitattributes_rule_on_disk() {
     fs::write(tmp.path().join(".gitattributes"), "* text=auto eol=lf\n").unwrap();
     assert!(root_has_eol_rule(tmp.path()));
 }
+
+#[tokio::test]
+async fn fix_crlf_batches_many_files() {
+    let tmp = repo();
+    let d = tmp.path();
+    let g = GitRunner::default();
+    let mut paths = Vec::new();
+    for i in 0..250 {
+        // 200개씩 묶는 경계(200·201번째)를 넘긴다. 짝수는 CRLF, 홀수는 이미 LF, 이름에 공백·줄바꿈 없는 한글도 섞는다
+        let name = if i % 50 == 0 { format!("한 글 {i}.txt") } else { format!("f{i}.txt") };
+        fs::write(d.join(&name), if i % 2 == 0 { format!("l{i}\r\nx\r\n") } else { format!("l{i}\nx\n") }).unwrap();
+        paths.push(name);
+    }
+    git(d, &["add", "-A"]);
+    fix_crlf(&g, d, &paths).await.unwrap();
+    for (i, n) in paths.iter().enumerate() {
+        assert_eq!(index_blob(d, n), format!("l{i}\nx\n").as_bytes(), "{n}");
+        assert_eq!(fs::read(d.join(n)).unwrap(), format!("l{i}\nx\n").as_bytes(), "{n}");
+    }
+}

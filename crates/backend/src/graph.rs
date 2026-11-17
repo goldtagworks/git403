@@ -18,6 +18,10 @@ pub(crate) async fn load_graph(git: &dyn GitBackend, repo: &Path, limit: usize, 
     let (commits, head) = tokio::join!(git.read_log(repo, limit, hidden), git.head_commit(repo));
     let commits = commits.map_err(err)?;
     // 현재 브랜치(HEAD)를 맨 왼쪽 레인에
-    let layout = gc_graph::layout_with_head(commits.iter().map(|c| gc_graph::Node { id: &c.id, parents: &c.parents }), head.as_deref());
-    Ok(GraphView { commits, layout })
+    // 수만 행 레이아웃은 CPU를 오래 쓰므로 async 워커를 막지 않게 블로킹 풀에서 계산한다
+    crate::util::off(move || {
+        let layout = gc_graph::layout_with_head(commits.iter().map(|c| gc_graph::Node { id: &c.id, parents: &c.parents }), head.as_deref());
+        Ok(GraphView { commits, layout })
+    })
+    .await
 }

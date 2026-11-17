@@ -49,6 +49,36 @@ pub use commit_graph::ensure_commit_graph;
 pub use eol::root_has_eol_rule;
 #[cfg(feature = "cli")]
 pub use eol::{fix_crlf, staged_crlf};
+
+/// 바이트 → 문자열(잘못된 UTF-8은 U+FFFD). 올바른 UTF-8이면 복사 없이 그대로 쓴다(큰 diff 출력의 이중 복사 방지).
+#[cfg(any(feature = "cli", feature = "gix"))]
+pub(crate) fn utf8_lossy(v: Vec<u8>) -> String {
+    String::from_utf8(v).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())
+}
+
+#[cfg(any(feature = "cli", feature = "gix"))]
+/// 본문 요약: 공백(줄바꿈 포함)을 한 칸으로 합치고 앞 `max`글자만. `max`글자를 채우면 거기서 멈춘다(긴 본문 전체를 복사하지 않는다).
+pub(crate) fn squash_ws(s: &str, max: usize) -> String {
+    let (mut out, mut n) = (String::new(), 0);
+    for w in s.split_whitespace() {
+        if n > 0 {
+            if n >= max {
+                break;
+            }
+            out.push(' ');
+            n += 1;
+        }
+        for c in w.chars() {
+            if n >= max {
+                return out;
+            }
+            out.push(c);
+            n += 1;
+        }
+    }
+    out
+}
+
 pub use conflict::ConflictBlobs;
 #[cfg(feature = "cli")]
 pub use conflict::conflict_blobs;

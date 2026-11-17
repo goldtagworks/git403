@@ -79,14 +79,17 @@ pub async fn create(git: &GitRunner, repo: &Path, id: &str) -> Result<Option<Bac
 
 /// 이 백업의 모든 ref(`ai-backup/<id>`·`ai-backup-heads/<id>/*`·`ai-backup-wip/<id>`)를 `이름 커밋` 줄로 모아 FNV-1a로 줄인다
 async fn digest_of(git: &GitRunner, repo: &Path, id: &str) -> Result<String> {
-    let mut lines = Vec::new();
-    for pat in [format!("{PREFIX}{id}"), format!("{WIP}{id}"), format!("{HEADS}{id}/")] {
-        let o = git.output(repo, &["for-each-ref", "--format=%(refname) %(objectname)", &pat]).await?;
-        lines.extend(String::from_utf8_lossy(&o).lines().filter(|l| {
+    // 패턴 셋을 한 번의 for-each-ref로(예전엔 셋을 따로 불렀다). 패턴이 더 넓게 맞춘 ref(`<id>/…`)는 아래 필터가 같은 규칙으로 걸러 낸다.
+    let (prefix, wip, heads) = (format!("{PREFIX}{id}"), format!("{WIP}{id}"), format!("{HEADS}{id}/"));
+    let o = git.output(repo, &["for-each-ref", "--format=%(refname) %(objectname)", &prefix, &wip, &heads]).await?;
+    let mut lines: Vec<String> = String::from_utf8_lossy(&o)
+        .lines()
+        .filter(|l| {
             let r = l.split(' ').next().unwrap_or_default();
-            r == format!("{PREFIX}{id}") || r == format!("{WIP}{id}") || r.starts_with(&format!("{HEADS}{id}/"))
-        }).map(str::to_owned));
-    }
+            r == prefix || r == wip || r.starts_with(&heads)
+        })
+        .map(str::to_owned)
+        .collect();
     lines.sort();
     Ok(format!("{:016x}", lines.join("\n").bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3))))
 }

@@ -59,6 +59,22 @@ impl Task {
 
     /// 구조화 출력용 JSON 스키마 (모든 객체 additionalProperties:false·required 전체)
     pub fn schema(self) -> Value {
+        self.schema_ref().clone()
+    }
+
+    /// 스키마는 작업마다 한 번만 만든다(호출·응답 검사마다 다시 만들지 않는다)
+    pub fn schema_ref(self) -> &'static Value {
+        static CACHE: [std::sync::OnceLock<Value>; 6] = [const { std::sync::OnceLock::new() }; 6];
+        CACHE[self as usize].get_or_init(|| self.build_schema())
+    }
+
+    /// `schema_ref`의 JSON 문자열(CLI 프롬프트에 그대로 들어간다)
+    pub fn schema_json(self) -> &'static str {
+        static CACHE: [std::sync::OnceLock<String>; 6] = [const { std::sync::OnceLock::new() }; 6];
+        CACHE[self as usize].get_or_init(|| self.schema_ref().to_string())
+    }
+
+    fn build_schema(self) -> Value {
         let s = || json!({"type": "string"});
         match self {
             Task::Commit => json!({"type":"object","properties":{"subject":s(),"body":s()},"required":["subject","body"],"additionalProperties":false}),
@@ -92,7 +108,7 @@ impl Task {
 
     /// 응답이 스키마(타입·필수·enum)를 만족하는지. CLI는 구조화 출력이 없어서 반드시 거친다.
     pub fn check(self, v: &Value) -> Result<()> {
-        check(&self.schema(), v, "")
+        check(self.schema_ref(), v, "")
     }
 }
 
@@ -251,7 +267,28 @@ pub fn build_prompt(parts: &[Part]) -> Result<String> {
     if size > MAX_INPUT_BYTES {
         return Err(Error::TooLarge { size, limit: MAX_INPUT_BYTES });
     }
-    Ok(parts.iter().map(|p| format!("### {}\n{}\n", p.label, p.text)).collect::<Vec<_>>().join("\n"))
+    let mut out = String::with_capacity(body_len(parts.iter()));
+    push_parts(&mut out, parts.iter());
+    Ok(out)
+}
+
+/// `### 라벨\n본문\n` 조각들을 빈 줄 하나(`\n`)로 이어 붙인 길이
+fn body_len<'a>(parts: impl ExactSizeIterator<Item = &'a Part>) -> usize {
+    let n = parts.len();
+    parts.map(|p| "### ".len() + p.label.len() + 1 + p.text.len() + 1).sum::<usize>() + n.saturating_sub(1)
+}
+
+fn push_parts<'a>(out: &mut String, parts: impl Iterator<Item = &'a Part>) {
+    for (i, p) in parts.enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        out.push_str("### ");
+        out.push_str(&p.label);
+        out.push('\n');
+        out.push_str(&p.text);
+        out.push('\n');
+    }
 }
 
 /// `build_prompt`에 작업별 규칙을 더한다. `CONVENTIONS_LABEL` 조각은 Commit·Pr이면 맨 앞 `<repo-conventions>…</repo-conventions>` 절로,
@@ -263,15 +300,22 @@ pub fn build_prompt_for(task: Task, parts: &[Part]) -> Result<String> {
     if size > MAX_INPUT_BYTES {
         return Err(Error::TooLarge { size: size + conv.map_or(0, str::len), limit: MAX_INPUT_BYTES });
     }
-    let body = rest.iter().map(|p| format!("### {}\n{}\n", p.label, p.text)).collect::<Vec<_>>().join("\n");
+    let body_len = body_len(rest.iter().copied());
     // 최종 문자열(여는·닫는 태그와 구분 줄바꿈 포함)이 상한 안이 되게, 본문과 태그 오버헤드를 뺀 만큼만 규칙에 준다
-    let budget = MAX_INPUT_BYTES.saturating_sub(body.len() + CONVENTIONS_OPEN.len() + CONVENTIONS_CLOSE.len() + "\n\n".len() + 1);
+    let budget = MAX_INPUT_BYTES.saturating_sub(body_len + CONVENTIONS_OPEN.len() + CONVENTIONS_CLOSE.len() + "\n\n".len() + 1);
     // 본문이 절을 열거나 닫지 못하게 태그를 깨뜨린다(이스케이프로 길이가 늘 수 있어 자르기 전에 한다)
     let conv = conv.map(|c| fit(&neutralize_tags(c), budget)).filter(|c| !c.is_empty());
-    Ok(match conv {
-        Some(c) => format!("{CONVENTIONS_OPEN}{c}\n{CONVENTIONS_CLOSE}\n\n{body}"),
-        None => body,
-    })
+    // 결과를 한 번에 만든다(본문을 따로 만들었다가 다시 복사하지 않는다)
+    let mut out = String::with_capacity(body_len + conv.as_ref().map_or(0, |c| c.len() + CONVENTIONS_OPEN.len() + CONVENTIONS_CLOSE.len() + 3));
+    if let Some(c) = conv {
+        out.push_str(CONVENTIONS_OPEN);
+        out.push_str(&c);
+        out.push('\n');
+        out.push_str(CONVENTIONS_CLOSE);
+        out.push_str("\n\n");
+    }
+    push_parts(&mut out, rest.iter().copied());
+    Ok(out)
 }
 
 /// `<repo-conventions>`·`</repo-conventions>`를 대소문자·공백(`< / repo-conventions >`) 무시하고 찾아 `<`를 `&lt;`로 바꾼다.

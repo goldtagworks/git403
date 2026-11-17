@@ -93,28 +93,58 @@ fn emit(path: &[u8], old: Option<&Side>, new: Option<&Side>, o: &Opts, out: &mut
     render(path, old, new, o, out);
 }
 
+/// `file_diff`의 한 변경: (경로, 이전 쪽, 이후 쪽). 이전·이후는 (모드, id).
+type Pair = (Vec<u8>, Option<(EntryMode, gix::ObjectId)>, Option<(EntryMode, gix::ObjectId)>);
+
 pub(super) fn file_diff(repo: &Path, commit: &str, path: &str, ignore_eol: bool, ignore_ws: bool) -> Result<String> {
     let r = open(repo)?;
     let (old, new) = trees(&r, commit)?;
-    // 경로 제한은 이름 변경 감지보다 먼저다: `git show <c> -- 새경로`는 이름 변경이 아니라 추가로 보인다.
-    let opts = gix::diff::Options::default();
-    let mut changes: Vec<Change> = r.diff_tree_to_tree(&old, &new, opts).map_err(fail)?.into_iter().filter(|c| !is_tree(c) && under(location(c), path)).collect();
-    changes.sort_by(|a, b| location(a).cmp(location(b)));
+    // 파일 경로면 트리 전체를 비교하지 않고 두 트리에서 그 항목만 찾는다. 디렉터리(트리 항목)·빈 경로·`.`은 전체 비교로 돌아간다.
+    let spec = path.strip_prefix("./").unwrap_or(path).trim_end_matches('/');
+    let entries = if spec.is_empty() || spec == "." {
+        None
+    } else {
+        let (o, n) = (old.lookup_entry_by_path(Path::new(spec)).map_err(fail)?, new.lookup_entry_by_path(Path::new(spec)).map_err(fail)?);
+        if o.as_ref().is_some_and(|e| e.mode().is_tree()) || n.as_ref().is_some_and(|e| e.mode().is_tree()) {
+            None
+        } else {
+            Some((o.map(|e| (e.mode(), e.object_id())), n.map(|e| (e.mode(), e.object_id()))))
+        }
+    };
+    let pairs: Vec<Pair> = match entries {
+        Some((o, n)) => match (o, n) {
+            (None, None) => vec![],
+            (Some(a), Some(b)) if a == b => vec![],
+            (o, n) => vec![(spec.as_bytes().to_vec(), o, n)],
+        },
+        None => {
+            // 경로 제한은 이름 변경 감지보다 먼저다: `git show <c> -- 새경로`는 이름 변경이 아니라 추가로 보인다.
+            let opts = gix::diff::Options::default();
+            let mut changes: Vec<Change> = r.diff_tree_to_tree(&old, &new, opts).map_err(fail)?.into_iter().filter(|c| !is_tree(c) && under(location(c), path)).collect();
+            changes.sort_by(|a, b| location(a).cmp(location(b)));
+            changes
+                .iter()
+                .map(|c| {
+                    let p = location(c).to_vec();
+                    match c {
+                        Change::Addition { entry_mode, id, .. } => (p, None, Some((*entry_mode, *id))),
+                        Change::Deletion { entry_mode, id, .. } => (p, Some((*entry_mode, *id)), None),
+                        Change::Modification { previous_entry_mode, previous_id, entry_mode, id, .. } => (p, Some((*previous_entry_mode, *previous_id)), Some((*entry_mode, *id))),
+                        Change::Rewrite { .. } => unreachable!("rewrites are not tracked here"),
+                    }
+                })
+                .collect()
+        }
+    };
     let abbrev = abbrev_fn(&r);
     let o = Opts { abbrev: &abbrev, ignore_eol, ignore_ws };
     let mut out = Vec::new();
-    for c in &changes {
-        let p = location(c).to_vec();
-        match c {
-            Change::Addition { entry_mode, id, .. } => emit(&p, None, Some(&side_of(&r, *entry_mode, *id)?), &o, &mut out),
-            Change::Deletion { entry_mode, id, .. } => emit(&p, Some(&side_of(&r, *entry_mode, *id)?), None, &o, &mut out),
-            Change::Modification { previous_entry_mode, previous_id, entry_mode, id, .. } => {
-                emit(&p, Some(&side_of(&r, *previous_entry_mode, *previous_id)?), Some(&side_of(&r, *entry_mode, *id)?), &o, &mut out)
-            }
-            Change::Rewrite { .. } => unreachable!("rewrites are not tracked here"),
-        }
+    for (p, a, b) in &pairs {
+        let a = a.map(|(m, id)| side_of(&r, m, id)).transpose()?;
+        let b = b.map(|(m, id)| side_of(&r, m, id)).transpose()?;
+        emit(p, a.as_ref(), b.as_ref(), &o, &mut out);
     }
-    Ok(String::from_utf8_lossy(&out).into_owned())
+    Ok(crate::utf8_lossy(out))
 }
 
 // ---- 작업 트리 ----
@@ -166,7 +196,7 @@ pub(super) fn worktree_diff(repo: &Path, path: &str, staged: bool, untracked: bo
             let side = Side { mode, id: blob_hash(&data)?, data };
             render(path.as_bytes(), None, Some(&side), &o, &mut out);
         }
-        return Ok(String::from_utf8_lossy(&out).into_owned());
+        return Ok(crate::utf8_lossy(out));
     }
     let index = r.index_or_empty().map_err(fail)?;
     if index.entry_by_path_and_stage(rela.as_ref(), gix::index::entry::Stage::Unconflicted).is_none() && index.entry_by_path(rela.as_ref()).is_some() {
@@ -196,7 +226,7 @@ pub(super) fn worktree_diff(repo: &Path, path: &str, staged: bool, untracked: bo
         };
         emit(path.as_bytes(), Some(&old), new.as_ref(), &o, &mut out);
     }
-    Ok(String::from_utf8_lossy(&out).into_owned())
+    Ok(crate::utf8_lossy(out))
 }
 
 // ---- file_blob ----
