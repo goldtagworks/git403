@@ -7,8 +7,8 @@
     "build": "tsc --noEmit && vite build",
     "dev:mock": "VITE_MOCK=1 vite",
     "e2e": "playwright test",
-    "e2e:app": "pnpm --dir .. tauri build --debug --no-bundle && node e2e/app/run.mjs",
-    "e2e:native": "pnpm --dir .. tauri build --debug --no-bundle && node e2e/app/native.mjs",
+    "e2e:app": "node e2e/app/build.mjs && node e2e/app/run.mjs",
+    "e2e:native": "node e2e/app/build.mjs && node e2e/app/native.mjs",
     "icons": "node scripts/gen-icons.mjs"
   },
   "dependencies": {

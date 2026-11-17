@@ -153,19 +153,19 @@ test.describe("우클릭 메뉴 순서", () => {
       await page.getByRole("menuitem", { name }).click();
     };
     await pickReset("Soft: 변경을 스테이지에 유지");
-    await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["reset", "--soft", expect.stringMatching(/^[0-9a-f]{40}$/)]);
+    await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "reset").at(-1)).toEqual(["reset", "--soft", expect.stringMatching(/^[0-9a-f]{40}$/)]);
     await pickReset("Mixed: 변경을 작업 디렉터리에 유지");
-    await expect.poll(async () => (await gitCalls(page)).at(-1)?.[1]).toBe("--mixed");
+    await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "reset").at(-1)?.[1]).toBe("--mixed");
     expect(await page.evaluate(() => (window as any).__asked.length)).toBe(0); // 선택창·확인창 없음
     await page.evaluate(() => ((window as any).__askNo = true));
-    const n = (await gitCalls(page)).length;
+    const n = (await gitCalls(page)).filter((c) => c[0] === "reset").length;
     await pickReset("Hard: 모든 변경 버리기");
     await expect.poll(() => page.evaluate(() => (window as any).__asked.length)).toBe(1); // hard는 확인
     await page.waitForTimeout(200);
-    expect((await gitCalls(page)).length).toBe(n); // 아니오면 실행 안 함
+    expect((await gitCalls(page)).filter((c) => c[0] === "reset").length).toBe(n); // 아니오면 실행 안 함
     await page.evaluate(() => ((window as any).__askNo = false));
     await pickReset("Hard: 모든 변경 버리기");
-    await expect.poll(async () => (await gitCalls(page)).at(-1)?.[1]).toBe("--hard");
+    await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "reset").at(-1)?.[1]).toBe("--hard");
   });
 
   test("스태시가 가리키는 커밋 행은 맨 위에 스태시 항목(적용·pop·삭제·이름 변경)이 붙는다", async ({ page }) => {

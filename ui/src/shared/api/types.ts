@@ -207,6 +207,12 @@ export interface JjChangeId { short: string; full: string }
 /** jj 쓰기 작업이 성공하며 돌려주는 경고(`Coded` 값) */
 export interface JjWarning { code: string; vars: Record<string, string>; message: string }
 export interface JjStatus { workingCopy: string | null; changeIds: Record<string, JjChangeId>; conflicted: string[]; truncated: boolean }
+/** operation log 항목(30f): id = 전체 16진, time = ms */
+export interface JjOpEntry { id: string; short: string; time: number; description: string; user: string | null }
+export interface JjRemoteBookmark { remote: string; sha: string | null; tracked: boolean }
+/** target = 충돌·원격만이면 null, targets = 충돌이면 전부, local = false면 원격에만 있음 */
+export interface JjBookmark { name: string; target: string | null; targets: string[]; local: boolean; remotes: JjRemoteBookmark[] }
+export interface JjDisableCheck { orphans: { sha: string; changeId: string; description: string }[]; workingCopyDescribed: boolean; workingCopyMerge: boolean; otherWorkspaces: number; opId: string }
 export interface GhRepoAccount { host: string; bound: string | null; active: string | null; remote: string | null }
 export interface GhProbe { user: string; ok: boolean }
 

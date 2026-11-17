@@ -7,7 +7,8 @@ import { showMenu, type MenuEntry } from "../../shared/ui/menu";
 import { FLOW_OPS, ops } from "../../shared/model/ops";
 import { pref, setPref } from "../../shared/lib/settings";
 import { supports, useCaps } from "../../shared/lib/caps";
-import { isMobile } from "../../shared/lib/platform";
+import { isMac, isMobile } from "../../shared/lib/platform";
+import { JjUndo } from "./JjUndo";
 import { aiChat } from "../../shared/model/aichat";
 import { countRender } from "../../shared/lib/profile";
 import type { ThemeMode } from "../../shared/lib/theme";
@@ -142,6 +143,18 @@ export const Toolbar = memo(function Toolbar(p: Props) {
           { label: t("toolbar.applyPatch"), op: ["apply", "am"], action: ops.applyPatch },
           { label: t("toolbar.stats"), op: "repo_stats", action: ops.repoStats },
           ops.jjEnabled() ? { label: t("toolbar.jjView"), checked: ops.jjOn(), action: ops.jjToggleView } : { label: t("toolbar.jjEnable"), action: ops.jjEnable },
+          ...(ops.jjEnabled() && !isMobile
+            ? [{
+                label: t("toolbar.jjMenu"),
+                submenu: [
+                  { label: t("toolbar.jjOpLog"), action: ops.jjOpLog },
+                  { label: t("toolbar.jjBookmarks"), action: ops.jjBookmarks },
+                  { label: t("toolbar.jjUndo"), action: () => void ops.jjUndo(), hint: isMac ? "⌘⌥Z" : "Ctrl+Alt+Z" },
+                  { separator: true },
+                  { label: t("toolbar.jjDisable"), action: ops.jjDisable },
+                ],
+              } as MenuEntry]
+            : []),
           { label: "Git Flow", op: FLOW_OPS, submenu: ops.flowMenu() } as MenuEntry,
           {
             label: "LFS",
@@ -180,6 +193,7 @@ export const Toolbar = memo(function Toolbar(p: Props) {
       <Tool op="branch" icon="newBranch" label={t("toolbar.branch")} onClick={() => ops.createBranch()} disabled={none} why={needRepo} />
       <Tool op="stash" icon="stashPush" label={t("toolbar.stash")} onClick={ops.stash} menu={() => [{ label: t("toolbar.stashMenu"), op: "stash", action: ops.stash }, { label: t("toolbar.snapshot"), op: "stash", action: ops.snapshot }]} disabled={none || !p.status?.files.length} why={none ? needRepo : t("toolbar.noChanges")} />
       <Tool op="stash" icon="stashPop" label={t("toolbar.pop")} onClick={() => ops.pop()} badge={stashes} disabled={none || !stashes} why={none ? needRepo : t("toolbar.noStash")} />
+      {!isMobile && <JjUndo repo={p.repo} />}
       <div className="tool-sep" />
       {aiChat.available && <Tool icon="sparkle" label={t("aiChat.title")} onClick={ops.aiChatToggle} disabled={none} why={needRepo} />}
       <Tool icon="launch" label={t("toolbar.quick")} onClick={p.onQuickLaunch} />

@@ -192,6 +192,18 @@ for (const size of [...PHONES, ...TABLETS]) {
     await shot(page, "commits", size, info);
   });
 
+  test(`${tag}: jj가 켜진 저장소의 길게 누르기 메뉴에는 jj 항목이 하나도 없고 되돌리기·시트도 없다`, async ({ page }) => {
+    await start(page, size, () => Object.assign(window, { __jj: { enabled: true, status: { workingCopy: null, changeIds: { ["0".repeat(40)]: { short: "abcdefabcdef", full: "abcdefabcdefabcdefabcdefabcdefab" } }, conflicted: [], truncated: false } } }));
+    await openRepo(page);
+    await press(page, "로그 파서");
+    const menu = page.getByRole("menu");
+    await expect(menu.getByRole("menuitem", { name: "SHA 복사" })).toBeVisible();
+    for (const n of [/새 변경/, /설명 편집/, /편집 \(@/, /부모로 합치기/, /버리기/, /북마크/, /되돌리기/, /작업 기록/, /jj/]) await expect(menu.getByRole("menuitem", { name: n })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".jj-undo")).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
   test(`${tag}: 길게 누르면 바닥 액션 시트가 뜨고 미지원 작업은 없다`, async ({ page }, info) => {
     await start(page, size);
     await openRepo(page);

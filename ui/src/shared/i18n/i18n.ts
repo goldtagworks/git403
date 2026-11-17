@@ -1,8 +1,9 @@
 // 다국어: 라이브러리 없이 최소 구조. 문구는 locales/en.ts(키 타입의 원본)와 언어별 locales/xx.ts(Record<Key,string>)에 있다.
 // 언어 추가 = locales/xx.ts 한 파일 + settings.ts LOCALES·아래 DICTS·LANGS에 한 줄 + Rust SUPPORTED_LOCALES (키가 빠지면 빌드 실패).
-// 이 파일은 settings.ts 외에는 아무것도 import하지 않는다 (api·ops가 t를 쓰므로 순환 방지).
+// 이 파일은 settings.ts·lib/safeText.ts(순수 함수, 의존 없음) 외에는 아무것도 import하지 않는다 (api·ops가 t를 쓰므로 순환 방지).
 import { useSyncExternalStore } from "react";
 import { en, type Key } from "./locales/en";
+import { visibleText } from "../lib/safeText";
 import { ko } from "./locales/ko";
 import { zhCN } from "./locales/zh-CN";
 import { zhTW } from "./locales/zh-TW";
@@ -98,8 +99,9 @@ export function t(key: Key, vars?: Vars): string {
     .replace(/\{(\w+)\}/g, (m, n: string) => (n in vars ? String(vars[n]) : m));
 }
 
-/** IPC 오류 코드 번역(`err.<code>`). 사전에 없는 코드면 Rust가 준 영어 원문 */
-export const tErr = (code: string, vars: Vars | undefined, message: string) => (`err.${code}` in en ? t(`err.${code}` as Key, vars) : message);
+/** IPC 오류 코드 번역(`err.<code>`). 사전에 없는 코드면 Rust가 준 영어 원문. 변수·원문에는 불신 문자열이 담길 수 있어 `visibleText`로 보이지 않는 문자를 가시화한다(여러 줄 폴백 message만 줄바꿈 유지) */
+export const tErr = (code: string, vars: Vars | undefined, message: string) =>
+  `err.${code}` in en ? t(`err.${code}` as Key, vars && Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, typeof v === "string" ? visibleText(v) : v]))) : visibleText(message, true);
 
 const fmts = new Map<string, Intl.DateTimeFormat>();
 /** 현재 언어의 날짜 포맷터 (언어·옵션별로 하나만 만든다) */

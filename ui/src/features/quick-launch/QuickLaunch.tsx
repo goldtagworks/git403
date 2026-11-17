@@ -1,4 +1,5 @@
 import { isMac, isMobile } from "../../shared/lib/platform";
+import { COMPACT } from "../../shared/api/bridge";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { t, useLocale } from "../../shared/i18n/i18n";
 import { bigView } from "../../shared/model/bigview";
@@ -47,6 +48,15 @@ export function QuickLaunch({ recent, onOpen, onClose }: { recent: string[]; onO
       { label: t("layout.toggle"), hint: isMac ? "⌘⌥B" : "Ctrl+Alt+B", run: ops.toggleLayout },
       ...(bigView.avail || bigView.open ? [{ label: t("quick.big"), run: bigView.toggle }] : []), // 보여 줄 diff가 없으면 항목을 숨긴다
       ...(ops.jjOn() ? [{ label: t("changes.jjNew"), hint: "jj", run: () => void ops.jjNewWorking() }, { label: t("graph.jjDescribe"), hint: "jj", run: () => void ops.jjDescribe() }] : []),
+      ...(!COMPACT && !ops.jjEnabled() ? [{ label: t("toolbar.jjEnable"), hint: "jj", run: ops.jjEnable }] : []), // 네이티브 메뉴를 못 누르는 실제 앱 E2E의 경로이기도 하다
+      ...(!COMPACT && ops.jjEnabled()
+        ? [
+            { label: t("toolbar.jjUndo"), hint: "jj", run: () => void ops.jjUndo() },
+            { label: t("toolbar.jjOpLog"), hint: "jj", run: ops.jjOpLog },
+            { label: t("toolbar.jjBookmarks"), hint: "jj", run: ops.jjBookmarks },
+            { label: t("toolbar.jjDisable"), hint: "jj", run: ops.jjDisable },
+          ]
+        : []),
       { label: "Fetch", op: "fetch", run: ops.fetch },
       { label: "Pull", op: "pull", run: ops.pullQuick },
       { label: "Pull…", hint: t("quick.h3"), op: "pull_opts", run: ops.pull },

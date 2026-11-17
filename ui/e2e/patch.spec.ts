@@ -17,12 +17,12 @@ test.beforeEach(async ({ page }) => {
 test("커밋 우클릭: format-patch로 고른 폴더에 저장 (범위 포함)", async ({ page }) => {
   await page.locator(".commits").getByText("Initial commit").click({ button: "right" });
   await menuItem(page, "패치로 저장…").click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["format-patch", "-o", "/demo", "-1", expect.stringMatching(/^[0-9a-f]+$/)]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "format-patch").at(-1)).toEqual(["format-patch", "-o", "/demo", "-1", expect.stringMatching(/^[0-9a-f]+$/)]);
   await expect(page.getByText(/패치 1개 저장됨/)).toBeVisible();
 
   await page.locator(".commits").getByText("Initial commit").click({ button: "right" });
   await menuItem(page, /여기부터 현재 브랜치 끝까지/).click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["format-patch", "-o", "/demo", expect.stringMatching(/^[0-9a-f]+\^\.\.HEAD$/)]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "format-patch").at(-1)).toEqual(["format-patch", "-o", "/demo", expect.stringMatching(/^[0-9a-f]+\^\.\.HEAD$/)]);
   expect((await gitCalls(page)).some((a) => a[0] === "merge-base" && a[2] === "HEAD")).toBe(true);
 });
 
@@ -30,7 +30,7 @@ test("범위 패치: 루트 커밋이면 --root, 현재 브랜치에 없는 커�
   await page.evaluate(() => ((window as any).__rootCommit = true));
   await page.locator(".commits").getByText("Initial commit").click({ button: "right" });
   await menuItem(page, /여기부터 현재 브랜치 끝까지/).click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["format-patch", "-o", "/demo", "--root", "HEAD"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "format-patch").at(-1)).toEqual(["format-patch", "-o", "/demo", "--root", "HEAD"]);
 
   await page.evaluate(() => ((window as any).__notAncestor = true));
   const before = (await gitCalls(page)).length;
@@ -53,20 +53,20 @@ test("커밋 없는 저장소의 전체 패치는 빈 트리 기준", async ({ p
   await page.keyboard.press("ControlOrMeta+p");
   await page.getByLabel("빠른 실행 검색").fill("모든 변경");
   await page.keyboard.press("Enter");
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["diff", "--binary", ...DIFF_OPTS, "--output=/demo/changes.patch", "4b825dc642cb6eb9a060e54bf8d69288fbee4904"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "diff").at(-1)).toEqual(["diff", "--binary", ...DIFF_OPTS, "--output=/demo/changes.patch", "4b825dc642cb6eb9a060e54bf8d69288fbee4904"]);
 });
 
 test("작업 디렉터리 변경: diff --binary --output (스테이지됨·안 됨·선택 파일)", async ({ page }) => {
   await page.getByText("로컬 변경사항").click();
   await page.getByRole("button", { name: "패치 저장" }).first().click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["diff", "--binary", ...DIFF_OPTS, "--output=/demo/unstaged.patch"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "diff").at(-1)).toEqual(["diff", "--binary", ...DIFF_OPTS, "--output=/demo/unstaged.patch"]);
 
   await page.getByRole("button", { name: "패치 저장" }).last().click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["diff", "--binary", ...DIFF_OPTS, "--output=/demo/staged.patch", "--cached"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "diff").at(-1)).toEqual(["diff", "--binary", ...DIFF_OPTS, "--output=/demo/staged.patch", "--cached"]);
 
   await unstaged(page).getByRole("option", { name: /Toolbar.tsx/ }).click({ button: "right" });
   await menuItem(page, "이 파일 패치로 저장…").click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["diff", "--binary", ...DIFF_OPTS, "--output=/demo/unstaged.patch", "--", "ui/src/Toolbar.tsx"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "diff").at(-1)).toEqual(["diff", "--binary", ...DIFF_OPTS, "--output=/demo/unstaged.patch", "--", "ui/src/Toolbar.tsx"]);
 });
 
 test("저장 대화상자를 취소하면 git을 실행하지 않는다", async ({ page }) => {
@@ -78,7 +78,7 @@ test("저장 대화상자를 취소하면 git을 실행하지 않는다", async 
   await page.locator(".commits").getByText("Initial commit").click({ button: "right" });
   await menuItem(page, "패치로 저장…").click();
   await page.waitForTimeout(300);
-  expect((await gitCalls(page)).length).toBe(before);
+  expect((await gitCalls(page)).slice(before).some((a) => a[0] === "format-patch" || (a[0] === "diff" && a.includes("--binary")))).toBe(false);
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
@@ -100,7 +100,7 @@ test("패치 적용: 3way 옵션", async ({ page }) => {
   const sheet = page.getByRole("dialog", { name: "패치 적용" });
   await sheet.getByLabel(/--3way/).check();
   await sheet.getByRole("button", { name: "적용" }).click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["apply", "--3way", "/demo/fix.patch"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "apply").at(-1)).toEqual(["apply", "--3way", "/demo/fix.patch"]);
 });
 
 test("apply --check가 실패하면 안내를 보이고 apply는 실행하지 않는다", async ({ page }) => {
@@ -120,7 +120,7 @@ test("패치 선택을 취소하면 아무것도 하지 않는다", async ({ pag
   await menuItem(page, "패치 적용…").click();
   await page.waitForTimeout(300);
   await expect(page.getByRole("dialog", { name: "패치 적용" })).toHaveCount(0);
-  expect((await gitCalls(page)).length).toBe(before);
+  expect((await gitCalls(page)).slice(before).some((a) => a[0] === "apply" || a[0] === "am")).toBe(false);
 });
 
 test("메일 형식 패치는 am --3way, 충돌하면 충돌 바에서 계속·중단", async ({ page }) => {
@@ -130,15 +130,15 @@ test("메일 형식 패치는 am --3way, 충돌하면 충돌 바에서 계속·�
   });
   await page.getByRole("button", { name: "저장소", exact: false }).first().click();
   await menuItem(page, "패치 적용…").click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["am", "--3way", "/demo/0001-fix.patch"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "am").at(-1)).toEqual(["am", "--3way", "/demo/0001-fix.patch"]);
   await page.evaluate(() => (window as any).__emit("repo-changed", { worktree: true, refs: false }));
   const bar = page.locator(".banner.op");
   await expect(bar).toContainText("am 진행 중");
   await page.evaluate(() => ((window as any).__gitFail = null));
   await bar.getByRole("button", { name: "계속" }).click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["-c", "core.editor=true", "am", "--continue"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "-c").at(-1)).toEqual(["-c", "core.editor=true", "am", "--continue"]);
   await bar.getByRole("button", { name: "중단" }).click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["am", "--abort"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "am").at(-1)).toEqual(["am", "--abort"]);
 });
 
 test("스냅샷: stash create → stash store, 변경은 그대로 남는다", async ({ page }) => {

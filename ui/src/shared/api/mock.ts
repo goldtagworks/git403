@@ -377,6 +377,9 @@ const resolve = (name: string) => {
   return id;
 };
 
+/** E2E: window.__jj.delay(ms)가 있으면 jj 응답을 그만큼 늦춘다(오류도 같이) */
+const jjLater = (j: { delay?: number }, f: () => unknown) => (j.delay ? new Promise((ok, err) => setTimeout(() => { try { ok(f()); } catch (e) { err(e); } }, j.delay)) : f());
+
 function handle(cmd: string, args: any): any {
   {
     if (cmd === "initial_repo") return null;
@@ -515,7 +518,8 @@ function handle(cmd: string, args: any): any {
     // plugin-dialog 2.x의 ask()는 message 명령 + "Yes". E2E: window.__asked = [] 면 묻는 문구를 모으고, window.__askNo = true 면 "아니오"
     if (cmd === "plugin:dialog|message") {
       (window as any).__asked?.push((args as { message: string }).message);
-      const ans = (window as any).__askNo ? "No" : "Yes";
+      const ok = (args as { buttons?: { OkCancelCustom?: string[] } | string }).buttons; // okLabel을 준 ask()는 눌린 버튼 라벨이 okLabel과 같아야 true
+      const ans = (window as any).__askNo ? "No" : typeof ok === "object" && ok?.OkCancelCustom ? ok.OkCancelCustom[0] : "Yes";
       return (window as any).__slowAsk ? new Promise((r) => setTimeout(() => r(ans), (window as any).__slowAsk)) : ans; // E2E: __slowAsk(ms) = 확인창이 떠 있는 시간
     }
     if (cmd === "worktree_diff") {
@@ -814,13 +818,59 @@ function handle(cmd: string, args: any): any {
       return j.status ?? { workingCopy: null, changeIds: {}, conflicted: [], truncated: false };
     }
     // jj 쓰기(30e): 호출만 gitCalls에 [cmd, ...인자]로 기록(결과 상태는 window.__jj.status로 테스트가 정함). window.__jj.fail(JSON 문자열)이 있으면 그 오류로 실패, window.__jj.warn이 있으면 그 경고 배열 반환
-    if (/^jj_(new|describe|edit|squash|split|abandon)$/.test(cmd)) {
+    if (/^jj_(new|describe|edit|squash|split|abandon|undo|op_restore|bookmark_set|bookmark_delete|bookmark_track)$/.test(cmd)) {
       const j = ((window as any).__jj ??= {});
       if (!j.enabled) throw JSON.stringify({ code: "jj.notEnabled", vars: {}, message: "jj is not enabled for this repository" });
       if (j.fail) throw j.fail;
-      const a = args as { parents?: string[]; sha?: string | null; message?: string; paths?: string[] | null };
-      gitCalls.push([cmd, ...(a.parents ? [a.parents.join(",")] : []), ...(a.sha ? [a.sha] : []), ...(a.message !== undefined ? [a.message] : []), ...(a.paths ? [a.paths.join(",")] : [])]);
-      return j.warn ?? []; // E2E: window.__jj.warn = [{code, vars, message}] 이면 경고 반환
+      const a = args as { parents?: string[]; sha?: string | null; message?: string; paths?: string[] | null; opId?: string; name?: string; remote?: string; allowBackwards?: boolean };
+      // 30f 불신 이름 시험: 이름에 보이지 않는 서식 문자(Cf)가 있으면 백엔드처럼 jj.badBookmark로 거절
+      if (a.name && /\p{Cf}/u.test(a.name) && cmd !== "jj_bookmark_set") throw JSON.stringify({ code: "jj.badBookmark", vars: { name: a.name }, message: `Invalid bookmark name: ${a.name}` });
+      if (cmd === "jj_bookmark_set" && j.backwards && !a.allowBackwards) throw JSON.stringify({ code: "jj.bookmarkBackwards", vars: { name: a.name }, message: "Moving bookmark backwards needs confirmation" });
+      gitCalls.push([cmd, ...(a.parents ? [a.parents.join(",")] : []), ...(a.sha ? [a.sha] : []), ...(a.message !== undefined ? [a.message] : []), ...(a.paths ? [a.paths.join(",")] : []), ...(a.opId ? [a.opId] : []), ...(a.name ? [a.name] : []), ...(a.remote ? [a.remote] : []), ...(cmd === "jj_bookmark_set" ? [String(!!a.allowBackwards)] : [])]);
+      return jjLater(j, () => j.warn ?? []); // E2E: window.__jj.warn = [{code, vars, message}] 이면 경고 반환, window.__jj.delay(ms) = 응답 지연(탭 전환 시험)
+    }
+    // jj 30f 조회: window.__jj.ops(operation log)·bookmarks·checks(jj_disable_check 결과 배열, 호출마다 하나씩 소비·마지막 반복)·checkFail·disableFail(한 번)·disableWarn·disablePartialGone·delay(ms)
+    if (/^jj_(op_log|bookmarks|disable_check|disable)$/.test(cmd)) {
+      const j = ((window as any).__jj ??= {});
+      if (!j.enabled) throw JSON.stringify({ code: "jj.notEnabled", vars: {}, message: "jj is not enabled for this repository" });
+      const a = args as { limit?: number | null; expect?: { opId?: string } };
+      if (cmd === "jj_op_log") {
+        gitCalls.push(["jj_op_log", String(a.limit ?? "")]);
+        const all = j.ops ?? [
+          { id: "a1".repeat(32), short: "a1a1a1a1a1a1", time: Date.now() - 60_000, description: "new empty commit", user: "dev@host" },
+          { id: "b2".repeat(32), short: "b2b2b2b2b2b2", time: Date.now() - 3_600_000, description: "snapshot working copy", user: "dev@host" },
+          { id: "c3".repeat(32), short: "c3c3c3c3c3c3", time: Date.now() - 7_200_000, description: "describe commit 0123456789abcdef", user: null },
+          { id: "d4".repeat(32), short: "d4d4d4d4d4d4", time: Date.now() - 86_400_000, description: "new empty commit", user: "dev@host" },
+          { id: "e5".repeat(32), short: "e5e5e5e5e5e5", time: Date.now() - 172_800_000, description: "import git refs", user: "dev@host" },
+        ];
+        return jjLater(j, () => all.slice(0, a.limit ?? 50));
+      }
+      if (cmd === "jj_bookmarks") {
+        gitCalls.push(["jj_bookmarks"]);
+        return j.bookmarks ?? [
+          { name: "main", target: sha("c1"), targets: [sha("c1")], local: true, remotes: [{ remote: "origin", sha: sha("c1"), tracked: true }] },
+          { name: "topic", target: sha("c2"), targets: [sha("c2")], local: true, remotes: [{ remote: "origin", sha: sha("c2"), tracked: false }] },
+          { name: "feature/x", target: null, targets: [], local: false, remotes: [{ remote: "origin", sha: sha("c3"), tracked: false }] },
+          { name: "clash", target: null, targets: [sha("x1"), sha("x2")], local: true, remotes: [] },
+        ];
+      }
+      if (cmd === "jj_disable_check") {
+        gitCalls.push(["jj_disable_check"]);
+        if (j.checkFail) throw j.checkFail;
+        const list = j.checks ?? [{ orphans: [], workingCopyDescribed: false, workingCopyMerge: false, otherWorkspaces: 0, opId: "abc" }];
+        return jjLater(j, () => (list.length > 1 ? list.shift() : list[0]));
+      }
+      gitCalls.push(["jj_disable", a.expect?.opId ?? ""]);
+      return jjLater(j, () => {
+        if (j.disableFail) {
+          const f = j.disableFail;
+          j.disableFail = null;
+          if (j.disablePartialGone) j.enabled = false; // `.jj` 단계 부분 실패: 이미 꺼진 뒤
+          throw f;
+        }
+        j.enabled = false;
+        return j.disableWarn ?? [];
+      });
     }
     if (cmd === "account_remove") {
       const { account } = args as { account: HostAccount };

@@ -553,6 +553,192 @@ try {
     git("branch", "-q", "-D", "cmp-a", "cmp-b");
   });
 
+  // ---- jj 30f: 실제 UI 경로(빠른 실행 팔레트·우클릭 메뉴·prompt·시트·OS ask)로 진행한다. IPC 직접 호출은 준비·검증(상태 읽기, 밖에서 jj가 바뀐 상황)에만 쓴다.
+  // 네이티브 메뉴는 JS로 못 누르므로 `window.__e2eDomMenu = true`로 우클릭 메뉴를 DOM 메뉴로 띄운다(menu.tsx). OS 확인창은 invoke를 가로채 문구를 모으고 승인한다(window.__asked).
+  const jjInv = (cmd, args = {}) => js(`try { return { ok: await window.__TAURI_INTERNALS__.invoke(${JSON.stringify(cmd)}, ${JSON.stringify({ repo, ...args })}) }; } catch (e) { return { err: String(e) }; }`);
+  const jjOk = async (cmd, args) => { const r = await jjInv(cmd, args); if (r.err) throw new Error(`${cmd}: ${r.err}`); return r.ok; };
+  const hookAsk = () => js(`window.__e2eDomMenu = true; if (!window.__askHooked) { window.__askHooked = true; window.__asked = []; const inv = window.__TAURI_INTERNALS__.invoke.bind(window.__TAURI_INTERNALS__); window.__TAURI_INTERNALS__.invoke = (cmd, args, opts) => cmd === "plugin:dialog|message" ? (window.__asked.push(args.message), Promise.resolve(window.__askNo ? "No" : args.buttons?.OkCancelCustom?.[0] ?? "Yes")) : inv(cmd, args, opts); }`);
+  const dlgJs = (name) => `$$('[role=dialog]').find((d) => d.getAttribute("aria-label") === ${JSON.stringify(name)})`;
+  const esc = () => js(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));`);
+  const quick = (label) => js(`
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "p", metaKey: true, ctrlKey: true, bubbles: true }));
+    const input = await waitFor(() => $('[role=dialog] input'), "빠른 실행 입력");
+    fill(input, ${JSON.stringify(label)});
+    press(await waitFor(() => $$('[role=dialog] [role=option]').find((o) => o.textContent.includes(${JSON.stringify(label)}) && o.textContent.includes("jj")), "팔레트 항목 ${label}"));
+  `);
+  /** 커밋 행 우클릭 → DOM 메뉴 항목 누르기 */
+  const rowMenu = (subject, item) => js(`
+    rightClick(await waitFor(() => $$(".commits .row").find((r) => r.textContent.includes(${JSON.stringify(subject)})), "커밋 행 ${subject}"));
+    press(await waitFor(() => $$('[role=menuitem]').find((m) => m.textContent.trim().startsWith(${JSON.stringify(item)})), "메뉴 ${item}"));
+  `);
+  /** "북마크 만들기" prompt에 이름을 넣고 만든다 */
+  const bookmarkPrompt = (name) => js(`
+    const d = await waitFor(() => ${dlgJs("북마크 만들기")}, "북마크 prompt");
+    fill($("input", d), ${JSON.stringify(name)});
+    press($$("button", d).find((b) => b.textContent.trim() === "만들기"));
+  `);
+  const jjMarks = () => js(`return $$(".jj-mark").length;`);
+  const asked = () => js(`return window.__asked ?? [];`);
+  const opLog = async () => jjOk("jj_op_log", { limit: 200 });
+  const toastHas = (text) => js(`return $$(".toast").some((t) => t.textContent.includes(${JSON.stringify(text)}));`);
+  const porcelainPaths = () => git("status", "--porcelain=v1", "-uall").split("\n").filter(Boolean).map((l) => l.slice(3).replace(/^"|"$/g, "")).sort();
+  const rev = (ref) => { try { return git("rev-parse", "--verify", "-q", ref); } catch { return ""; } };
+  const bare = temp("bare");
+
+  await step("jj 30f: 빠른 실행으로 jj를 켜면(ask 승인) jj 보기가 되고, 앱 변경 목록이 새 파일을 보인 뒤 ctx.status 경로 집합이 git status와 같다 (새 파일은 ? 또는 A)", async () => {
+    await hookAsk();
+    await quick("jj 모드 켜기");
+    await until(async () => (await jjMarks()) > 0, "jj 보기 표시");
+    writeFileSync(join(repo, "a.txt"), "1\n2\n3\n");
+    writeFileSync(join(repo, "new.txt"), "새 파일\n");
+    const n = porcelainPaths().length;
+    // 앱의 변경 목록(DOM)에 새 파일이 보일 때까지: "로컬 변경사항" 행의 개수가 변경 파일 수가 된다
+    await js(`await waitFor(() => { const m = $(".local-row")?.textContent.match(/(\\d+)/); return m && Number(m[1]) >= ${n}; }, "로컬 변경사항 개수 ${n}");`);
+    const st = await jjOk("load_status");
+    eq(st.files.map((f) => f.path).sort(), porcelainPaths(), "앱 status 경로 집합 = git status");
+    for (const f of st.files.filter((f) => f.path === "new.txt")) if (!f.untracked && !["?", "A"].includes(f.worktree) && !["?", "A"].includes(f.index)) throw new Error(`새 파일 상태가 ?/A가 아님: ${JSON.stringify(f)}`);
+  });
+
+  await step("jj 30f: ⌘⌥Z 한 번 → 확인창(N개 파일) 승인 → snapshot만 취소돼 파일이 되돌아가고 undo operation은 하나만 생긴다, 작업 기록에서 snapshot 시점으로 복구", async () => {
+    const before = (await opLog()).length;
+    await js(`window.__asked = []; document.dispatchEvent(new KeyboardEvent("keydown", { key: "z", code: "KeyZ", metaKey: true, ctrlKey: true, altKey: true, bubbles: true }));`);
+    await until(async () => (await asked()).length >= 1, "되돌리기 확인창");
+    if (!/변경 \d+개 파일/.test((await asked())[0]) || !(await asked())[0].includes("snapshot working copy")) throw new Error("확인창 문구: " + (await asked())[0]);
+    await until(() => readFileSync(join(repo, "a.txt"), "utf8") === "1\n2\n", "a.txt가 되돌아감");
+    const log = await opLog();
+    eq(log.filter((e) => e.description.startsWith("undo")).length, 1, "undo operation은 한 개");
+    if (log.length - before > 2) throw new Error(`키 한 번에 operation이 ${log.length - before}개 늘었다`);
+    await js(`window.__asked = [];`);
+    await quick("작업 기록");
+    await js(`
+      const d = await waitFor(() => ${dlgJs("작업 기록")}, "작업 기록 시트");
+      const row = await waitFor(() => $$("li", d).find((l) => l.textContent.includes("snapshot working copy")), "snapshot 행");
+      press($$("button", row).find((b) => b.textContent.includes("이 시점으로")));
+    `);
+    await until(() => readFileSync(join(repo, "a.txt"), "utf8") === "1\n2\n3\n", "snapshot 시점으로 복구");
+    await esc();
+  });
+
+  await step("jj 30f: 우클릭 → prompt로 북마크 만들기, 뒤로 옮기기는 '그래도 옮기기' ask → allowBackwards 재시도, operation 복원 뒤 git rev-parse로 ref가 되돌아가고, 시트에서 삭제하면 git 브랜치도 사라진다", async () => {
+    const head = git("rev-parse", "main");
+    const older = git("rev-parse", "main~1");
+    await rowMenu("두 번째 커밋", "북마크 만들기");
+    await bookmarkPrompt("e2e-bm");
+    await until(() => rev("refs/heads/e2e-bm") === head, "북마크 = git 브랜치 ref");
+    const opBefore = (await opLog())[0].id;
+    // 뒤로 옮기기: 거절 → ask → allowBackwards
+    await js(`window.__asked = [];`);
+    await rowMenu("첫 커밋", "북마크 만들기");
+    await bookmarkPrompt("e2e-bm");
+    await until(async () => (await asked()).some((m) => m.includes("뒤쪽이나 다른 가지")), "'그래도 옮기기' 확인창");
+    await until(() => rev("refs/heads/e2e-bm") === older, "allowBackwards로 옮김");
+    // 작업 기록에서 옮기기 전 시점으로 복원 → ref가 되돌아간다
+    await js(`window.__asked = [];`);
+    await quick("작업 기록");
+    const idx = (await opLog()).findIndex((e) => e.id === opBefore);
+    await js(`
+      const d = await waitFor(() => ${dlgJs("작업 기록")}, "작업 기록 시트");
+      const rows = await waitFor(() => { const r = $$('[role=option]', d); return r.length > ${idx} && r; }, "행");
+      press($$("button", rows[${idx}]).find((b) => b.textContent.includes("이 시점으로")));
+    `);
+    await until(() => rev("refs/heads/e2e-bm") === head, "복원 뒤 브랜치 ref가 되돌아감");
+    await esc();
+    // 북마크 시트에서 삭제
+    await js(`window.__asked = [];`);
+    await quick("북마크");
+    await js(`
+      const d = await waitFor(() => ${dlgJs("북마크")}, "북마크 시트");
+      const row = await waitFor(() => $$("li", d).find((l) => l.textContent.includes("e2e-bm")), "e2e-bm 행");
+      press($$("button", row).find((b) => b.textContent.includes("삭제")));
+    `);
+    await until(() => !rev("refs/heads/e2e-bm"), "북마크 삭제 뒤 git 브랜치 없음");
+    await esc();
+  });
+
+  await step("jj 30f: untracked 원격 북마크 '추적' → 로컬 생성, Cf 이름 원격 브랜치는 보이는 표기로 표시되고 추적이 jj CLI 안내로 거절되며 op log는 그대로", async () => {
+    execFileSync("git", ["init", "-q", "--bare", bare]);
+    git("remote", "add", "origin", bare);
+    git("push", "-q", "origin", "main", "main:refs/heads/rb");
+    const head = git("rev-parse", "main");
+    execFileSync("git", ["update-ref", "refs/heads/fix‮fdp", head], { cwd: bare });
+    git("fetch", "-q", "origin");
+    await jjOk("jj_describe", { sha: (await jjOk("jj_status")).workingCopy, message: "e2e import trigger" }); // 준비: 쓰기 작업 = git ref 가져오기
+    const bms = await jjOk("jj_bookmarks");
+    // (1) 일반 원격 북마크 추적
+    if (!bms.some((b) => b.name === "rb")) throw new Error("원격 북마크 rb가 안 보임");
+    await quick("북마크");
+    await js(`
+      const d = await waitFor(() => ${dlgJs("북마크")}, "북마크 시트");
+      const row = await waitFor(() => $$("li", d).find((l) => l.textContent.trim().startsWith("rb")), "rb 행");
+      const b = $$("button", row).find((x) => x.textContent.trim() === "추적");
+      if (!b) throw new Error("rb는 이미 추적 중이라 '추적' 버튼이 없음");
+      press(b);
+    `);
+    await until(() => rev("refs/heads/rb") === head, "추적 → 로컬 북마크(git 브랜치) 생성");
+    // (2) Cf 이름: jj가 가져온 경우에만
+    const evil = (await jjOk("jj_bookmarks")).find((b) => b.name.includes("‮"));
+    if (!evil) { console.warn("(jj가 Cf 이름을 가져오지 않음: 표시·거절 단언 생략)"); await esc(); return; }
+    await js(`await waitFor(() => ${dlgJs("북마크")}?.textContent.includes("⟦U+202E⟧"), "Cf가 보이는 표기로 표시");`);
+    if (await js(`return ${dlgJs("북마크")}.textContent.includes("‮");`)) throw new Error("원문 Cf 문자가 그대로 렌더됨");
+    const logN = (await opLog()).length;
+    await js(`
+      const d = ${dlgJs("북마크")};
+      const row = $$("li", d).find((l) => l.textContent.includes("⟦U+202E⟧"));
+      press($$("button", row).find((x) => x.textContent.trim() === "추적"));
+    `);
+    await until(() => toastHas("jj CLI"), "badNameCli 안내 토스트");
+    eq((await opLog()).length, logN, "거절됐으니 op log 불변");
+    await esc();
+  });
+
+  await step("jj 30f: abandon 확인창에 그 커밋의 북마크 이름이 나오고, 승인하면 git 브랜치도 사라진다", async () => {
+    if (!rev("refs/heads/side/only")) throw new Error("준비: side/only 브랜치 없음");
+    await js(`window.__asked = [];`);
+    await rowMenu("숨길 브랜치만의 커밋", "버리기");
+    await until(async () => (await asked()).some((m) => m.includes("side/only") && m.includes("삭제됩니다")), "북마크 이름이 든 abandon 확인창");
+    await until(() => !git("branch", "--list", "side/only"), "abandon 뒤 git 브랜치 삭제");
+  });
+
+  await step("jj 30f: jj 끄기 시트 — 보기만 끄기(.jj 유지) → 삭제 확인(보존 목록·고지) → 확인 뒤 jj가 바뀌면 다시 확인 → 삭제 후 .jj·refs/jj 없음·보존 ref·HEAD 브랜치, 다시 켜면 jj 보기가 기본", async () => {
+    // (a) 보기만 끄기
+    await quick("jj 끄기");
+    await js(`
+      const d = await waitFor(() => ${dlgJs("jj 끄기")}, "jj 끄기 시트");
+      press($$("button", d).find((b) => b.textContent.trim() === "보기만 끄기"));
+    `);
+    await until(async () => (await jjMarks()) === 0, "git 보기로 전환");
+    if (!existsSync(join(repo, ".jj"))) throw new Error("보기만 끄기가 .jj를 지움");
+    // (b) 삭제: orphan 하나(설명 있는 변경)를 만들고 확인 화면까지
+    await jjOk("jj_describe", { sha: (await jjOk("jj_status")).workingCopy, message: "e2e orphan 변경" });
+    await js(`window.__asked = [];`);
+    await quick("jj 끄기");
+    await js(`
+      const d = await waitFor(() => ${dlgJs("jj 끄기")}, "jj 끄기 시트");
+      press($$("button", d).find((b) => b.textContent.includes("jj 삭제…")));
+      await waitFor(() => $$("button", ${dlgJs("jj 끄기")}).find((b) => b.textContent.trim() === "jj 삭제"), "삭제 확인 화면");
+    `);
+    const text = await js(`return ${dlgJs("jj 끄기")}.textContent;`);
+    for (const need of ["작업 기록(operation log)", "refs/git403/jj-orphans/"]) if (!text.includes(need)) throw new Error(`확인 화면에 '${need}' 없음`);
+    // 확인 뒤 jj 상태가 밖에서 바뀌면(jj.disableChanged) 목록을 다시 불러온다
+    await jjOk("jj_new", { parents: [(await jjOk("jj_status")).workingCopy] });
+    await js(`press($$("button", ${dlgJs("jj 끄기")}).find((b) => b.textContent.trim() === "jj 삭제"));`);
+    await js(`await waitFor(() => ${dlgJs("jj 끄기")}?.textContent.includes("저장소가 바뀌어 목록을 다시 불러왔습니다"), "disableChanged 안내");`);
+    if ((await asked()).length !== 1) throw new Error("첫 시도의 확인창은 1번");
+    await js(`press($$("button", ${dlgJs("jj 끄기")}).find((b) => b.textContent.trim() === "jj 삭제"));`);
+    await until(() => !existsSync(join(repo, ".jj")), ".jj 삭제");
+    eq(git("for-each-ref", "refs/jj/").split("\n").filter(Boolean), [], "refs/jj 없음");
+    if (!git("for-each-ref", "refs/git403/jj-orphans/").split("\n").filter(Boolean).length) throw new Error("보존 ref 없음");
+    git("symbolic-ref", "-q", "HEAD"); // HEAD가 브랜치에 붙어 있다(없으면 예외)
+    if (git("status", "--porcelain").includes(".jj")) throw new Error("git status에 .jj가 보임");
+    if ((await asked()).length !== 2) throw new Error("두 번째 승인까지 확인창은 2번");
+    await esc(); // 결과 화면 닫기
+    // 다시 켜면 jj 보기가 기본(저장돼 있던 git 보기 설정이 지워졌다)
+    await quick("jj 모드 켜기");
+    await until(async () => (await jjMarks()) > 0, "다시 켠 뒤 기본은 jj 보기");
+    eq(await js(`return localStorage.getItem("jj:view:" + ${JSON.stringify(repo)});`), null, "저장된 git 보기 설정 없음");
+    rmSync(bare, { recursive: true, force: true });
+  });
+
   await step("앱을 끄면 실행 중이던 작업의 자식 프로세스(손자 포함)도 함께 끝난다", async () => {
     const pidFile = join(home, "child.pid");
     // Windows의 start_shell은 cmd /C라 손자 프로세스를 PowerShell로 띄운다 (cmd가 감싸므로 큰따옴표 없이)

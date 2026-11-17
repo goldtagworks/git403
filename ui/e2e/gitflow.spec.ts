@@ -54,7 +54,7 @@ test("feature start / finish", async ({ page }) => {
   await menuItem(page, "Feature 시작…").click();
   await page.getByRole("dialog", { name: "Feature 시작" }).getByLabel("이름").fill("login");
   await page.getByRole("button", { name: "시작" }).click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["switch", "-c", "feature/login", "develop"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "switch").at(-1)).toEqual(["switch", "-c", "feature/login", "develop"]);
 
   // 사이드바 우클릭: prefix 브랜치에만 Finish가 있다
   const side = page.locator(".sidebar");
@@ -78,7 +78,7 @@ test("release start / finish: main 머지 → 태그 → develop 머지 → 삭�
   await menuItem(page, "Release 시작…").click();
   await page.getByRole("dialog", { name: "Release 시작" }).getByLabel("버전").fill("1.2.0");
   await page.getByRole("button", { name: "시작" }).click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["switch", "-c", "release/1.2.0", "develop"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "switch").at(-1)).toEqual(["switch", "-c", "release/1.2.0", "develop"]);
 
 
   // mock에는 release 브랜치가 없어서 접두사를 바꿔 feature/graph를 release로 취급한다

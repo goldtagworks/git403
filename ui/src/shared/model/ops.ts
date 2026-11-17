@@ -4,17 +4,18 @@ import { prReview } from "./prreview";
 import { useSyncExternalStore } from "react";
 import { ask, errCode, listen, openFile } from "../api/bridge";
 import { api } from "../api/api";
-import { t, tErr } from "../i18n/i18n";
+import { dateFmt, t, tErr } from "../i18n/i18n";
 import { build, kindLabels, targetLabels, type CustomCommand, type CustomKind, type CustomTarget, type CustomVars } from "../lib/custom";
 import { showAll, toggleHidden } from "../lib/hidden";
 import { jjEnabled, jjOn, jjWorking, setJjStatus, setJjView } from "../lib/jjview";
+import { visibleText } from "../lib/safeText";
 import { prompt, type Field } from "../ui/prompt";
 import { toast, toastError, type ToastOpts } from "../lib/toast";
 import type { MenuEntry } from "../ui/menu";
 import { autoRule, jiraCfg, jiraEffective, jiraRule, jiraSuggest, parseRules, type IssueRule, type JiraSuggestion } from "../lib/issues";
 import { GIT_SETTINGS_RE, JIRA_RE, parseConfig, pref, setPref, validEmail, type Prefs } from "../lib/settings";
 import { aiProvider } from "./aiProviders";
-import { WORKTREE, type JjWarning, type AiEffort, type AiPart, type AiResults, type AiStatus, type AiTask, type Commit, type HostAccount, type Ref, type RemoteInfo, type Status } from "../api/types";
+import { WORKTREE, type JjOpEntry, type JjWarning, type AiEffort, type AiPart, type AiResults, type AiStatus, type AiTask, type Commit, type HostAccount, type Ref, type RemoteInfo, type Status } from "../api/types";
 import { guide } from "./guide";
 import { aiChat } from "./aichat";
 import { fileWant, type PickRef } from "./selection";
@@ -71,6 +72,10 @@ export const ctx = {
   showLfs: () => {},
   /** 저장소 통계 시트 열기 (Inspector가 등록) */
   showStats: () => {},
+  /** jj 작업 기록·북마크·jj 끄기 시트 열기 (JjHost가 등록 — 순환 import 방지) */
+  showJjOps: () => {},
+  showJjBookmarks: () => {},
+  showJjDisable: () => {},
   /** 현재 저장소 다시 읽기 (서브모듈·worktree처럼 파일 감시가 못 잡는 변경 뒤) */
   reload: (): Promise<unknown> | void => {},
   /** 설정 창 열기 (SettingsSheet가 등록 — 순환 import 방지). tab: general|git|accounts|tools|ignore|ssh|issues */
@@ -396,6 +401,10 @@ async function flowReady(branches: string[]) {
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 const confirm = (message: string, title: string) => ask(message, { title, kind: "warning" });
+/** jj undo·복원이 진행 중인가(재진입 방지: 키 반복·더블클릭·확인창 대기 중 호출). 새 스토어 없이 모듈 플래그만 */
+const jjBusy = { undo: false, restore: false };
+/** 확인창·입력창을 기다리는 사이 저장소를 옮기지 않았는가. 옮겼으면 안내하고 false(다른 저장소에서 실행되지 않게 중단) */
+const stillHere = (repo: string) => repo === ctx.repo || (ctx.notify(t("ops.jj.repoChanged"), { kind: "info" }), false);
 
 import { isMac, isMobile, isWin } from "../lib/platform";
 import { supports } from "../lib/caps";
@@ -1151,24 +1160,30 @@ export const ops = {
       ctx.reload();
     }
   },
-  /** jj 쓰기 작업 공통(30e): 성공하면 완료 토스트 + 경고(`JjWarning`)마다 경고 토스트, 끝나면 jj 상태·그래프를 다시 읽는다(`ctx.reload`가 jjLoad부터).
-   *  `jj.stale`(밖에서 바뀜)이면 자동 재시도 없이 다시 읽고 안내만 한다. 성공하면 true */
-  jjRun: async (done: string, call: (repo: string) => Promise<JjWarning[]>) => {
-    const repo = ctx.repo;
+  /** jj 쓰기 작업 공통(30e·30f): 성공하면 완료 토스트 + 경고(`JjWarning`)마다 경고 토스트, 끝나면 jj 상태·그래프를 다시 읽는다(`ctx.reload`가 jjLoad부터).
+   *  `jj.stale`(밖에서 바뀜)이면 자동 재시도 없이 다시 읽고 안내만 한다. 성공하면 true.
+   *  `call`이 null을 돌려주면 사용자가 취소한 것(토스트·다시 읽기 없음, false). opts.soft = 막혔다는 안내라 오류 대신 정보 토스트로 보일 코드, opts.hint = 코드별 덧붙일 안내(오류 토스트 자세히).
+   *  시작한 저장소 기준으로 끝낸다: 그 사이 다른 저장소로 옮겼으면 토스트에 저장소 이름을 앞에 붙이고 다시 읽기는 하지 않는다 */
+  jjRun: async (done: string, call: (repo: string) => Promise<JjWarning[] | null>, opts?: { soft?: string[]; hint?: Record<string, string>; repo?: string }) => {
+    const repo = opts?.repo ?? ctx.repo; // 확인창·입력창을 거치는 작업은 시작할 때 잡아 둔 저장소를 넘긴다(그 사이 탭을 옮겨도 다른 저장소에서 실행되지 않게)
     if (!repo) return false;
+    const pre = () => (repo === ctx.repo ? "" : `${repo.split(/[\\/]/).pop()}: `);
     let ok = false;
     let stale = false;
     try {
       const warns = await call(repo);
+      if (warns === null) return false;
       ok = true;
-      ctx.notify(done, { kind: "success" });
-      for (const w of warns) ctx.notify(tErr(w.code, w.vars, w.message), { kind: "warning" });
+      ctx.notify(pre() + done, { kind: "success" });
+      for (const w of warns) ctx.notify(pre() + tErr(w.code, w.vars, w.message), { kind: "warning" });
     } catch (e) {
-      if (errCode(e) === "jj.stale") stale = true;
-      else ctx.error(String(e));
+      const code = errCode(e);
+      if (code === "jj.stale") stale = true;
+      else if (code && opts?.soft?.includes(code)) ctx.notify(pre() + String(e), { kind: "info" });
+      else ctx.error(pre() + String(e), code ? opts?.hint?.[code] : undefined);
     }
     if (repo === ctx.repo) await ctx.reload();
-    if (stale) ctx.error(t("ops.jj.staleReloaded")); // 다시 읽은 뒤에 안내
+    if (stale && repo === ctx.repo) ctx.error(t("ops.jj.staleReloaded")); // 다시 읽은 뒤에 안내
     return ok;
   },
   /** 이 커밋(들)을 부모로 새 변경. 둘 이상이면 머지 변경 */
@@ -1180,10 +1195,12 @@ export const ops = {
   },
   /** 설명 편집: 메시지 입력 시트(`ctx.editMessage`, 커밋 메시지 수정 시트 재사용) → describe. sha 생략 = `@` */
   jjDescribe: async (sha?: string) => {
-    const target = sha ?? jjWorking(ctx.repo);
+    const repo = ctx.repo;
+    const target = sha ?? jjWorking(repo);
     if (!target) return false;
     const message = await ctx.editMessage(target, t("ops.jj.describeTitle"));
-    return message !== null && ops.jjRun(t("ops.jj.describeDone"), (r) => api.jjDescribe(r, target, message));
+    if (message === null) return false;
+    return stillHere(repo) && ops.jjRun(t("ops.jj.describeDone"), (r) => api.jjDescribe(r, target, message), { repo });
   },
   /** `@`를 이 커밋으로 */
   jjEdit: (sha: string) => ops.jjRun(t("ops.jj.editDone"), (r) => api.jjEdit(r, sha)),
@@ -1194,9 +1211,75 @@ export const ops = {
     const wc = jjWorking(ctx.repo);
     return !!wc && ops.jjRun(t("ops.jj.splitDone"), (r) => api.jjSplit(r, wc, paths));
   },
-  /** 커밋 버리기(확인창) */
-  jjAbandon: async (sha: string) =>
-    (await ask(t("ops.jj.abandonAsk"), { title: t("ops.jj.abandonTitle"), kind: "warning" })) && ops.jjRun(t("ops.jj.abandonDone"), (r) => api.jjAbandon(r, sha)),
+  /** 커밋 버리기(확인창). 그 커밋을 가리키는 북마크는 jj가 부모로 옮기지 않고 지우므로(git 브랜치도) 확인창에 이름을 보인다 */
+  jjAbandon: async (sha: string) => {
+    const repo = ctx.repo;
+    const names = await api.jjBookmarks(repo).then((l) => l.filter((b) => b.local && (b.target === sha || b.targets.includes(sha))).map((b) => visibleText(b.name)), () => [] as string[]);
+    const list = names.length > 5 ? t("ops.jj.abandonMore", { names: names.slice(0, 5).join(", "), n: names.length - 5 }) : names.join(", ");
+    const msg = t("ops.jj.abandonAsk") + (names.length ? "\n\n" + t("ops.jj.abandonBookmarks", { names: list }) : "");
+    if (!(await ask(msg, { title: t("ops.jj.abandonTitle"), kind: "warning" }))) return false;
+    return stillHere(repo) && ops.jjRun(t("ops.jj.abandonDone"), (r) => api.jjAbandon(r, sha), { repo });
+  },
+  /** 저장 안 된 변경 수(안내용): 클릭 시점의 `ctx.status`를 읽는다(없으면 한 번 조회). 안전장치가 아니다 — 백엔드가 변경을 먼저 snapshot operation으로 남긴다 */
+  jjDirtyCount: async (repo = ctx.repo) => ((repo === ctx.repo ? ctx.status : null) ?? (await api.loadStatus(repo).catch(() => null)))?.files.length ?? 0,
+  /** 마지막 operation 되돌리기. 변경이 있으면 "그 변경만 사라지고 작업 기록에서 되살린다"를 확인한다. 연속 호출·키 반복은 무시(await 전에 플래그) */
+  jjUndo: async () => {
+    const repo = ctx.repo;
+    if (jjBusy.undo || jjBusy.restore || !repo) return false;
+    jjBusy.undo = true;
+    try {
+      const n = await ops.jjDirtyCount(repo);
+      if (n > 0 && !(await ask(t("ops.jj.undoDirtyAsk", { count: n }), { title: t("ops.jj.undoTitle"), kind: "warning" }))) return false;
+      return stillHere(repo) && (await ops.jjRun(t("ops.jj.undoDone"), (r) => api.jjUndo(r), { soft: ["jj.nothingToUndo", "jj.cannotUndo"], repo }));
+    } finally {
+      jjBusy.undo = false;
+    }
+  },
+  /** operation 시점으로 복원(확인창). entry.id = 목록의 전체 16진 id */
+  jjOpRestore: async (entry: JjOpEntry) => {
+    const repo = ctx.repo;
+    if (jjBusy.undo || jjBusy.restore || !repo) return false;
+    jjBusy.restore = true;
+    try {
+      const n = await ops.jjDirtyCount(repo);
+      const msg = t("ops.jj.restoreAsk", { desc: visibleText(entry.description), time: dateFmt({ dateStyle: "short", timeStyle: "short" }).format(entry.time) }) + (n > 0 ? "\n\n" + t("ops.jj.dirtyNote", { count: n }) : "");
+      if (!(await ask(msg, { title: t("ops.jj.restoreTitle"), kind: "warning" }))) return false;
+      return stillHere(repo) && (await ops.jjRun(t("ops.jj.restoreDone"), (r) => api.jjOpRestore(r, entry.id), { soft: ["jj.cannotUndo"], repo }));
+    } finally {
+      jjBusy.restore = false;
+    }
+  },
+  /** 북마크 만들기·옮기기. name이 없으면 이름 입력 시트. 뒤·옆으로 옮기면 백엔드가 `jj.bookmarkBackwards`로 거절 → "그래도 옮기기" 확인 뒤 allowBackwards로 다시 */
+  jjBookmarkSet: async (sha: string, name?: string) => {
+    const repo = ctx.repo;
+    if (!name) {
+      const r = await prompt({ title: t("ops.jj.bookmarkNewTitle"), fields: [{ kind: "text", name: "name", label: t("ops.jj.bookmarkName") }], submit: t("ops.jj.bookmarkCreate") });
+      name = String(r?.name ?? "").trim();
+      if (!name || !stillHere(repo)) return false;
+    }
+    const n = name;
+    const existed = ctx.refs.some((r) => r.kind === "local" && r.name === n);
+    return ops.jjRun(t(existed ? "ops.jj.bookmarkMoved" : "ops.jj.bookmarkCreated"), async (r) => {
+      try {
+        return await api.jjBookmarkSet(r, n, sha, false);
+      } catch (e) {
+        if (errCode(e) !== "jj.bookmarkBackwards") throw e;
+        if (!(await ask(t("ops.jj.backwardsAsk", { name: visibleText(n) }), { title: t("ops.jj.backwardsTitle"), kind: "warning", okLabel: t("ops.jj.moveAnyway") })) || !stillHere(repo)) return null;
+        return api.jjBookmarkSet(r, n, sha, true);
+      }
+    }, { repo });
+  },
+  jjBookmarkDelete: async (name: string) => {
+    const repo = ctx.repo;
+    if (!(await ask(t("ops.jj.bookmarkDeleteAsk", { name: visibleText(name) }), { title: t("ops.jj.bookmarkDeleteTitle"), kind: "warning" }))) return false;
+    return stillHere(repo) && ops.jjRun(t("ops.jj.bookmarkDeleted"), (r) => api.jjBookmarkDelete(r, name), { hint: { "jj.badBookmark": t("ops.jj.badNameCli") }, repo });
+  },
+  jjBookmarkTrack: (name: string, remote: string) =>
+    ops.jjRun(t("ops.jj.bookmarkTracked", { name: visibleText(name) }), (r) => api.jjBookmarkTrack(r, name, remote), { hint: { "jj.badBookmark": t("ops.jj.badNameCli"), "jj.badRemote": t("ops.jj.badNameCli") } }),
+  /** 시트 열기(JjHost) */
+  jjOpLog: () => ctx.showJjOps(),
+  jjBookmarks: () => ctx.showJjBookmarks(),
+  jjDisable: () => ctx.showJjDisable(),
   /** git 보기 ↔ jj 보기 (그래프 범위가 달라서 다시 읽는다) */
   jjToggleView: () => {
     setJjView(ctx.repo, jjOn(ctx.repo) ? "git" : "jj");

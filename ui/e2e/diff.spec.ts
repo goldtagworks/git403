@@ -81,8 +81,9 @@ test("나란히에서도 줄을 골라 그 줄만 스테이지한다", async ({ 
   await diff.getByText("// 레인마다 색을 다르게 준다.").click();
   await diff.getByText("let mut next_color = 0;").click({ modifiers: ["Shift"] });
   await diff.getByRole("button", { name: "선택한 줄 스테이지" }).first().click();
-  const [cmd, args] = (await page.evaluate(() => (window as any).__git as string[][])).at(-1)!;
-  expect(cmd).toBe("apply_partial");
+  const partial = () => page.evaluate(() => ((window as any).__git as string[][]).filter((c) => c[0] === "apply_partial"));
+  await expect.poll(async () => (await partial()).length).toBeGreaterThan(0);
+  const [, args] = (await partial()).at(-1)!;
   expect(JSON.parse(args)).toMatchObject({ hunk: 0, lines: [2, 3], target: "stage" });
 });
 

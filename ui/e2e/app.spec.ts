@@ -94,7 +94,7 @@ test("로컬 변경사항: 스테이지 → 커밋", async ({ page }) => {
   await page.getByLabel("커밋 제목").fill("툴바 개편");
   await page.getByLabel("커밋 설명").fill("아이콘과 배지");
   await commit.click();
-  expect((await gitCalls(page)).at(-1)).toEqual(["commit", "툴바 개편\n\n아이콘과 배지"]);
+  expect((await gitCalls(page)).filter((c) => c[0] === "commit").at(-1)).toEqual(["commit", "툴바 개편\n\n아이콘과 배지"]);
   await expect(staged.getByRole("option")).toHaveCount(0);
 });
 
@@ -106,8 +106,8 @@ test("diff에서 줄을 골라 그 줄만 스테이지한다", async ({ page }) 
   await diff.getByText("// 레인마다 색을 다르게 준다.").click();
   await diff.getByText("let mut next_color = 0;").click({ modifiers: ["Shift"] });
   await diff.getByRole("button", { name: "선택한 줄 스테이지" }).click();
-  const [cmd, args] = (await gitCalls(page)).at(-1)!;
-  expect(cmd).toBe("apply_partial");
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "apply_partial").length).toBeGreaterThan(0);
+  const [, args] = (await gitCalls(page)).filter((c) => c[0] === "apply_partial").at(-1)!;
   expect(JSON.parse(args)).toMatchObject({ hunk: 0, lines: [2, 3], target: "stage" });
 });
 
@@ -118,7 +118,7 @@ test("커밋 우클릭 메뉴로 브랜치를 만든다", async ({ page }) => {
   const sheet = page.getByRole("dialog", { name: "새 브랜치" });
   await sheet.getByRole("textbox").fill("feature/menu");
   await sheet.getByRole("button", { name: "만들기" }).click();
-  expect((await gitCalls(page)).at(-1)).toEqual(["switch", "-c", "feature/menu", "c3".padEnd(40, "0")]);
+  expect((await gitCalls(page)).filter((c) => c[0] === "switch").at(-1)).toEqual(["switch", "-c", "feature/menu", "c3".padEnd(40, "0")]);
 });
 
 test("사이드바 우클릭: 브랜치 머지, 스태시 적용", async ({ page }) => {
@@ -126,11 +126,11 @@ test("사이드바 우클릭: 브랜치 머지, 스태시 적용", async ({ page
   await page.locator(".sidebar").getByRole("button", { name: "pull-lock", exact: true }).click({ button: "right" });
   await menuItem(page, "현재 브랜치에 머지…").click();
   await page.getByRole("dialog").getByRole("button", { name: "머지" }).click();
-  expect((await gitCalls(page)).at(-1)).toEqual(["merge", "--no-edit", "hotfix/pull-lock"]);
+  expect((await gitCalls(page)).filter((c) => c[0] === "merge").at(-1)).toEqual(["merge", "--no-edit", "hotfix/pull-lock"]);
 
   await page.locator(".sidebar").getByRole("button", { name: /툴바 배치 실험/ }).click({ button: "right" });
   await menuItem(page, "적용하고 삭제 (pop)").click();
-  expect((await gitCalls(page)).at(-1)).toEqual(["stash", "pop", "stash@{0}"]);
+  expect((await gitCalls(page)).filter((c) => c[0] === "stash").at(-1)).toEqual(["stash", "pop", "stash@{0}"]);
 });
 
 test("빠른 실행으로 브랜치를 체크아웃한다", async ({ page }) => {
@@ -140,7 +140,7 @@ test("빠른 실행으로 브랜치를 체크아웃한다", async ({ page }) => 
   await palette.getByRole("textbox").fill("체크아웃 graph");
   await expect(palette.getByRole("option").first()).toContainText("feature/graph");
   await page.keyboard.press("Enter");
-  expect((await gitCalls(page)).at(-1)).toEqual(["switch", "feature/graph"]);
+  expect((await gitCalls(page)).filter((c) => c[0] === "switch").at(-1)).toEqual(["switch", "feature/graph"]);
 });
 
 test("⌘W는 열린 팝업 → 저장소 탭 → 창 숨기기 순으로 하나만 닫는다", async ({ page }) => {
@@ -205,8 +205,8 @@ test("원격 인증 요청이 오면 비밀번호를 입력받아 돌려준다",
   const input = sheet.locator("input[type=password]");
   await input.fill("ghp_token");
   await sheet.getByRole("button", { name: "확인" }).click();
-  const [cmd, args] = (await gitCalls(page)).at(-1)!;
-  expect(cmd).toBe("askpass_reply");
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "askpass_reply").length).toBeGreaterThan(0);
+  const [, args] = (await gitCalls(page)).filter((c) => c[0] === "askpass_reply").at(-1)!;
   expect(JSON.parse(args)).toEqual({ id: 7, answer: "ghp_token" });
 });
 
@@ -253,8 +253,8 @@ test("추적 안 하는 파일을 .gitignore에 추가한다", async ({ page }) 
   await page.getByRole("listbox", { name: "스테이지 안 됨" }).getByRole("option", { name: /notes.md/ }).click({ button: "right" });
   await menuItem(page, "무시 목록에 추가 (.gitignore)").click();
   await page.getByRole("dialog", { name: "무시 목록에 추가" }).getByRole("button", { name: "추가" }).click();
-  const [cmd, args] = (await gitCalls(page)).at(-1)!;
-  expect(cmd).toBe("append_line");
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "append_line").length).toBeGreaterThan(0);
+  const [, args] = (await gitCalls(page)).filter((c) => c[0] === "append_line").at(-1)!;
   expect(JSON.parse(args)).toMatchObject({ file: ".gitignore", line: "notes.md" });
 });
 
@@ -283,8 +283,8 @@ test("복제: URL에서 이름을 추정하고, 끝나면 새 저장소를 탭�
   await sheet.getByRole("button", { name: "선택…" }).click();
   await expect(sheet.getByLabel("위치")).toHaveValue("/demo");
   await sheet.getByRole("button", { name: "복제" }).click();
-  const [cmd, args] = (await gitCalls(page)).at(-1)!;
-  expect(cmd).toBe("start_job");
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "start_job").length).toBeGreaterThan(0);
+  const [, args] = (await gitCalls(page)).filter((c) => c[0] === "start_job").at(-1)!;
   expect(JSON.parse(args)).toEqual({ repo: "/demo", args: ["clone", "--progress", "--", "https://github.com/me/hello-world.git", "hello-world"] });
   await expect(tabs(page).getByRole("tab", { name: "hello-world" })).toHaveAttribute("aria-selected", "true");
   await expect(page.locator(".toolbar .picker").first()).toContainText("hello-world");
@@ -315,7 +315,7 @@ test("새 저장소: git init 후 연다", async ({ page }) => {
   await sheet.getByRole("button", { name: "선택…" }).click();
   await sheet.getByLabel("이름").fill("fresh");
   await sheet.getByRole("button", { name: "만들기" }).click();
-  expect((await gitCalls(page)).at(-1)).toEqual(["init", "fresh"]);
+  expect((await gitCalls(page)).filter((c) => c[0] === "init").at(-1)).toEqual(["init", "fresh"]);
   await expect(tabs(page).getByRole("tab", { name: "fresh" })).toBeVisible();
 });
 

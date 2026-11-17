@@ -52,7 +52,7 @@ test("서브모듈: 열기·업데이트·동기화·추가·제거", async ({ p
 
   await side(page).getByRole("button", { name: /^서브모듈/ }).click({ button: "right" });
   await menuItem(page, "URL 동기화").click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["submodule", "sync", "--recursive"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "submodule").at(-1)).toEqual(["submodule", "sync", "--recursive"]);
 
   await side(page).getByRole("button", { name: /^서브모듈/ }).click({ button: "right" });
   await menuItem(page, "서브모듈 추가…").click();
@@ -101,7 +101,7 @@ test("Worktree: 열기·잠금·prune, main은 제거 불가", async ({ page }) 
 
   await wt.getByRole("button", { name: "hotfix/pull-lock" }).click({ button: "right" });
   await menuItem(page, "잠금").click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["worktree", "lock", "--", "/demo/git403-hotfix"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "worktree").at(-1)).toEqual(["worktree", "lock", "--", "/demo/git403-hotfix"]);
 
   await wt.getByRole("button", { name: "main" }).click({ button: "right" });
   await expect(menuItem(page, "제거…")).toBeDisabled();
@@ -110,7 +110,7 @@ test("Worktree: 열기·잠금·prune, main은 제거 불가", async ({ page }) 
 
   await side(page).getByRole("button", { name: /^Worktree/ }).click({ button: "right" });
   await menuItem(page, /prune/).click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["worktree", "prune"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "worktree").at(-1)).toEqual(["worktree", "prune"]);
 });
 
 test("Worktree 제거: 확인 시트, --force는 별도 옵션", async ({ page }) => {
@@ -124,13 +124,13 @@ test("Worktree 제거: 확인 시트, --force는 별도 옵션", async ({ page }
   await item().click({ button: "right" });
   await menuItem(page, "제거…").click();
   await sheet.getByRole("button", { name: "제거" }).click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["worktree", "remove", "--", "/demo/git403-hotfix"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "worktree").at(-1)).toEqual(["worktree", "remove", "--", "/demo/git403-hotfix"]);
 
   await item().click({ button: "right" });
   await menuItem(page, "제거…").click();
   await sheet.getByLabel(/--force/).check();
   await sheet.getByRole("button", { name: "제거" }).click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["worktree", "remove", "--force", "--", "/demo/git403-hotfix"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "worktree").at(-1)).toEqual(["worktree", "remove", "--force", "--", "/demo/git403-hotfix"]);
 });
 
 test("Worktree 추가: 없는 브랜치는 새로, 있는 브랜치는 그대로", async ({ page }) => {
@@ -143,13 +143,13 @@ test("Worktree 추가: 없는 브랜치는 새로, 있는 브랜치는 그대로
   await sheet.getByLabel("위치").fill("/demo/wt-new");
   await sheet.getByLabel("브랜치").fill("feature/wt");
   await sheet.getByRole("button", { name: "추가" }).click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["worktree", "add", "-b", "feature/wt", "--", "/demo/wt-new"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "worktree").at(-1)).toEqual(["worktree", "add", "-b", "feature/wt", "--", "/demo/wt-new"]);
 
   sheet = await add();
   await sheet.getByLabel("위치").fill("/demo/wt-old");
   await sheet.getByLabel("브랜치").fill("feature/graph");
   await sheet.getByRole("button", { name: "추가" }).click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["worktree", "add", "--", "/demo/wt-old", "feature/graph"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "worktree").at(-1)).toEqual(["worktree", "add", "--", "/demo/wt-old", "feature/graph"]);
 
   // 원격에만 있는 브랜치: -b 없이 이름만 (git이 추적 브랜치로 만든다)
   await page.evaluate(() => ((window as any).__remoteOnly = true));
@@ -159,13 +159,13 @@ test("Worktree 추가: 없는 브랜치는 새로, 있는 브랜치는 그대로
   await sheet.getByLabel("위치").fill("/demo/wt-remote");
   await sheet.getByLabel("브랜치").fill("release");
   await sheet.getByRole("button", { name: "추가" }).click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["worktree", "add", "--", "/demo/wt-remote", "release"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "worktree").at(-1)).toEqual(["worktree", "add", "--", "/demo/wt-remote", "release"]);
 
   // 비우면 detached
   sheet = await add();
   await sheet.getByLabel("위치").fill("/demo/wt-detached");
   await sheet.getByRole("button", { name: "추가" }).click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["worktree", "add", "--detach", "--", "/demo/wt-detached"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "worktree").at(-1)).toEqual(["worktree", "add", "--detach", "--", "/demo/wt-detached"]);
 });
 
 test("LFS: 상태 시트에 패턴과 파일이 보이고 패턴을 해제할 수 있다", async ({ page }) => {
@@ -177,7 +177,7 @@ test("LFS: 상태 시트에 패턴과 파일이 보이고 패턴을 해제할 �
   await expect(sheet.getByRole("list", { name: "LFS 파일" })).toContainText("포인터");
 
   await sheet.getByRole("button", { name: "*.psd 추적 해제" }).click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["lfs", "untrack", "*.psd"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "lfs").at(-1)).toEqual(["lfs", "untrack", "*.psd"]);
 });
 
 test("LFS: pull·fetch·push는 작업으로, 패턴 추적은 git lfs track", async ({ page }) => {
@@ -200,7 +200,7 @@ test("LFS: pull·fetch·push는 작업으로, 패턴 추적은 git lfs track", a
   const sheet = page.getByRole("dialog", { name: "LFS로 추적" });
   await sheet.getByLabel("패턴").fill("*.zip");
   await sheet.getByRole("button", { name: "추적" }).click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["lfs", "track", "*.zip"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "lfs").at(-1)).toEqual(["lfs", "track", "*.zip"]);
   await expect(page.locator(".toast", { hasText: ".gitattributes" }).first()).toBeVisible();
 });
 
@@ -211,7 +211,7 @@ test("변경 파일 우클릭 메뉴로 확장자 패턴을 LFS 추적", async (
   const sheet = page.getByRole("dialog", { name: "LFS로 추적" });
   await expect(sheet.getByLabel("패턴")).toHaveValue("*.md");
   await sheet.getByRole("button", { name: "추적" }).click();
-  await expect.poll(async () => (await gitCalls(page)).at(-1)).toEqual(["lfs", "track", "*.md"]);
+  await expect.poll(async () => (await gitCalls(page)).filter((c) => c[0] === "lfs").at(-1)).toEqual(["lfs", "track", "*.md"]);
 });
 
 test("LFS 미설치: 작업은 안내만 하고 실행하지 않는다", async ({ page }) => {

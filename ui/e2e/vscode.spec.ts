@@ -476,3 +476,28 @@ for (const theme of ["vscode-light", "vscode-dark"]) {
     expect((await ofType(page, "ready")).length).toBe(1);
   });
 }
+
+// jj 30f: VS Code 웹뷰(compact)는 툴바·저장소 메뉴·단축키가 없다. 그래프 우클릭의 jj 항목(30e)과 북마크·"되돌리기"만 보이고, 작업 기록·jj 끄기는 없다
+test("compact: jj 켜진 저장소 우클릭에 북마크·되돌리기 항목이 있고(되돌리기 → jj_undo), 작업 기록·jj 끄기는 없으며 ⌥⌘Z는 아무것도 하지 않는다", async ({ page }) => {
+  await page.setViewportSize({ width: 300, height: 700 });
+  const jj = { enabled: true, status: { workingCopy: null, changeIds: { ["a".repeat(40)]: { short: "abcdefabcdef", full: "abcdefabcdefabcdefabcdefabcdefab" } }, conflicted: [], truncated: false } };
+  await start(page, { ...compact, __jj: jj, __clean: true });
+  const row = page.locator(".commits .row:not(.local-row)", { hasText: "Initial commit" }).first();
+  await expect(row).toBeVisible();
+  // jj 보기는 `@`가 없으면 +jj 표지로 그린다. jj 항목은 jj 켜짐 + jj 보기에서만
+  await page.keyboard.press("Control+Alt+Z");
+  await page.waitForTimeout(200);
+  expect(await cmds(page)).not.toContain("jj_undo");
+  await row.click({ button: "right" });
+  const menu = page.getByRole("menu");
+  await expect(menu.getByRole("menuitem", { name: "북마크 만들기…" })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: "되돌리기" })).toBeVisible();
+  for (const n of ["작업 기록…", "jj 끄기…", "북마크…"]) await expect(menu.getByRole("menuitem", { name: n, exact: true })).toHaveCount(0);
+  await menu.getByRole("menuitem", { name: "되돌리기" }).click();
+  await expect.poll(async () => (await cmds(page)).filter((c) => c === "jj_undo").length).toBe(1);
+  // 빠른 실행 팔레트에도 jj 시트 항목(작업 기록·북마크·jj 끄기·되돌리기)이 없다
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Control+p");
+  await page.getByRole("dialog").locator("input").fill("jj");
+  await expect(page.getByRole("dialog").getByRole("option", { name: /작업 기록|북마크|jj 끄기|되돌리기|jj 모드 켜기/ })).toHaveCount(0);
+});

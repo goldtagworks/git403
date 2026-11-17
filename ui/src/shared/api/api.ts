@@ -5,7 +5,7 @@ import type { Locale } from "../i18n/i18n";
 import { hiddenPatterns } from "../lib/hidden";
 import { jjScope } from "../lib/jjview";
 import { graphLimit, pref } from "../lib/settings";
-import type { JjStatus, JjWarning, GhAccounts, GhProbe, GhRepoAccount, AiProvider, AiEffort, PrReviewComment, ConflictBlobs, AiMethod, AiPart, AiResults, AiBackup, AiRisk, AiSeen, AiChatEntry, AiChatSettings, AiChatSummary, AiStatus, AiTask, BlameLine, ChangedFile, Commit, GraphView, RefCompare, HostAccount, InboxPr, PrDetail, HostProvider, Lfs, Pr, Ref, RemoteInfo, RemoteRepo, SshKey, Stats, StatsRange, Status, Submodule, SettingsApplied, SettingsPreview, SettingsSectionId, Worktree } from "./types";
+import type { JjStatus, JjWarning, JjOpEntry, JjBookmark, JjDisableCheck, GhAccounts, GhProbe, GhRepoAccount, AiProvider, AiEffort, PrReviewComment, ConflictBlobs, AiMethod, AiPart, AiResults, AiBackup, AiRisk, AiSeen, AiChatEntry, AiChatSettings, AiChatSummary, AiStatus, AiTask, BlameLine, ChangedFile, Commit, GraphView, RefCompare, HostAccount, InboxPr, PrDetail, HostProvider, Lfs, Pr, Ref, RemoteInfo, RemoteRepo, SshKey, Stats, StatsRange, Status, Submodule, SettingsApplied, SettingsPreview, SettingsSectionId, Worktree } from "./types";
 
 /** PR 계열 호출에 로컬 저장소 경로(연결된 gh 계정 토큰을 쓰게) */
 const lr = (localRepo?: string) => (localRepo ? { localRepo } : {});
@@ -183,6 +183,16 @@ export const api = {
   /** paths = 첫 커밋으로 갈 파일, 나머지는 둘째(`@`·자손이 옮겨 옴) */
   jjSplit: (repo: string, sha: string, paths: string[]) => invoke<JjWarning[]>("jj_split", { repo, sha, paths }),
   jjAbandon: (repo: string, sha: string) => invoke<JjWarning[]>("jj_abandon", { repo, sha }),
+  /** jj 30f: operation log(최근순, 기본 50)·undo·operation 시점 복원(opId는 목록의 전체 16진 id)·북마크·jj 떼기(check의 opId를 expect로) */
+  jjOpLog: (repo: string, limit?: number) => invoke<JjOpEntry[]>("jj_op_log", { repo, limit: limit ?? null }),
+  jjUndo: (repo: string) => invoke<JjWarning[]>("jj_undo", { repo }),
+  jjOpRestore: (repo: string, opId: string) => invoke<JjWarning[]>("jj_op_restore", { repo, opId }),
+  jjBookmarks: (repo: string) => invoke<JjBookmark[]>("jj_bookmarks", { repo }),
+  jjBookmarkSet: (repo: string, name: string, sha: string, allowBackwards?: boolean) => invoke<JjWarning[]>("jj_bookmark_set", { repo, name, sha, allowBackwards: !!allowBackwards }),
+  jjBookmarkDelete: (repo: string, name: string) => invoke<JjWarning[]>("jj_bookmark_delete", { repo, name }),
+  jjBookmarkTrack: (repo: string, name: string, remote: string) => invoke<JjWarning[]>("jj_bookmark_track", { repo, name, remote }),
+  jjDisableCheck: (repo: string) => invoke<JjDisableCheck>("jj_disable_check", { repo }),
+  jjDisable: (repo: string, opId: string) => invoke<JjWarning[]>("jj_disable", { repo, expect: { opId } }),
   ghBind: (repo: string, user?: string) => invoke<void>("gh_bind", { repo, ...(user ? { user } : {}) }),
   ghProbe: (repo: string) => invoke<GhProbe[]>("gh_probe", { repo }),
   cancelJob: (job: number) => invoke<void>("cancel_job", { job }),

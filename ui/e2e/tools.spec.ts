@@ -3,7 +3,8 @@ import { build, expand, quoteShell, splitArgs, type CustomCommand } from "../src
 
 // 로드맵 14단계: 터미널·파일 열기, 외부 diff/merge 도구, 사용자 정의 명령
 const gitCalls = (page: Page) => page.evaluate(() => (window as any).__git as string[][]);
-const lastCall = async (page: Page) => (await gitCalls(page)).at(-1);
+/** 그 명령의 마지막 호출(자동 fetch 등 다른 호출이 끼어도 흔들리지 않게 이름으로 거른다) */
+const lastCall = async (page: Page, cmd: string) => (await gitCalls(page)).filter((c) => c[0] === cmd).at(-1);
 const settingsTab = async (page: Page, tab: string, button?: string) => {
   await page.locator(".toolbar").getByRole("button", { name: "설정", exact: true }).click();
   await menuItem(page, "설정…").click();
@@ -53,10 +54,10 @@ test("파일 우클릭: 파일 관리자에서 보기·기본 앱으로 열기 (
   await page.getByText("로컬 변경사항").click();
   await unstaged(page).getByText("ui/src/Toolbar.tsx").click({ button: "right" });
   await menuItem(page, REVEAL).click();
-  await expect.poll(() => lastCall(page)).toEqual(["open_in", "reveal", "null", "ui/src/Toolbar.tsx"]);
+  await expect.poll(() => lastCall(page, "open_in")).toEqual(["open_in", "reveal", "null", "ui/src/Toolbar.tsx"]);
   await unstaged(page).getByText("ui/src/Toolbar.tsx").click({ button: "right" });
   await menuItem(page, "기본 앱으로 열기").click();
-  await expect.poll(() => lastCall(page)).toEqual(["open_in", "open", "null", "ui/src/Toolbar.tsx"]);
+  await expect.poll(() => lastCall(page, "open_in")).toEqual(["open_in", "open", "null", "ui/src/Toolbar.tsx"]);
   // 추적 안 하는 파일에도 열기 항목은 있다 (diff·히스토리는 없다)
   await unstaged(page).getByText("notes.md").click({ button: "right" });
   await expect(menuItem(page, REVEAL)).toBeVisible();
@@ -66,15 +67,15 @@ test("파일 우클릭: 파일 관리자에서 보기·기본 앱으로 열기 (
 test("커밋 파일 목록 우클릭: 파일 관리자에서 보기·기본 앱으로 열기", async ({ page }) => {
   await page.getByRole("listbox", { name: "변경 파일" }).getByText("lib.rs").click({ button: "right" });
   await menuItem(page, REVEAL).click();
-  await expect.poll(() => lastCall(page)).toEqual(["open_in", "reveal", "null", "crates/graph/src/lib.rs"]);
+  await expect.poll(() => lastCall(page, "open_in")).toEqual(["open_in", "reveal", "null", "crates/graph/src/lib.rs"]);
   await page.getByRole("listbox", { name: "변경 파일" }).getByText("lib.rs").click({ button: "right" });
   await menuItem(page, "기본 앱으로 열기").click();
-  await expect.poll(() => lastCall(page)).toEqual(["open_in", "open", "null", "crates/graph/src/lib.rs"]);
+  await expect.poll(() => lastCall(page, "open_in")).toEqual(["open_in", "open", "null", "crates/graph/src/lib.rs"]);
 });
 
 test("터미널 앱 선택은 저장되어 열기에 쓰인다", async ({ page }) => {
   await page.locator(".toolbar").getByRole("button", { name: "열기", exact: true }).click();
-  expect((await gitCalls(page)).at(-1)).toEqual(["open_in", "terminal", "null", "null"]); // 기본값: 앱 지정 없음
+  await expect.poll(() => lastCall(page, "open_in")).toEqual(["open_in", "terminal", "null", "null"]); // 기본값: 앱 지정 없음
   await settingsTab(page, "도구", "터미널 앱…");
   const dialog = page.getByRole("dialog", { name: "터미널 앱" });
   const second = await dialog.getByRole("combobox").locator("option").nth(1).textContent();
@@ -82,7 +83,7 @@ test("터미널 앱 선택은 저장되어 열기에 쓰인다", async ({ page }
   await dialog.getByRole("button", { name: "저장" }).click();
   await page.keyboard.press("Escape"); // 설정 창 닫기
   await page.locator(".toolbar").getByRole("button", { name: "열기", exact: true }).click();
-  await expect.poll(() => lastCall(page)).toEqual(["open_in", "terminal", second, "null"]);
+  await expect.poll(() => lastCall(page, "open_in")).toEqual(["open_in", "terminal", second, "null"]);
 });
 
 // ---- 외부 diff / merge 도구 ----
@@ -91,24 +92,24 @@ test("외부 diff 도구: 스테이지 안 된 파일은 difftool -y, 스테이�
   await page.getByText("로컬 변경사항").click();
   await unstaged(page).getByText("ui/src/Toolbar.tsx").click({ button: "right" });
   await menuItem(page, "외부 diff 도구로 열기").click();
-  await expect.poll(() => lastCall(page)).toEqual(["run_detached", "difftool", "-y", "--", "ui/src/Toolbar.tsx"]);
+  await expect.poll(() => lastCall(page, "run_detached")).toEqual(["run_detached", "difftool", "-y", "--", "ui/src/Toolbar.tsx"]);
   await expect(page.locator(".toast", { hasText: "외부 diff 도구 실행 중" }).first()).toBeVisible();
   await expect(page.locator(".toolbar").getByRole("button", { name: "Pull", exact: true })).toBeEnabled();
   await expect(page.locator(".toast", { hasText: "외부 diff 도구 종료" }).first()).toBeVisible();
 
   await staged(page).getByText("crates/core/src/status.rs").click({ button: "right" });
   await menuItem(page, "외부 diff 도구로 열기").click();
-  await expect.poll(() => lastCall(page)).toEqual(["run_detached", "difftool", "-y", "--cached", "--", "crates/core/src/status.rs"]);
+  await expect.poll(() => lastCall(page, "run_detached")).toEqual(["run_detached", "difftool", "-y", "--cached", "--", "crates/core/src/status.rs"]);
 });
 
 test("외부 diff 도구: 커밋 파일은 부모와 비교(c^ c), 루트 커밋은 빈 트리와 비교", async ({ page }) => {
   await page.getByRole("listbox", { name: "변경 파일" }).getByText("lib.rs").click({ button: "right" });
   await menuItem(page, "외부 diff 도구로 열기").click();
-  await expect.poll(() => lastCall(page)).toEqual(["run_detached", "difftool", "-y", expect.stringMatching(/^m3\w*\^$/), expect.stringMatching(/^m3/), "--", "crates/graph/src/lib.rs"]);
+  await expect.poll(() => lastCall(page, "run_detached")).toEqual(["run_detached", "difftool", "-y", expect.stringMatching(/^m3\w*\^$/), expect.stringMatching(/^m3/), "--", "crates/graph/src/lib.rs"]);
   await page.locator(".commits").getByText("Initial commit").click();
   await page.getByRole("listbox", { name: "변경 파일" }).getByText("lib.rs").click({ button: "right" });
   await menuItem(page, "외부 diff 도구로 열기").click();
-  await expect.poll(() => lastCall(page)).toEqual(["run_detached", "difftool", "-y", "4b825dc642cb6eb9a060e54bf8d69288fbee4904", expect.stringMatching(/^c1/), "--", "crates/graph/src/lib.rs"]);
+  await expect.poll(() => lastCall(page, "run_detached")).toEqual(["run_detached", "difftool", "-y", "4b825dc642cb6eb9a060e54bf8d69288fbee4904", expect.stringMatching(/^c1/), "--", "crates/graph/src/lib.rs"]);
 });
 
 test("외부 도구가 실패하면 오류를 보인다", async ({ page }) => {
@@ -170,7 +171,7 @@ test("충돌 파일: 외부 merge 도구로 해결 = mergetool -y", async ({ pag
   await page.keyboard.press("ControlOrMeta+r");
   await unstaged(page).getByText("conflict.txt").click({ button: "right" });
   await menuItem(page, "외부 merge 도구로 해결").click();
-  await expect.poll(() => lastCall(page)).toEqual(["run_detached", "mergetool", "-y", "--", "conflict.txt"]);
+  await expect.poll(() => lastCall(page, "run_detached")).toEqual(["run_detached", "mergetool", "-y", "--", "conflict.txt"]);
   await unstaged(page).getByText("conflict.txt").click();
   await page.getByRole("toolbar", { name: "충돌 해결" }).getByRole("button", { name: "외부 merge 도구" }).click();
   await expect.poll(async () => (await gitCalls(page)).filter((a) => a[0] === "run_detached").length).toBe(2);
@@ -213,7 +214,7 @@ test("커밋 우클릭: git 명령은 start_job에 인자 배열로, 변수 치�
   await seed(page, [{ name: "통계 보기", target: "commit", kind: "git", command: 'git show --stat --format="%h %s" ${sha}' }]);
   await page.locator(".commits").getByText("Initial commit").click({ button: "right" });
   await menuItem(page, "통계 보기").click();
-  await expect.poll(() => lastCall(page)).toEqual(["start_job", JSON.stringify({ repo: "/demo/git403", args: ["show", "--stat", "--format=%h %s", "c1".padEnd(40, "0")] })]);
+  await expect.poll(() => lastCall(page, "start_job")).toEqual(["start_job", JSON.stringify({ repo: "/demo/git403", args: ["show", "--stat", "--format=%h %s", "c1".padEnd(40, "0")] })]);
   await expect(page.getByRole("button", { name: "통계 보기 취소" })).toBeVisible(); // 진행률 job으로 표시
   await expect(page.locator(".toast", { hasText: "통계 보기 완료" }).first()).toBeVisible();
 });
@@ -227,12 +228,12 @@ test("셸 명령: 값은 셸 인용, 파일·브랜치 대상 메뉴", async ({ 
   await page.getByRole("listbox", { name: "변경 파일" }).getByText("lib.rs").click({ button: "right" });
   await menuItem(page, "파일 크기").click();
   // ${sha}는 커밋 파일 목록에서만 값이 있다
-  await expect.poll(() => lastCall(page)).toEqual(["start_shell", `wc -c ${q("crates/graph/src/lib.rs")} # ${q("m3".padEnd(40, "0"))}`]);
+  await expect.poll(() => lastCall(page, "start_shell")).toEqual(["start_shell", `wc -c ${q("crates/graph/src/lib.rs")} # ${q("m3".padEnd(40, "0"))}`]);
   await expect(page.locator(".toast", { hasText: "파일 크기 완료" }).first()).toBeVisible();
 
   await page.locator(".sidebar").getByRole("button", { name: "pull-lock", exact: true }).click({ button: "right" });
   await menuItem(page, "브랜치 로그").click();
-  await expect.poll(() => lastCall(page)).toEqual(["start_shell", `git log -1 ${q("hotfix/pull-lock")} && echo ${q("/demo/git403")}`]);
+  await expect.poll(() => lastCall(page, "start_shell")).toEqual(["start_shell", `git log -1 ${q("hotfix/pull-lock")} && echo ${q("/demo/git403")}`]);
 });
 
 test("파일 대상 명령에서 ${sha}는 변경 화면(작업 디렉터리)에는 없어서 오류", async ({ page }) => {
@@ -252,17 +253,19 @@ test("실행 전 확인: 최종 명령을 보여 주고, 아니오면 실행하�
   await page.getByRole("dialog", { name: "빠른 실행" }).getByRole("textbox").fill("실행: 정리");
   await page.keyboard.press("Enter");
   // 자동 fetch 등 다른 호출이 끼어도 흔들리지 않게 start_shell 중 마지막 것을 본다
-  const lastShell = async () => (await gitCalls(page)).filter((a) => a[0] === "start_shell").at(-1);
+  const lastShell = () => lastCall(page, "start_shell");
   await expect.poll(lastShell).toEqual(["start_shell", cmd]);
   expect(await page.evaluate(() => (window as any).__asked)).toEqual([expect.stringContaining(cmd)]);
 
   await page.evaluate(() => ((window as any).__askNo = true));
-  const before = (await gitCalls(page)).length;
+  // 백그라운드 호출(jj_status·자동 fetch 등)은 늘어날 수 있으므로 start_shell 수만 비교한다
+  const shells = async () => (await gitCalls(page)).filter((c) => c[0] === "start_shell").length;
+  const before = await shells();
   await page.keyboard.press("ControlOrMeta+p");
   await page.getByRole("dialog", { name: "빠른 실행" }).getByRole("textbox").fill("실행: 정리");
   await page.keyboard.press("Enter");
   await expect.poll(() => page.evaluate(() => (window as any).__asked.length)).toBe(2);
-  expect((await gitCalls(page)).length).toBe(before);
+  expect(await shells()).toBe(before);
 });
 
 test("셸 명령 실패는 오류로 보인다", async ({ page }) => {

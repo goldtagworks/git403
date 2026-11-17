@@ -15,6 +15,7 @@ import { aiChat } from "../shared/model/aichat";
 import { HostingHost } from "../features/hosting/HostingSheets";
 import { PrReviewHost } from "../features/hosting/PrReview";
 import { InspectorHost } from "../features/inspect/Inspector";
+import { JjHost } from "../features/jj/JjSheets";
 import type { IssueRule } from "../shared/lib/issues";
 import { QuickLaunch } from "../features/quick-launch/QuickLaunch";
 import { RebaseHost } from "../features/rebase/RebaseSheet";
@@ -462,6 +463,14 @@ function App() {
         }
         return;
       }
+      // ⌥⌘Z(Alt+Ctrl+Z): jj 되돌리기 (jj 보기일 때만, 입력창 포커스·키 반복·VS Code 웹뷰에서는 무시 — VS Code 키 바인딩과 충돌)
+      if (e.altKey && !e.shiftKey && e.code === "KeyZ") {
+        if (!COMPACT && !e.repeat && repoRef.current && ops.jjOn() && !(e.target as HTMLElement | null)?.closest?.("input, textarea, select, [contenteditable]")) {
+          e.preventDefault();
+          void ops.jjUndo();
+        }
+        return;
+      }
       // ⌥⌘B(Alt+Ctrl+B): 커밋 상세 위치 오른쪽 ↔ 아래 (입력창 포커스 중엔 무시)
       if (e.altKey && !e.shiftKey && e.code === "KeyB") {
         if (!(e.target as HTMLElement | null)?.closest?.("input, textarea, select, [contenteditable]")) (e.preventDefault(), ops.toggleLayout());
@@ -642,6 +651,7 @@ function App() {
       <AiHost />
       <AutoFetch repo={repo} />
       <InspectorHost onSelectCommit={setSelected} />
+      {!isMobile && !COMPACT && <JjHost repo={repo} />}
       <DomMenuHost />
     </div>
   );

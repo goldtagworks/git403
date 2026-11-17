@@ -1179,3 +1179,62 @@ test("jj 쓰기 작업(30e): 우클릭 메뉴 열기·새 변경·설명 편집 
   const a2 = await renders(page);
   for (const id of ["CommitGraph", "Sidebar", "Details", "Toolbar", "StatusBar"]) expect(a2[id], id).toBe(b2[id]);
 });
+
+test("jj 30f: 작업 기록·북마크·jj 끄기 시트(열기·더 보기·phase 전환·닫기)는 CommitGraph/Sidebar/Details/Toolbar/StatusBar를 다시 그리지 않고, 버려진 늦은 응답과 같은 내용의 재조회는 행을 다시 그리지 않는다", async ({ page }) => {
+  const status = { workingCopy: sha("m3"), changeIds: { [sha("m3")]: { short: "kkmpptxzrspx", full: "kkmpptxzrspxqwertyuiopasdfghjklz" } }, conflicted: [], truncated: false };
+  const ops = Array.from({ length: 80 }, (_, i) => ({ id: String(i).padStart(2, "0").repeat(32), short: String(i).padStart(2, "0").repeat(6), time: Date.now() - i * 1000, description: `op ${i}`, user: null }));
+  const check = { orphans: [{ sha: sha("f1"), changeId: "abcdefabcdef0123", description: "x" }], workingCopyDescribed: false, workingCopyMerge: false, otherWorkspaces: 0, opId: "op1" };
+  await page.addInitScript((j) => Object.assign(window, { __jj: j }), { enabled: true, status, ops, checks: [check] });
+  await page.reload();
+  await expect(page.locator(".jj-mark")).toHaveCount(1);
+  await expect(page.locator(".diff .add").first()).toBeVisible(); // 첫 로드가 다 끝날 때까지
+  const menu = async (name: string) => {
+    await page.locator(".toolbar .picker").first().click();
+    await page.getByRole("menu").getByRole("menuitem", { name }).click();
+  };
+  const same = async (before: Record<string, number>, ids = ["CommitGraph", "Sidebar", "Details", "Toolbar", "StatusBar"]) => {
+    const after = await renders(page);
+    for (const id of ids) expect(after[id], id).toBe(before[id]);
+  };
+  const before = await renders(page);
+  // 작업 기록: 열기·더 보기
+  await menu("작업 기록…");
+  const dlg = page.getByRole("dialog", { name: "작업 기록" });
+  await expect(dlg.getByRole("option")).toHaveCount(50);
+  await dlg.getByRole("button", { name: "이전 기록 더 보기" }).click();
+  await expect(dlg.getByRole("option")).toHaveCount(80);
+  await page.keyboard.press("Escape");
+  // 북마크
+  await menu("북마크…");
+  await expect(page.getByRole("dialog", { name: "북마크" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  // jj 끄기: choose → checking → confirm → 뒤로 → 닫기
+  await menu("jj 끄기…");
+  const d = page.getByRole("dialog", { name: "jj 끄기" });
+  await d.getByRole("button", { name: "jj 삭제…" }).click();
+  await expect(d.getByRole("button", { name: "jj 삭제", exact: true })).toBeVisible();
+  await d.getByRole("button", { name: "뒤로" }).click();
+  await page.keyboard.press("Escape");
+  await expect(d).toHaveCount(0);
+  await same(before);
+  // 복원: 그래프 다시 읽기(reload)는 정상 렌더. 같은 내용의 작업 기록 재조회는 행을 다시 그리지 않는다
+  await menu("작업 기록…");
+  await expect(dlg.getByRole("option")).toHaveCount(50);
+  await dlg.getByRole("button", { name: "이전 기록 더 보기" }).click();
+  await expect(dlg.getByRole("option")).toHaveCount(80);
+  const rows0 = (await renders(page)).JjOpRow;
+  const logs = () => page.evaluate(() => ((window as any).__git as string[][]).filter((c) => c[0] === "jj_op_log").length);
+  const l0 = await logs();
+  await dlg.getByRole("option").nth(5).getByRole("button", { name: "이 시점으로" }).click();
+  await expect.poll(logs).toBeGreaterThan(l0);
+  expect((await renders(page)).JjOpRow, "같은 내용의 재조회는 행을 다시 그리지 않는다").toBe(rows0);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+  // 버려진 늦은 응답: 지연된 jj_op_log 응답이 시트를 닫은 뒤 도착해도 아무것도 다시 그리지 않는다
+  const b2 = await renders(page);
+  await page.evaluate(() => ((window as any).__jj.delay = 400));
+  await menu("작업 기록…");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(700);
+  await same(b2);
+});

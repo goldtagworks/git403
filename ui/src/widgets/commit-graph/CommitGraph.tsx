@@ -10,6 +10,7 @@ import { relTime } from "../../shared/lib/reltime";
 import { CommitTip } from "./CommitTip";
 import { isHiddenRef, useHiddenSet } from "../../shared/lib/hidden";
 import { useJjRow } from "../../shared/lib/jjview";
+import { visibleText } from "../../shared/lib/safeText";
 import { ctx, ops } from "../../shared/model/ops";
 import { resetMenu, stashMenu } from "../../shared/model/menus";
 import { startInteractiveRebase } from "../../features/rebase/RebaseSheet";
@@ -98,13 +99,26 @@ interface Props {
   onOpenLocal?: () => void;
 }
 
+/** "북마크 옮기기" 서브메뉴: 이 커밋을 가리키지 않는 로컬 북마크(= git 브랜치)를 이름순 최대 15개 + 직접 입력. 메뉴를 열 때만 만든다 */
+const BOOKMARK_MENU_MAX = 15;
+const bookmarkMoves = (c: Commit, refs: Ref[]): MenuEntry[] => [
+  ...refs
+    .filter((r) => r.kind === "local" && r.target !== c.id)
+    .map((r) => r.name)
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+    .slice(0, BOOKMARK_MENU_MAX)
+    .map((name) => ({ label: visibleText(name), action: () => void ops.jjBookmarkSet(c.id, name) })),
+  { label: t("graph.jjBookmarkOther"), action: () => void ops.jjBookmarkSet(c.id) },
+];
+
 /** 커밋 우클릭 메뉴 (ops 재사용). 그룹 순서: 체크아웃 → 이 커밋 기준 작업 → AI → 복사·패치·웹 → 태그 */
 const commitMenu = (c: Commit, refs: Ref[], multi: ReadonlySet<string>): MenuEntry[] => {
   const branches = refs.filter((r) => r.kind === "local" && !r.head);
   const tip = refs.find((r) => r.head)?.target;
   const stash = refs.find((r) => r.kind === "stash" && r.target === c.id);
   // jj 보기(30e): 고른 커밋이 정확히 둘이면 머지 변경, 아니면 이 커밋 기준 작업. 불변 커밋은 백엔드가 거절한다
-  const jj: MenuEntry[] = !ops.jjOn()
+  // 모바일은 jj 쓰기 메뉴를 숨긴다(리뷰 중심, 터치 오조작 위험). VS Code(COMPACT)는 툴바·단축키가 없어 끝에 "되돌리기"를 둔다
+  const jj: MenuEntry[] = !ops.jjOn() || isMobile
     ? []
     : [
         ...(multi.size === 2 && multi.has(c.id)
@@ -114,6 +128,9 @@ const commitMenu = (c: Commit, refs: Ref[], multi: ReadonlySet<string>): MenuEnt
         { label: t("graph.jjEdit"), action: () => void ops.jjEdit(c.id) },
         { label: t("graph.jjSquash"), action: () => void ops.jjSquash(c.id) },
         { label: t("graph.jjAbandon"), action: () => void ops.jjAbandon(c.id) },
+        { label: t("graph.jjBookmarkNew"), action: () => void ops.jjBookmarkSet(c.id) },
+        { label: t("graph.jjBookmarkMove"), submenu: bookmarkMoves(c, refs) },
+        ...(COMPACT ? [{ label: t("toolbar.jjUndo"), action: () => void ops.jjUndo() }] : []),
         { separator: true },
       ];
   return [

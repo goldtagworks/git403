@@ -45,7 +45,7 @@ export async function nativeItems(list: MenuEntry[], roles: Roles = {}): Promise
  */
 export async function showMenu(items: MenuEntry[], at?: { x: number; y: number }) {
   items = visible(items);
-  if (import.meta.env.VITE_MOCK || IS_VSCODE || isMobile) return domMenu.open(items, at ?? lastPointer);
+  if (import.meta.env.VITE_MOCK || IS_VSCODE || isMobile || (import.meta.env.VITE_E2E_APP && (window as unknown as { __e2eDomMenu?: boolean }).__e2eDomMenu)) return domMenu.open(items, at ?? lastPointer);
   const { Menu } = await import("@tauri-apps/api/menu");
   const menu = await Menu.new({ items: await nativeItems(items) });
   await menu.popup();

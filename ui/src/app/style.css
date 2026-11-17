@@ -308,6 +308,21 @@ html.vibrant .sidebar > section > .section-title { background: transparent; back
 .jj-id { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; color: var(--muted); }
 .jj-at { padding: 0 5px; border-radius: 8px; font-size: 11px; font-weight: 600; line-height: 16px; background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent-fg); }
 .jj-conflict { padding: 0 6px; border-radius: 8px; font-size: 11px; line-height: 16px; background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent); }
+/* jj 30f 시트(작업 기록·북마크·jj 끄기): 목록은 .files 재사용, 색은 토큰만 */
+.jj-list { border: 1px solid var(--border); border-radius: 6px; overflow: auto; min-height: 96px; max-height: 50vh; flex: none; }
+.jj-list li { align-items: center; gap: 8px; padding: 5px 10px; }
+.jj-op, .jj-bm { justify-content: space-between; }
+.jj-op-main, .jj-bm-main { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 2px; }
+.jj-bm.off { opacity: 0.75; }
+.jj-cur, .jj-list .jj-conflict { margin-left: 8px; }
+.jj-cur { padding: 0 6px; border-radius: 8px; font-size: 11px; line-height: 16px; background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent-fg); }
+.jj-chip { display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.jj-chip button { padding: 0 6px; min-height: 18px; font-size: 11px; }
+.jj-sha { margin: 0 8px 0 0; padding: 0; min-height: 0; border: 0; background: none; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; color: var(--accent-fg); }
+.jj-note { margin: 0; color: var(--muted); font-size: 12px; white-space: normal; }
+.jj-warn, .jj-err { margin: 0; color: var(--danger); white-space: normal; }
+.jj-more { align-self: center; }
+.jj-orphans li { white-space: nowrap; }
 .subject { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .author { width: 110px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .avatar { flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; object-fit: cover; color: var(--av-fg); font-weight: 600; line-height: 1; vertical-align: middle; overflow: hidden; }

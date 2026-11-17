@@ -198,6 +198,11 @@ const worktreeSectionMenu = (): MenuEntry[] => [
   { label: t("sidebar.prune"), op: "worktree", action: ops.pruneWorktrees },
 ];
 
+/** 브랜치 섹션 제목 우클릭: jj가 켜진 저장소에서만 "jj 북마크…"(메뉴를 열 때 읽는다 — 구독 아님). 꺼져 있으면 아무것도 하지 않는다 */
+const jjSectionMenu = (e: React.MouseEvent) => {
+  if (ops.jjEnabled()) contextMenu(() => [{ label: t("toolbar.jjBookmarks"), action: ops.jjBookmarks }])(e);
+};
+
 const remoteMenu = (name: string): MenuEntry[] => [
   { label: "Fetch", op: "fetch", action: ops.fetch },
   { label: t("sidebar.edit"), op: "remote", action: () => ops.editRemote(name) },
@@ -441,7 +446,7 @@ export const Sidebar = memo(function Sidebar({ repo, refs, submodules, worktrees
               className="section-title"
               aria-expanded={open}
               onClick={() => toggle(kind)}
-              onContextMenu={kind === "remote" ? contextMenu(() => [{ label: t("sidebar.addRemote"), op: "remote", action: ops.addRemote }]) : undefined}
+              onContextMenu={kind === "remote" ? contextMenu(() => [{ label: t("sidebar.addRemote"), op: "remote", action: ops.addRemote }]) : kind === "local" && !isMobile ? jjSectionMenu : undefined}
             >
               <Icon name={open ? "chevronDown" : "chevronRight"} size={12} />
               {t(label)}
