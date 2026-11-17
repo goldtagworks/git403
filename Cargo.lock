@@ -1729,6 +1729,7 @@ dependencies = [
 name = "gc-jj"
 version = "1.0.6"
 dependencies = [
+ "futures",
  "gc-i18n",
  "gix",
  "jj-lib",
