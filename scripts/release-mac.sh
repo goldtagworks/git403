@@ -26,14 +26,9 @@ for T in aarch64-apple-darwin:aarch64:darwin-aarch64 x86_64-apple-darwin:x64:dar
   rustup target add "$TRIPLE" >/dev/null
   # 앱 안 업데이트용 .app.tar.gz·.sig도 만든다.
   TAURI_SIGNING_PRIVATE_KEY="$KEY" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" pnpm tauri build --target "$TRIPLE" --bundles app
-  # dmg는 마운트 없이 만든다: Tauri의 bundle_dmg.sh는 임시 볼륨을 마운트하는데, 보안 에이전트(EDR)가 새 앱을 검사하며 붙잡으면 해제가 안 돼 "리소스 사용 중"으로 실패한다.
+  # dmg는 마운트 없이 만든다(이유는 make-dmg.sh).
   DMG=target/$TRIPLE/release/bundle/dmg/git403_${VERSION}_${ARCH}.dmg
-  SRC=$(mktemp -d)
-  cp -R "target/$TRIPLE/release/bundle/macos/git403.app" "$SRC/" && ln -s /Applications "$SRC/Applications"
-  mkdir -p "$(dirname "$DMG")" && rm -f "$DMG" "$SRC.dmg"
-  hdiutil makehybrid -quiet -hfs -default-volume-name git403 -o "$SRC.dmg" "$SRC"
-  hdiutil convert -quiet -format UDZO -o "$DMG" "$SRC.dmg"
-  rm -rf "$SRC" "$SRC.dmg"
+  scripts/make-dmg.sh "target/$TRIPLE/release/bundle/macos/git403.app" "$DMG"
   APP=target/$TRIPLE/release/bundle/macos/git403.app.tar.gz
   [ -f "$DMG" ] || { echo "$DMG 가 없습니다."; exit 1; }
   printf -v "SHA_$ARCH" %s "$(shasum -a 256 "$DMG" | cut -d' ' -f1)"
