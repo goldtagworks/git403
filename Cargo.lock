@@ -1665,6 +1665,7 @@ dependencies = [
  "gc-graph",
  "gc-hosting",
  "gc-i18n",
+ "gc-jj",
  "ignore",
  "libc",
  "notify-debouncer-mini",
@@ -1731,6 +1732,7 @@ dependencies = [
  "gc-i18n",
  "jj-lib",
  "pollster",
+ "serde",
  "tempfile",
 ]
 

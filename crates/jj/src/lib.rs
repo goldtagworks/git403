@@ -26,7 +26,7 @@ pub const MAX_COMMITS: usize = 2000;
 /// 짧은 change ID 길이(jj 역 hex 문자 수).
 pub const SHORT_CHANGE_ID_LEN: usize = 12;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ChangeId {
     /// 앞 `SHORT_CHANGE_ID_LEN`자
     pub short: String,
@@ -34,7 +34,8 @@ pub struct ChangeId {
     pub full: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct JjStatus {
     /// `@`(작업 중 커밋)의 git 커밋 SHA. 작업 공간에 `@`가 없으면 None
     pub working_copy: Option<String>,

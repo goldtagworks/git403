@@ -295,3 +295,61 @@ fn askpass_이벤트와_응답() {
     }
     assert!(ask.is_some(), "askpass 이벤트가 오지 않음");
 }
+
+#[test]
+fn jj_enable_status_와_우회_거절() {
+    let (cfg, r) = (tempfile::tempdir().unwrap(), repo());
+    let repo = r.path().to_string_lossy().into_owned();
+    let mut s = Server::start(cfg.path());
+
+    // 켜기 전 status는 jj.notEnabled
+    let v = s.call(1, "jj_status", json!({"repo": repo}));
+    assert!(v["err"].as_str().unwrap().contains("jj.notEnabled"), "{v}");
+
+    assert_eq!(s.call(2, "jj_enable", json!({"repo": repo}))["ok"], Value::Null);
+    assert_eq!(s.call(3, "jj_enable", json!({"repo": repo}))["ok"], Value::Null); // 멱등
+    let v = s.call(4, "jj_status", json!({"repo": repo}));
+    let st = &v["ok"];
+    assert!(st["workingCopy"].is_string() && st["truncated"] == false && st["conflicted"].as_array().unwrap().is_empty(), "{v}");
+    let ids = st["changeIds"].as_object().unwrap();
+    assert!(ids.len() >= 3, "{v}"); // first·second·@
+    let id = ids.values().next().unwrap();
+    assert_eq!(id["short"].as_str().unwrap().len(), 12);
+    assert_eq!(id["full"].as_str().unwrap().len(), 32);
+    // git 쪽 작업은 그대로(.jj는 자체 .gitignore). `--all`이라 jj의 refs/jj/keep 커밋도 그래프에 보인다
+    assert!(s.call(5, "load_graph", json!({"repo": repo, "limit": 100}))["ok"]["commits"].as_array().unwrap().len() >= 2);
+    assert!(s.call(6, "load_status", json!({"repo": repo}))["ok"]["files"].as_array().map_or(true, |f| f.is_empty()));
+
+    // 우회: 저장소가 아닌 경로·없는 경로
+    let plain = tempfile::tempdir().unwrap();
+    for (i, p) in [plain.path().to_path_buf(), plain.path().join("nope")].iter().enumerate() {
+        let v = s.call(10 + i as u64, "jj_enable", json!({"repo": p}));
+        assert!(v["err"].as_str().unwrap().contains("jj."), "{v}");
+        assert!(!p.join(".jj").exists());
+    }
+    assert!(s.call(12, "jj_status", json!({}))["err"].as_str().unwrap().contains("repo"));
+}
+
+#[cfg(unix)]
+#[test]
+fn jj_는_심볼릭_링크_git_jj_를_거절한다() {
+    let (cfg, r) = (tempfile::tempdir().unwrap(), repo());
+    let mut s = Server::start(cfg.path());
+
+    // .git이 심볼릭 링크인 저장소
+    let link = tempfile::tempdir().unwrap();
+    std::os::unix::fs::symlink(r.path().join(".git"), link.path().join(".git")).unwrap();
+    let v = s.call(1, "jj_enable", json!({"repo": link.path()}));
+    assert!(v["err"].as_str().unwrap().contains("jj.notRepo"), "{v}");
+    assert!(!r.path().join(".jj").exists());
+
+    // .jj가 밖을 가리키는 링크
+    let outside = tempfile::tempdir().unwrap();
+    std::os::unix::fs::symlink(outside.path(), r.path().join(".jj")).unwrap();
+    let v = s.call(2, "jj_enable", json!({"repo": r.path()}));
+    assert!(v["err"].as_str().unwrap().contains("jj."), "{v}");
+    assert!(v["err"].as_str().unwrap().contains("jj.partial") || v["err"].as_str().unwrap().contains("jj.notRepo"), "{v}");
+    assert_eq!(std::fs::read_dir(outside.path()).unwrap().count(), 0, "링크 대상에 쓰면 안 됨");
+    let v = s.call(3, "jj_status", json!({"repo": r.path()}));
+    assert!(v["err"].as_str().unwrap().contains("jj.notEnabled"), "{v}");
+}

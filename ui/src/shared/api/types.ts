@@ -202,6 +202,9 @@ export interface SshKey {
 // ---- gh(GitHub CLI) 계정 (crates/backend/src/gh.rs) ----
 export interface GhAccounts { installed: boolean; hosts: { host: string; accounts: { user: string; active: boolean }[] }[] }
 /** bound = 이 저장소에 연결한 계정(git config), active = 지금 gh 활성 계정, remote = "owner/name"(GitHub류가 아니면 null) */
+export interface JjChangeId { short: string; full: string }
+/** jj 상태(30c): 키는 git 커밋 SHA. `workingCopy`=@ 커밋 SHA */
+export interface JjStatus { workingCopy: string | null; changeIds: Record<string, JjChangeId>; conflicted: string[]; truncated: boolean }
 export interface GhRepoAccount { host: string; bound: string | null; active: string | null; remote: string | null }
 export interface GhProbe { user: string; ok: boolean }
 

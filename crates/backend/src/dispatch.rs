@@ -97,6 +97,16 @@ impl Backend {
             }
             // 앱 전용 저장소 폴더(`<config_dir>/repos`, 만들어 둠). 폴더 선택기가 없는 백엔드(gix = Android)만 있고, 데스크탑은 null
             "repos_root" => json(self.repos_root().await?),
+            // ---- jj 모드 (gc-jj): 켜짐 여부는 `.jj` 존재, git/jj 표시 선택은 UI 저장소별 설정 ----
+            "jj_enable" => {
+                let repo = a.repo()?;
+                off(move || gc_jj::enable(&repo).map_err(|e| e.json())).await?;
+                Ok(Value::Null)
+            }
+            "jj_status" => {
+                let repo = a.repo()?;
+                json(off(move || gc_jj::status(&repo).map_err(|e| e.json())).await?)
+            }
             // ---- 통계 ----
             "repo_stats" => {
                 let (repo, range, branch, with_lines, token) =

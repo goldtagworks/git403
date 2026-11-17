@@ -11,7 +11,7 @@ crates/core    gc-core   git 실행, 저장소 데이터 읽기 (UI 의존 없�
 crates/graph   gc-graph  커밋 그래프 레이아웃 계산 (git 의존 없음)
 crates/hosting gc-hosting GitHub·GitLab·Bitbucket·Gitea 계정·PR (git 의존 없음)
 crates/ai      gc-ai      git 작업용 AI: 공급자 4곳(Anthropic·OpenAI·Google·xAI)의 CLI 위임·API 키 (git 의존 없음, 키체인만 gc-hosting 재사용)
-crates/jj      gc-jj      jj(Jujutsu) 연동: `jj-lib` 0.47.1로 기존 git 저장소에 jj 켜기·상태 읽기 (UI·IPC 아직 없음)
+crates/jj      gc-jj      jj(Jujutsu) 연동: `jj-lib` 0.47.1로 기존 git 저장소에 jj 켜기·상태 읽기 (IPC `jj_enable`·`jj_status`, UI 화면은 아직 없음)
 crates/backend gc-backend Tauri 비의존 백엔드: 모든 IPC 명령 본문·앱 상태·감시·askpass + stdio 서버 `git403-server`
 src-tauri      Tauri 셸: `gc_backend::Backend`를 IPC·이벤트로 연결만 한다 (창·메뉴·업데이터·e2e만 자체)
 ui             React + Canvas 화면
@@ -33,7 +33,7 @@ Rust에는 번역 문구가 없다. 사용자에게 보이는 오류·경고는 
 
 ## gc-jj (jj 모드 코어, `crates/jj`)
 
-`jj-lib =0.47.1`(+`pollster`) 래퍼. jj-lib가 쓰는 gix 0.90과 `gc-core`의 gix는 **같은 버전이어야** 한다(올릴 때 같이). 아직 IPC·UI 없음(30b). 오류는 `gc_i18n::Coded`(`jj.failed`·`jj.notRepo`·`jj.notEnabled`·`jj.partial`).
+`jj-lib =0.47.1`(+`pollster`) 래퍼. jj-lib가 쓰는 gix 0.90과 `gc-core`의 gix는 **같은 버전이어야** 한다(올릴 때 같이). IPC는 `jj_enable`·`jj_status`(30c, `gc-backend`가 기본 의존 — Android 포함 `cargo check --target aarch64-linux-android` 통과라 feature 분리 없음), 화면은 아직 없음. `JjStatus`·`ChangeId`는 serde `Serialize`(camelCase). 오류는 `gc_i18n::Coded`(`jj.failed`·`jj.notRepo`·`jj.notEnabled`·`jj.partial`).
 
 - `enable(repo_path: &Path) -> Result<(), Coded>`: `Workspace::init_external_git`(기존 `.git` 그대로) → `.jj/.gitignore`(`/*\n`, jj CLI와 같게; `git status`에 `.jj/` 안 보임) → git HEAD·브랜치·태그를 jj로 가져오고 `@`를 HEAD 위 빈 커밋으로(작업 폴더·index·HEAD·기존 ref 불변, jj가 `refs/jj/keep/*`만 추가). 이미 켜져 있으면 통과(멱등).
 - `is_enabled(repo_path: &Path) -> bool`
@@ -342,6 +342,8 @@ git 작업용 AI. git을 모른다 — 입력 텍스트는 호출 측(UI `ops.ts
 | 명령 | 인자 | 반환 / 이벤트 |
 |---|---|---|
 | `load_graph` | `repo, limit, hidden?` | `{ commits, layout }`. 같은 `--date-order`의 앞 `limit`개라 limit을 늘려 다시 읽어도 앞쪽 행·레인이 그대로다 |
+| `jj_enable` | `repo` | 없음(null). `gc_jj::enable`(멱등)을 블로킹 스레드에서. 오류는 `jj.*` 코드 JSON(UI 사전 `err.jj.failed·notRepo·partial·notEnabled`, 23 locale) |
+| `jj_status` | `repo` | `{workingCopy: string\|null, changeIds: {[sha]: {short, full}}, conflicted: string[], truncated}`. 꺼져 있으면 `jj.notEnabled`. UI: `api.jjEnable`·`api.jjStatus`·타입 `JjStatus`, mock은 `window.__jj = {enabled, status?}`. **jj 켜짐 여부는 `.jj` 존재(별도 저장 없음)이고, git/jj 보기 선택은 화면 단계에서 UI 저장소별 표시 설정(localStorage)으로 둔다 — 백엔드 `jj_set_mode` 없음.** 주의: 그래프 `--all`이 jj의 `refs/jj/keep/*` 커밋(@·버려진 커밋)도 읽는다 |
 | `ensure_commit_graph` | `repo` | 바로 반환(없음). commit-graph를 백그라운드로 보장(`ensure_commit_graph` 위 참고). 저장소를 열 때 UI가 한 번 부른다 |
 | `load_refs` | `repo` | `Ref[]` |
 | `changed_files` | `repo, commit` | `ChangedFile[]` |

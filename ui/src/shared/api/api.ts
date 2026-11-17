@@ -4,7 +4,7 @@ import { t } from "../i18n/i18n";
 import type { Locale } from "../i18n/i18n";
 import { hiddenPatterns } from "../lib/hidden";
 import { graphLimit, pref } from "../lib/settings";
-import type { GhAccounts, GhProbe, GhRepoAccount, AiProvider, AiEffort, PrReviewComment, ConflictBlobs, AiMethod, AiPart, AiResults, AiBackup, AiRisk, AiSeen, AiChatEntry, AiChatSettings, AiChatSummary, AiStatus, AiTask, BlameLine, ChangedFile, Commit, GraphView, RefCompare, HostAccount, InboxPr, PrDetail, HostProvider, Lfs, Pr, Ref, RemoteInfo, RemoteRepo, SshKey, Stats, StatsRange, Status, Submodule, SettingsApplied, SettingsPreview, SettingsSectionId, Worktree } from "./types";
+import type { JjStatus, GhAccounts, GhProbe, GhRepoAccount, AiProvider, AiEffort, PrReviewComment, ConflictBlobs, AiMethod, AiPart, AiResults, AiBackup, AiRisk, AiSeen, AiChatEntry, AiChatSettings, AiChatSummary, AiStatus, AiTask, BlameLine, ChangedFile, Commit, GraphView, RefCompare, HostAccount, InboxPr, PrDetail, HostProvider, Lfs, Pr, Ref, RemoteInfo, RemoteRepo, SshKey, Stats, StatsRange, Status, Submodule, SettingsApplied, SettingsPreview, SettingsSectionId, Worktree } from "./types";
 
 /** PR 계열 호출에 로컬 저장소 경로(연결된 gh 계정 토큰을 쓰게) */
 const lr = (localRepo?: string) => (localRepo ? { localRepo } : {});
@@ -170,6 +170,9 @@ export const api = {
   ghAccounts: (host?: string) => invoke<GhAccounts>("gh_accounts", { host: host ?? null }),
   ghSwitch: (host: string, user: string) => invoke<void>("gh_switch", { host, user }),
   ghRepoAccount: (repo: string) => invoke<GhRepoAccount>("gh_repo_account", { repo }),
+  /** jj 켜기(기존 git 저장소 위, 멱등). 켜짐 여부는 `.jj` 존재 */
+  jjEnable: (repo: string) => invoke<void>("jj_enable", { repo }),
+  jjStatus: (repo: string) => invoke<JjStatus>("jj_status", { repo }),
   ghBind: (repo: string, user?: string) => invoke<void>("gh_bind", { repo, ...(user ? { user } : {}) }),
   ghProbe: (repo: string) => invoke<GhProbe[]>("gh_probe", { repo }),
   cancelJob: (job: number) => invoke<void>("cancel_job", { job }),

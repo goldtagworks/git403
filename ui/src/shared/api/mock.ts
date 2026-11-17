@@ -798,6 +798,17 @@ function handle(cmd: string, args: any): any {
       gitCalls.push(["account_add", JSON.stringify({ provider, host: host.trim() })]);
       return account;
     }
+    // jj: window.__jj = { enabled, status? } (기본 꺼짐). jj_enable은 켜고 gitCalls에 기록, 꺼져 있으면 jj_status는 jj.notEnabled 오류
+    if (cmd === "jj_enable") {
+      ((window as any).__jj ??= {}).enabled = true;
+      gitCalls.push(["jj_enable"]);
+      return null;
+    }
+    if (cmd === "jj_status") {
+      const j = ((window as any).__jj ??= {});
+      if (!j.enabled) throw JSON.stringify({ code: "jj.notEnabled", vars: {}, message: "jj is not enabled for this repository" });
+      return j.status ?? { workingCopy: null, changeIds: {}, conflicted: [], truncated: false };
+    }
     if (cmd === "account_remove") {
       const { account } = args as { account: HostAccount };
       (window as any).__accounts = accountList().filter((a) => !(a.provider === account.provider && a.host === account.host && a.username === account.username));

@@ -20,6 +20,7 @@ gc-core = { path = "../core", default-features = false }
 gc-graph = { path = "../graph" }
 gc-hosting = { path = "../hosting" }
 gc-ai = { path = "../ai" }
+gc-jj = { path = "../jj" }
 tokio = { workspace = true, features = ["io-std"] }
 serde.workspace = true
 serde_json.workspace = true
